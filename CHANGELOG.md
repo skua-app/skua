@@ -1,0 +1,342 @@
+# Changelog
+
+All notable changes to Skua are documented in this file.
+
+The format is based on [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+> **Note on early history.** Versions before 0.8.0 shipped under the
+> project's private development name. The functionality described in
+> each entry is unchanged; only the project name, package paths, and
+> infrastructure references differ between the historical record and
+> the public release. The 0.8.0 entry covers the rename and the
+> surrounding open-source readiness work.
+
+## [Unreleased]
+
+## [0.8.0] — 2026-05-28
+
+### Added
+
+- `LICENSE` (MIT, Copyright (c) 2026 Skua contributors).
+- `CONTRIBUTING.md` with conventions distilled from `CLAUDE.md` §10.
+- `SECURITY.md` with the threat model and hardening recommendations
+  referenced from the README.
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, enforcement contact
+  via GitHub private security advisories).
+- `.github/ISSUE_TEMPLATE/` with bug-report and feature-request GitHub
+  Forms plus a `config.yml` that disables blank issues and redirects
+  questions to Discussions.
+- `frontend/src/lib/i18n/strings.ru.ts` as a Russian-translation
+  backup, kept for a future runtime locale-switching PR but not
+  imported by any code path today.
+- This `CHANGELOG.md`.
+
+### Changed
+
+- Renamed the project from its private development name to Skua.
+  Go module path is now `github.com/skua-app/skua`; frontend
+  package name is `skua`; container image is
+  `ghcr.io/skua-app/skua`.
+- UI strings translated to English as the baseline; 31 inline-Russian
+  literals were extracted from components into `lib/i18n/strings.ts`
+  keys; `Intl.DateTimeFormat` calls switched from `ru-RU` to the
+  runtime default locale; the `app.html` `lang` attribute switched to
+  `en`.
+- Backend user-facing error messages and code comments translated to
+  English.
+- README rewritten end-to-end as a public-grade landing document with
+  a security callout above the fold, a feature list, requirements, a
+  five-minute Docker Compose quick start, a full environment-variable
+  table aligned to `.env.example`, a build-from-source section,
+  troubleshooting, and forward-references to `LICENSE` /
+  `CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`.
+- Access-model documentation reframed from "VPN-only by network" to
+  "LAN-only by default with the user's reverse-proxy or VPN as an
+  optional remote-access layer". `CLAUDE.md` §2 / §3 / §5 / §7
+  rewritten; `docs/setup/frigate-config.md` rewritten with LAN-default
+  ICE candidates and an optional remote-access block;
+  `docs/setup/npm-proxy.md` and `docs/setup/pihole-dns.md` re-headed
+  as optional examples.
+- Historical epic specs (`docs/epics/E1-skeleton.md`,
+  `E2-streaming.md`, `E3-live-polish-events.md`) gained a
+  historical-record header note and had infrastructure literals (`wg0`,
+  `awg0`, specific VPN IP literals) replaced with generic placeholders.
+- Private homelab fingerprints removed from machine-read config:
+  `.env.example` and `compose.yaml` now use `frigate:5000` /
+  `frigate:1984` as the canonical Frigate URL examples; documentation
+  prose uses `<frigate-host>` / `<docker-host>` / `<reverse-proxy>`
+  placeholders.
+
+### Removed
+
+- All references to the project's private development name, the
+  maintainer's personal domain, specific homelab IPs, owner
+  identities, and the maintainer's seven-camera inventory from code
+  and shipped docs (`design_handoff_security_cams/` retained as a
+  read-only reference is unchanged).
+
+## [0.7.1] — 2026-05-26
+
+### Changed
+
+- Documentation-tree statements in `CLAUDE.md` §8 reconciled with the
+  actual filesystem.
+- Per-camera card hint rhythm in `/settings` consolidated for visual
+  consistency.
+
+### Removed
+
+- Dead i18n keys that no component referenced.
+
+## [0.7.0] — 2026-05-26
+
+### Added
+
+- Per-camera `go2rtc` stream-source selectors in `/settings` with
+  optimistic save and server-revert on `stream_not_found` /
+  `go2rtc_unreachable`.
+- `/settings` page reorganised into three sections — Appearance,
+  Cameras, Groups.
+- `lib/components/settings/` subfolder split the page into
+  `AppearanceSection`, `CamerasSection`, `CameraCard`,
+  `GroupsSection`, `GroupCard`.
+- `streamOverridesStore` and `go2rtcStreamsStore` (lazy-inited on
+  `/settings` mount only, not in the shell).
+
+### Changed
+
+- On desktop (≥900px), `/settings` is a two-column layout with a
+  sticky left rail of section anchors driven by an
+  `IntersectionObserver`-backed scroll-spy; mobile keeps a single
+  column.
+
+## [0.6.1] — 2026-05-26
+
+### Added
+
+- `internal/streamoverrides` store (YAML-backed, atomic write,
+  auto-prune on empty entry).
+- `internal/go2rtc` REST client (`GetStreams`).
+- `GET /api/go2rtc/streams`, `GET /api/stream-overrides`, `PUT
+  /api/stream-overrides/{cam_id}` with full validation (invalid body,
+  unknown camera, unknown stream against the live `go2rtc` list,
+  `go2rtc` unreachable).
+- Override store joins the orphan-cleanup chain on `POST
+  /api/cameras/refresh`.
+
+### Changed
+
+- WHEP handler merges the override layer (`override.Main` over
+  `cam.StreamMain`, same for Sub) and returns `400 no stream
+  configured for quality` when the resolved stream name is empty.
+
+## [0.6.0] — 2026-05-25
+
+### Added
+
+- `POST /api/cameras/refresh` re-pulls the roster on demand, returns
+  the `{added, removed}` diff, broadcasts `camera.added` /
+  `camera.removed` SSE events, and orphan-cleans dependent stores
+  (groups, names, capabilities).
+- `capabilities.yaml` override layer for per-camera `talk_back` / `ptz`
+  flags (read-only via API for now, hand-edited on the host).
+
+### Changed
+
+- Removed the static `config.Cameras` slice; the camera roster is
+  pulled from Frigate `/api/config` at startup and persisted to
+  `cameras.yaml`.
+- BFF falls back to the persisted `cameras.yaml` snapshot when Frigate
+  is unreachable at startup; if neither is available, the BFF fails
+  fast.
+
+## [0.5.3] — 2026-05-25
+
+### Changed
+
+- The connecting / buffering text on the focus screen now sits inside
+  a dark blurred pill (`rgba(0, 0, 0, 0.5)` + `backdrop-filter:
+  blur(10px)`, matching the existing `.telemetry-pill` / `.ts-chip`
+  style), so it stays readable over bright snapshots.
+
+## [0.5.2] — 2026-05-25
+
+### Added
+
+- Snapshot poster layered behind the `<video>` (the `<video>`
+  background is transparent) that fades out on the native `playing`
+  event; the poster stays in the DOM at `opacity: 0` so pause/resume
+  and HQ↔LQ reconnects re-show it instantly.
+- Two-stage spinner overlay reads "Connecting…" during signalling and
+  switches to "Buffering…" once `streamState === 'connected'` but
+  before the first frame paints.
+
+### Changed
+
+- Focus mount no longer shows a black frame between WHEP negotiation
+  and the first decoded frame.
+
+## [0.5.1] — 2026-05-25
+
+### Added
+
+- `lib/lifecycle.svelte.ts` hub that tears down the WHEP
+  `RTCPeerConnection`, the SSE `EventSource`, and the cameras polling
+  interval on `pagehide` / `visibilitychange:hidden`, and re-arms them
+  on resume; a 30-minute-absence guard forces a hard reload rather
+  than trust the resumed JS context.
+- `routes/+error.svelte` so a bootstrap-time throw renders a
+  recoverable error card instead of a blank shell.
+
+### Changed
+
+- Service-worker activation switched from `'autoUpdate'` to
+  `'prompt'`; the new SW waits until every tab for the scope is closed
+  (i.e. the next cold launch on iOS PWA) instead of skipping-waiting
+  mid-load.
+
+### Fixed
+
+- White/black screen on iOS PWA relaunch via `workbox.navigateFallback:
+  'index.html'` plus `navigateFallbackDenylist: [/^\/api\//]` so
+  deep-link navigations resolve against the precached shell while
+  `/api/*` keeps reaching the BFF.
+
+## [0.5.0] — 2026-05-22
+
+### Added
+
+- Per-camera display-name overrides persisted to `camera_names.yaml`,
+  edited inline in `/settings`, merged into `/api/cameras` as `.name`.
+- `CAMERA_NAMES_CONFIG_PATH` environment variable (default
+  `/data/camera_names.yaml`).
+
+### Changed
+
+- Cameras without an override fall back to the Frigate-sourced default
+  rather than the historical static config map.
+
+## [0.4.3] — 2026-05-22
+
+### Changed
+
+- In-page `<h1>` hidden on mobile for `/events` and `/settings`
+  because the sticky `AppHeader` already shows the page title. Kept on
+  desktop where the header carries only small nav links.
+
+## [0.4.2] — 2026-05-22
+
+### Added
+
+- In-place `hev1` → `hvc1` sample-entry box-tag rewrite (via `go-mp4`)
+  inside the clip pipeline so iOS Safari decodes HEVC clips in
+  `<video>`. See `docs/ios-clip-playback.md`.
+
+## [0.4.1] — 2026-05-22
+
+### Added
+
+- Per-event MP4 LRU cache (16 entries / 512 MiB) so one upstream
+  Frigate fetch serves all Range subrequests for a clip.
+- `HEAD /api/events/:id/clip.mp4` with the same headers as `GET`,
+  required by iOS Safari before issuing the first Range request.
+
+## [0.4.0] — 2026-05-21
+
+### Added
+
+- Camera groups with an in-app editor at `/settings`. Groups are
+  YAML-backed at `$GROUPS_CONFIG_PATH` (default `/data/groups.yaml`),
+  enforce a single-membership invariant server-side, and persist the
+  last-selected group filter via `prefs.grid_filter` so reopens land
+  on the same view.
+- Full `/api/groups` CRUD with structured snake_case error codes.
+- Mobile group filter opens a slide-up `BottomSheet` from the merged
+  `AppHeader` title row.
+
+## [0.3.2] — 2026-05-21
+
+### Added
+
+- `MobileTabBar` now appears on `/cam/[id]`, so the user always has
+  bottom navigation.
+
+### Changed
+
+- `AppHeader` merged with the page title row on mobile, HD/ECO toggle
+  moved into the title row (route-gated on `/`).
+- Focus screens navigate between cameras via `goto(url, {
+  replaceState: true })` so a single back-tap from focus always lands
+  on the grid, regardless of how many cameras were hopped through.
+
+## [0.3.1] — 2026-05-21
+
+### Added
+
+- Inline `<video>` clip playback in `EventModal` against
+  `/api/events/:id/clip.mp4`, with a snapshot fallback when
+  `has_clip === false` and a "Download video" button hitting the
+  `?download=1` variant.
+
+### Changed
+
+- `prefsStore.loaded` gate prevents the focus connect effect from
+  running with `$state(...)` defaults before `/api/prefs` resolves
+  (fixes HQ stream forced on LQ users after grid → focus navigation on
+  slower mobile networks).
+
+## [0.3.0] — 2026-05-21
+
+### Added
+
+- `/events` route — real events list with cam, kind, and group
+  filters, infinite scroll, real-time SSE updates, `EventCard`
+  thumb-and-meta layout.
+- `EventModal` for per-event detail (snapshot, clip placeholder at
+  this tag, metadata).
+- `GET /api/events` listing endpoint, per-event `thumbnail.jpg` /
+  `snapshot.jpg` / `clip.mp4` (full clip pipeline lands later in the
+  0.4.x line), `GET /api/stream` SSE hub.
+
+### Removed
+
+- `lib/mocks/` — replaced by the real `/api/events` shape.
+
+## [0.2.0] — 2026-05-18
+
+### Added
+
+- Single-camera focus view via WHEP through `go2rtc`, sub-500 ms
+  latency, runtime audio detection via the WHEP track event.
+- HD/ECO snapshot modes for the grid; ECO renders 320px-wide JPEG
+  tiles resized server-side via `golang.org/x/image/draw` at quality
+  60.
+- `POST /api/webrtc/whep` proxy endpoint and `GO2RTC_URL` environment
+  variable.
+- Server-side user preferences via `GET` / `PUT /api/prefs`
+  (file-backed, atomic write).
+
+### Changed
+
+- ICE candidate strategy verified across LAN, VPN-tunnelled, and STUN
+  srflx paths (configuration block in `docs/setup/frigate-config.md`).
+
+## [0.1.0] — 2026-04-30
+
+### Added
+
+- Go BFF (`chi` router, `log/slog`) and SvelteKit + Svelte 5 frontend
+  embedded into the binary via `embed.FS`.
+- Camera grid with 1 Hz JPEG snapshots passthrough at
+  `/api/cameras/:id/snapshot.jpg`.
+- PWA manifest, service worker via `vite-plugin-pwa` `generateSW`,
+  iOS / Android home-screen install.
+- `Dockerfile` producing a single-binary distroless image around 9 MB.
+- GitHub Actions workflow `build.yml` that publishes to GHCR on tag
+  push.
+
+## Comparison links
+
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/skua-app/skua/releases/tag/v0.8.0

@@ -1,0 +1,5 @@
+# This directory is the embed target for the built SvelteKit frontend.
+# It is intentionally kept in version control so `//go:embed` has a valid
+# target on a fresh clone. The real contents are produced by the frontend
+# build (`cd frontend && npm run build`) and by the Docker build, and are
+# git-ignored. Do not commit built assets here.

@@ -1,0 +1,31 @@
+# Go
+backend/bin/
+backend/vendor/
+
+# Node
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Embedded frontend build (populated by Dockerfile)
+backend/internal/static/dist/*
+!backend/internal/static/dist/.gitkeep
+
+# Private reference material — never publish
+design_handoff_security_cams/
+
+# Claude Code local state
+.claude/

@@ -1,0 +1,386 @@
+export type Camera = {
+  id: string
+  name: string
+  online: boolean
+  snapshot_url: string
+  capabilities: {
+    talk_back: boolean
+    ptz: boolean
+  }
+  streams: {
+    main: string
+    sub?: string
+  }
+  groups: string[]
+}
+
+export type Accent = 'cyan' | 'sage' | 'amber' | 'violet'
+export type NameStyle = 'below' | 'overlay'
+export type DesktopColumns = 2 | 3 | 4 | 5
+export type MobileColumns = 1 | 2
+
+export type Prefs = {
+  grid_mode: 'hd' | 'eco'
+  muted_by_default: boolean
+  stream_quality: 'main' | 'sub'
+  show_telemetry: boolean
+  accent: Accent
+  name_style: NameStyle
+  show_timestamp: boolean
+  desktop_columns: DesktopColumns
+  mobile_columns: MobileColumns
+  grid_filter: string | null
+}
+
+export const ACCENT_VALUES: Record<Accent, string> = {
+  cyan: 'oklch(0.78 0.10 200)',
+  sage: 'oklch(0.78 0.07 150)',
+  amber: 'oklch(0.78 0.10 75)',
+  violet: 'oklch(0.75 0.10 290)'
+}
+
+// EventKind mirrors backend/internal/events.Kind exactly. 'motion' is not
+// a valid kind — Frigate's `motion` events collapse into `other` on the BFF.
+export type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
+
+// EventItem mirrors backend/internal/events.Item. started_at is RFC3339 UTC.
+// ended_at and duration_seconds are null while an event is in progress.
+export type EventItem = {
+  id: string
+  cam_id: string
+  started_at: string
+  ended_at: string | null
+  duration_seconds: number | null
+  label: string
+  kind: EventKind
+  score: number | null
+  has_snapshot: boolean
+  has_clip: boolean
+}
+
+export type EventsResponse = {
+  items: EventItem[]
+  next_before: string | null
+}
+
+export type AppConfig = {
+  frigate_ui_url: string
+}
+
+export type EventsQuery = {
+  cameras?: string[]
+  labels?: string[]
+  before?: string // ISO 8601; BFF translates to unix-seconds for Frigate
+  limit?: number
+}
+
+async function apiFetch<T>(path: string): Promise<T> {
+  const res = await fetch(path)
+  if (!res.ok) {
+    throw new Error(`${path}: ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<T>
+}
+
+export async function fetchCameras(): Promise<Camera[]> {
+  return apiFetch<Camera[]>('/api/cameras')
+}
+
+export async function fetchPrefs(): Promise<Prefs> {
+  return apiFetch<Prefs>('/api/prefs')
+}
+
+export async function updatePrefs(partial: Partial<Prefs>): Promise<Prefs> {
+  const res = await fetch('/api/prefs', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(partial)
+  })
+  if (!res.ok) {
+    throw new Error(`/api/prefs: ${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<Prefs>
+}
+
+export async function fetchConfig(): Promise<AppConfig> {
+  return apiFetch<AppConfig>('/api/config')
+}
+
+export async function fetchEvents(q: EventsQuery = {}): Promise<EventsResponse> {
+  const params = new URLSearchParams()
+  if (q.cameras) for (const c of q.cameras) params.append('camera', c)
+  if (q.labels) for (const l of q.labels) params.append('label', l)
+  if (q.before) params.set('before', q.before)
+  if (q.limit !== undefined) params.set('limit', String(q.limit))
+  const qs = params.toString()
+  return apiFetch<EventsResponse>(`/api/events${qs ? `?${qs}` : ''}`)
+}
+
+export function eventThumbnailURL(id: string): string {
+  return `/api/events/${encodeURIComponent(id)}/thumbnail.jpg`
+}
+
+export function eventSnapshotURL(id: string): string {
+  return `/api/events/${encodeURIComponent(id)}/snapshot.jpg`
+}
+
+export function eventClipURL(id: string, download = false): string {
+  const base = `/api/events/${encodeURIComponent(id)}/clip.mp4`
+  return download ? `${base}?download=1` : base
+}
+
+// Camera groups (E3.3). Server-side single-membership: when a camera is added
+// to a group, it is removed from any other group atomically.
+export type Group = {
+  id: string
+  name: string
+  camera_ids: string[]
+}
+
+export type GroupErrorCode =
+  | 'name_empty'
+  | 'name_too_long'
+  | 'name_duplicate'
+  | 'camera_not_found'
+  | 'duplicate_camera'
+  | 'not_found'
+  | 'invalid_body'
+  | 'empty_patch'
+  | 'missing_id'
+  | 'internal'
+
+export type GroupErrorBody = {
+  error: GroupErrorCode
+  message: string
+}
+
+// GroupApiError carries the parsed server error so callers can switch on
+// `.code` for inline validation messages.
+export class GroupApiError extends Error {
+  code: GroupErrorCode
+  status: number
+  constructor(body: GroupErrorBody, status: number) {
+    super(body.message)
+    this.code = body.error
+    this.status = status
+  }
+}
+
+async function parseGroupError(res: Response): Promise<GroupApiError> {
+  let body: GroupErrorBody
+  try {
+    body = (await res.json()) as GroupErrorBody
+  } catch {
+    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
+  }
+  return new GroupApiError(body, res.status)
+}
+
+export async function fetchGroups(): Promise<Group[]> {
+  return apiFetch<Group[]>('/api/groups')
+}
+
+export async function createGroup(name: string): Promise<Group> {
+  const res = await fetch('/api/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  })
+  if (!res.ok) throw await parseGroupError(res)
+  return res.json() as Promise<Group>
+}
+
+export async function updateGroup(
+  id: string,
+  patch: { name?: string; camera_ids?: string[] }
+): Promise<Group> {
+  const res = await fetch(`/api/groups/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch)
+  })
+  if (!res.ok) throw await parseGroupError(res)
+  return res.json() as Promise<Group>
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  const res = await fetch(`/api/groups/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw await parseGroupError(res)
+}
+
+// Per-camera friendly-name overrides. The store keeps only cameras that
+// have a user-supplied override; cameras with no entry use the config
+// default exposed via /api/cameras. Setting an empty name clears the
+// override and the camera reverts to its config default.
+export type CameraNamesMap = { [camId: string]: string }
+export type CameraNameUpdate = {
+  cam_id: string
+  name: string // merged result (override if set, else config default)
+}
+
+export type CameraNameErrorCode =
+  | 'camera_not_found'
+  | 'name_too_long'
+  | 'invalid_body'
+  | 'missing_id'
+  | 'internal'
+
+export type CameraNameErrorBody = {
+  error: CameraNameErrorCode
+  message: string
+}
+
+export class CameraNameApiError extends Error {
+  code: CameraNameErrorCode
+  status: number
+  constructor(body: CameraNameErrorBody, status: number) {
+    super(body.message)
+    this.code = body.error
+    this.status = status
+  }
+}
+
+async function parseCameraNameError(res: Response): Promise<CameraNameApiError> {
+  let body: CameraNameErrorBody
+  try {
+    body = (await res.json()) as CameraNameErrorBody
+  } catch {
+    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
+  }
+  return new CameraNameApiError(body, res.status)
+}
+
+export async function fetchCameraNames(): Promise<CameraNamesMap> {
+  const res = await apiFetch<{ names: CameraNamesMap }>('/api/camera-names')
+  return res.names ?? {}
+}
+
+export async function setCameraName(camId: string, name: string): Promise<CameraNameUpdate> {
+  const res = await fetch(`/api/camera-names/${encodeURIComponent(camId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  })
+  if (!res.ok) throw await parseCameraNameError(res)
+  return res.json() as Promise<CameraNameUpdate>
+}
+
+// Dynamic camera discovery (E5). POST /api/cameras/refresh re-pulls Frigate
+// /api/config, persists the new snapshot, and broadcasts SSE camera.added /
+// camera.removed for the diff. The response carries the sorted diff; both
+// arrays are always present (possibly empty), never null.
+export type RefreshDiff = {
+  added: string[]
+  removed: string[]
+}
+
+export type RefreshErrorCode = 'frigate_unreachable' | 'internal'
+
+export type RefreshErrorBody = {
+  error: RefreshErrorCode
+  message: string
+}
+
+export class RefreshApiError extends Error {
+  code: RefreshErrorCode
+  status: number
+  constructor(body: RefreshErrorBody, status: number) {
+    super(body.message)
+    this.code = body.error
+    this.status = status
+  }
+}
+
+async function parseRefreshError(res: Response): Promise<RefreshApiError> {
+  let body: RefreshErrorBody
+  try {
+    body = (await res.json()) as RefreshErrorBody
+  } catch {
+    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
+  }
+  return new RefreshApiError(body, res.status)
+}
+
+export async function refreshCameras(): Promise<RefreshDiff> {
+  const res = await fetch('/api/cameras/refresh', { method: 'POST' })
+  if (!res.ok) throw await parseRefreshError(res)
+  return res.json() as Promise<RefreshDiff>
+}
+
+// Per-camera go2rtc stream overrides (E6). Applied server-side inside the
+// WHEP handler only — GET /api/cameras still surfaces Frigate-truth stream
+// names. An entry is present in the map only when at least one of main/sub
+// is non-empty; setting both empty clears the entry.
+export type Override = {
+  main: string
+  sub: string
+}
+
+export type StreamOverridesMap = { [camId: string]: Override }
+
+export type StreamOverrideErrorCode =
+  | 'invalid_body'
+  | 'camera_not_found'
+  | 'stream_not_found'
+  | 'go2rtc_unreachable'
+  | 'missing_id'
+  | 'internal'
+
+export type StreamOverrideErrorBody = {
+  error: StreamOverrideErrorCode
+  message: string
+}
+
+export class StreamOverrideApiError extends Error {
+  code: StreamOverrideErrorCode
+  status: number
+  constructor(body: StreamOverrideErrorBody, status: number) {
+    super(body.message)
+    this.code = body.error
+    this.status = status
+  }
+}
+
+async function parseStreamOverrideError(res: Response): Promise<StreamOverrideApiError> {
+  let body: StreamOverrideErrorBody
+  try {
+    body = (await res.json()) as StreamOverrideErrorBody
+  } catch {
+    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
+  }
+  return new StreamOverrideApiError(body, res.status)
+}
+
+// fetchGo2RTCStreams returns the sorted list of go2rtc stream aliases.
+// The BFF passes through go2rtc's /api/streams keys directly; the response
+// body IS the array, not wrapped in an envelope.
+export async function fetchGo2RTCStreams(): Promise<string[]> {
+  const res = await fetch('/api/go2rtc/streams')
+  if (!res.ok) throw await parseStreamOverrideError(res)
+  return res.json() as Promise<string[]>
+}
+
+export async function fetchStreamOverrides(): Promise<StreamOverridesMap> {
+  const res = await fetch('/api/stream-overrides')
+  if (!res.ok) throw await parseStreamOverrideError(res)
+  const body = (await res.json()) as { overrides: StreamOverridesMap | null }
+  return body.overrides ?? {}
+}
+
+// setStreamOverride PUTs the override pair for camId. Both fields are
+// always sent — the BFF requires them. Sending both empty clears the entry
+// (the response carries the saved Override, which is {main:"", sub:""} on
+// the clear path).
+export async function setStreamOverride(
+  camId: string,
+  main: string,
+  sub: string
+): Promise<Override> {
+  const res = await fetch(`/api/stream-overrides/${encodeURIComponent(camId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ main, sub })
+  })
+  if (!res.ok) throw await parseStreamOverrideError(res)
+  return res.json() as Promise<Override>
+}

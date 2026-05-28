@@ -1,0 +1,62 @@
+name: "Bug report"
+description: "Something is broken in Skua. Use this for confirmed misbehaviour, not for configuration questions (those go to Discussions)."
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: input
+    id: nestscope-version
+    attributes:
+      label: Skua version (image tag or commit)
+    validations:
+      required: true
+  - type: input
+    id: frigate-version
+    attributes:
+      label: Frigate version
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client (browser + OS, e.g. "iOS 17.5 Safari, PWA installed")
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: Short description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected to happen
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: bff-logs
+    attributes:
+      label: BFF logs (docker logs skua)
+      description: Trim to the relevant window.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: browser-console
+    attributes:
+      label: Browser DevTools console errors
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+    validations:
+      required: false

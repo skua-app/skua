@@ -1,0 +1,92 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+
+type Config struct {
+	Port                string
+	LogLevel            string
+	LogFormat           string
+	FrigateURL          string
+	FrigateUIURL        string
+	Go2RTCURL           string
+	SnapshotCacheTTL    time.Duration
+	HTTPTimeout         time.Duration
+	ShutdownTimeout     time.Duration
+	WHEPTimeout         time.Duration
+	StreamProxyTimeout  time.Duration
+	PrefsPath           string
+	GroupsPath          string
+	NamesPath           string
+	CamerasPath         string
+	CapabilitiesPath    string
+	StreamOverridesPath string
+}
+
+func Load() (*Config, error) {
+	cfg := &Config{
+		Port:                env("PORT", "3200"),
+		LogLevel:            env("LOG_LEVEL", "info"),
+		LogFormat:           env("LOG_FORMAT", "json"),
+		FrigateURL:          env("FRIGATE_URL", ""),
+		FrigateUIURL:        env("FRIGATE_UI_URL", ""),
+		Go2RTCURL:           env("GO2RTC_URL", ""),
+		SnapshotCacheTTL:    mustDuration(env("SNAPSHOT_CACHE_TTL", "15s")),
+		HTTPTimeout:         mustDuration(env("HTTP_TIMEOUT", "5s")),
+		ShutdownTimeout:     mustDuration(env("SHUTDOWN_TIMEOUT", "10s")),
+		WHEPTimeout:         mustDuration(env("WHEP_TIMEOUT", "10s")),
+		StreamProxyTimeout:  mustDuration(env("STREAM_PROXY_TIMEOUT", "0")),
+		PrefsPath:           env("PREFS_PATH", "/data/prefs.json"),
+		GroupsPath:          env("GROUPS_CONFIG_PATH", "/data/groups.yaml"),
+		NamesPath:           env("CAMERA_NAMES_CONFIG_PATH", "/data/camera_names.yaml"),
+		CamerasPath:         env("CAMERAS_CONFIG_PATH", "/data/cameras.yaml"),
+		CapabilitiesPath:    env("CAPABILITIES_CONFIG_PATH", "/data/capabilities.yaml"),
+		StreamOverridesPath: env("STREAM_OVERRIDES_CONFIG_PATH", "/data/stream_overrides.yaml"),
+	}
+
+	var errs []string
+	if cfg.FrigateURL == "" {
+		errs = append(errs, "FRIGATE_URL is required")
+	}
+	cfg.FrigateURL = strings.TrimRight(cfg.FrigateURL, "/")
+	if cfg.FrigateUIURL == "" {
+		cfg.FrigateUIURL = cfg.FrigateURL
+	}
+	cfg.FrigateUIURL = strings.TrimRight(cfg.FrigateUIURL, "/")
+	if cfg.Go2RTCURL != "" {
+		cfg.Go2RTCURL = strings.TrimRight(cfg.Go2RTCURL, "/")
+	}
+
+	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+	if !validLevels[cfg.LogLevel] {
+		errs = append(errs, fmt.Sprintf("LOG_LEVEL must be one of debug|info|warn|error, got %q", cfg.LogLevel))
+	}
+	validFormats := map[string]bool{"json": true, "text": true}
+	if !validFormats[cfg.LogFormat] {
+		errs = append(errs, fmt.Sprintf("LOG_FORMAT must be json|text, got %q", cfg.LogFormat))
+	}
+
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("config: %s", strings.Join(errs, "; "))
+	}
+	return cfg, nil
+}
+
+func env(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+func mustDuration(s string) time.Duration {
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0
+	}
+	return d
+}

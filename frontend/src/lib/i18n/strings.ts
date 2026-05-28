@@ -1,0 +1,131 @@
+export const streamErrorReasons: Record<string, string> = {
+  timeout: 'Timed out (3 s)',
+  negotiation_failed: 'Connection negotiation failed',
+  ice_failed: 'Could not establish media channel',
+  network: 'Network error',
+  unknown: 'Unknown error'
+}
+
+export const ui = {
+  // grid mode toggle
+  hd: 'HD',
+  // stream errors
+  retry: 'Retry',
+  streamErrorHeading: 'Could not connect to camera',
+  connecting: 'Connecting…',
+  buffering: 'Buffering…',
+  // navigation
+  cameras: 'Cameras',
+  events: 'Events',
+  settings: 'Settings',
+  // shared
+  comingSoon: 'Coming soon',
+  online: 'Online',
+  offline: 'Offline',
+  live: 'LIVE',
+  // settings
+  showTimestamp: 'Timestamp on tiles and video',
+  // events
+  eventsTitle: 'Events',
+  eventsEmpty: 'No events',
+  eventsLoading: 'Loading…',
+  eventsLoadError: 'Could not load events',
+  filterAll: 'All',
+  recentEvents: 'Recent events',
+  noRecentEvents: 'Nothing yet',
+  openInFrigate: 'Open in Frigate',
+  downloadVideo: 'Download video',
+  close: 'Close',
+  duration: 'Duration',
+  score: 'Confidence',
+  // settings > cameras section (E5)
+  camerasSection: 'Cameras',
+  refreshCameras: 'Refresh from Frigate',
+  refreshingCameras: 'Refreshing…',
+  refreshNoChanges: 'No changes.',
+  refreshFrigateDown: 'Frigate is unreachable.',
+  refreshGenericError: 'Refresh failed.',
+  refreshDiffAdded: 'Added',
+  refreshDiffRemoved: 'Removed',
+  // settings > IA + appearance + per-camera editor (E6 sprint B)
+  sectionAppearance: 'Appearance',
+  sectionCameras: 'Cameras',
+  sectionGroups: 'Groups',
+  gridModeLabel: 'Grid mode',
+  desktopColumnsLabel: 'Columns (desktop)',
+  mobileColumnsLabel: 'Columns (mobile)',
+  nameStyleLabel: 'Camera name',
+  accentLabel: 'Accent',
+  nameLabel: 'Name',
+  streamMain: 'Main stream',
+  streamSub: 'Sub stream',
+  streamDefault: 'Default',
+  streamsHint: 'go2rtc stream sources. Change only if you know what you’re doing.',
+  streamsLoading: 'Loading streams…',
+  streamsLoadError: 'Could not load go2rtc stream list.',
+  streamOverrideSaveError: 'Could not save.',
+  streamOverrideSaving: 'Saving…',
+  // settings > shared editor labels
+  groupNameLabel: 'Name',
+  groupNoCameras: 'No cameras',
+  groupCameras: 'Cameras:',
+  cancel: 'Cancel',
+  save: 'Save',
+  edit: 'Edit',
+  delete: 'Delete',
+  createGroup: '+ Create group',
+  newGroupPlaceholder: 'Group name',
+  create: 'Create',
+  confirmDeleteGroup: 'Delete group "{name}"? Cameras will remain but ungrouped.',
+  saveErrorGeneric: 'Save failed',
+  createErrorGeneric: 'Create failed',
+  // shared labels
+  yes: 'Yes',
+  no: 'No',
+  cameraNameAria: 'Camera name',
+  refreshHint:
+    'Reload the camera list from Frigate. Use after adding or removing a camera in Frigate.',
+  // moved out of components in L3
+  errorTitle: 'Something went wrong',
+  errorSubtitle: 'Reload the page to continue.',
+  errorReload: 'Reload',
+  menuLabel: 'Menu',
+  telemetryLabel: 'Telemetry',
+  otherCamerasLabel: 'Other cameras',
+  primaryNavLabel: 'Primary navigation',
+  groupFilterLabel: 'Group filter',
+  cameraGroupTitle: 'Camera group',
+  camerasCountWord: 'cameras',
+  backLabel: 'Back',
+  streamLabel: 'Stream',
+  qualityLabel: 'Quality',
+  viewAll: 'View all →',
+  secondsShort: 's',
+  noSignal: 'no signal',
+  statusUnknown: 'Status unknown',
+  installAppTitle: 'Install app',
+  install: 'Install',
+  installIOSHintTap: 'Tap',
+  installIOSHintShare: '⬆ Share',
+  installIOSHintHome: 'Add to Home Screen',
+  appUpdatedToast: 'App updated',
+  groupAria: 'Group',
+  cameraAria: 'Camera',
+  kindAria: 'Kind',
+  nameStyleBelow: 'Below',
+  nameStyleOverlay: 'Overlay',
+  accentCyan: 'Cyan',
+  accentSage: 'Sage',
+  accentAmber: 'Amber',
+  accentViolet: 'Violet'
+}
+
+// eventKindLabels covers the four EventKind values surfaced by the BFF.
+// 'motion' from the design mock is gone — Frigate `motion` collapses into
+// 'other' server-side (see backend/internal/events.KindFor).
+export const eventKindLabels: Record<string, string> = {
+  person: 'Person',
+  vehicle: 'Vehicle',
+  animal: 'Animal',
+  other: 'Other'
+}

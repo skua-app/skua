@@ -1,0 +1,47 @@
+name: "Feature request"
+description: "Propose a new feature or extension. For concept-stage ideas, prefer opening a Discussion first."
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the user-facing pain point, not the technical solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: How you'd like it to work; rough sketch is fine.
+    validations:
+      required: true
+  - type: dropdown
+    id: scope-check
+    attributes:
+      label: Have you read CLAUDE.md §1 and §2 (project scope and access model)?
+      options:
+        - "Yes"
+        - "Not yet"
+    validations:
+      required: true
+  - type: input
+    id: discussion
+    attributes:
+      label: Linked Discussion (if any)
+      description: Features should usually start as a Discussion in the Ideas category.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+    validations:
+      required: false

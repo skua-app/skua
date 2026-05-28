@@ -1,0 +1,28 @@
+services:
+  skua:
+    image: ghcr.io/skua-app/skua:${TAG:-latest}
+    container_name: skua
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    environment:
+      # Frigate's REST API. Use whatever hostname resolves to your Frigate
+      # container — `frigate` works if both run on the same Docker network.
+      FRIGATE_URL: "http://frigate:5000"
+      GO2RTC_URL: "http://frigate:1984"
+      LOG_LEVEL: "info"
+      LOG_FORMAT: "json"
+      WHEP_TIMEOUT: "10s"
+      STREAM_PROXY_TIMEOUT: "0"
+      PREFS_PATH: "/data/prefs.json"
+      GROUPS_CONFIG_PATH: "/data/groups.yaml"
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "/server", "-healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
