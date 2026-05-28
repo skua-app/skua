@@ -649,6 +649,7 @@ These known issues are recorded but not yet fixed:
 | **patch** | E6 sprint A — backend: per-camera go2rtc stream override store + endpoints (no UI) | **DONE** | v0.6.1 |
 | **E6** | Per-camera go2rtc stream override editor in /settings; /settings IA redesign (desktop rail + scroll-spy, mobile single-column) | **DONE** | v0.7.0 |
 | **Public Launch** | Rebrand to Skua, desensitize, English baseline, public-grade docs, MIT, public migration | in progress | v0.8.0 |
+| **patch** | header domain + app-name rebrand residue fix, manifest color sync | **DONE** | v0.8.1 |
 | E7+ | PTZ, semantic search, multi-user prefs | unscheduled | |
 
 - BFF exposes: `/api/config`, `/api/cameras` (now carrying `groups[]`),
