@@ -27,7 +27,7 @@ recommendations in SECURITY.md.
 - [x] L8 CHANGELOG.md covering v0.1.0..v0.8.0
 - [x] L9 GHA release workflow with multi-arch and auto release notes
 - [ ] L10 GHCR public visibility flip
-- [ ] L11 Squash and migrate to public repo, tag v0.8.0
+- [x] L11 Squash and migrate to public repo, tag v0.8.0
 - [ ] L7 Real screenshots in docs/screenshots/ (deferred — synthetic Frigate rig built post-migration)
 - [ ] L12 Announce (r/selfhosted, r/homelab, Frigate Discord, Show HN)
 
