@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-05-28
+
+### Changed
+
+- PWA manifest `theme_color` / `background_color` aligned to `#0a0b0d`,
+  matching `--bg` in `app.css` and the `app.html` `theme-color` meta.
+
+### Fixed
+
+- Header no longer shows a placeholder domain — desktop shows the
+  wordmark only, mobile shows the live host.
+- iOS home-screen install and the web manifest now name the app "Skua"
+  instead of "Cams".
+
 ## [0.8.0] — 2026-05-28
 
 ### Added
@@ -338,5 +352,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/skua-app/skua/releases/tag/v0.8.1
 [0.8.0]: https://github.com/skua-app/skua/releases/tag/v0.8.0

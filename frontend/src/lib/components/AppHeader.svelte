@@ -35,6 +35,14 @@
     }
   })
 
+  // Live host for the mobile status row. ssr=false, but window is still
+  // absent at module-eval time on the client's first synchronous pass, so
+  // read it once inside an effect rather than at module scope.
+  let host = $state('')
+  $effect(() => {
+    host = window.location.host
+  })
+
   const cameras = $derived(camerasStore.cameras)
   const onlineCount = $derived(cameras.filter((c) => c.online).length)
   const offlineCount = $derived(cameras.length - onlineCount)
@@ -93,7 +101,6 @@
         <span class="bracket br"></span>
       </div>
       <span class="ah-brand">skua</span>
-      <Mono color="var(--text-3)" size={11}>example.com</Mono>
       <nav class="ah-nav" aria-label={ui.primaryNavLabel}>
         {#each navItems as item (item.href)}
           <a
@@ -166,7 +173,7 @@
           </span>
         {/if}
       </div>
-      <Mono color="var(--text-3)" size={10}>skua.example.com</Mono>
+      <Mono color="var(--text-3)" size={10}>{host}</Mono>
     </div>
   </header>
 

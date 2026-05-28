@@ -28,14 +28,14 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//]
       },
       manifest: {
-        name: 'Cams',
-        short_name: 'Cams',
+        name: 'Skua',
+        short_name: 'Skua',
         description: 'Home cameras viewer',
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        background_color: '#0a0a0a',
-        theme_color: '#0a0a0a',
+        background_color: '#0a0b0d',
+        theme_color: '#0a0b0d',
         orientation: 'any',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
