@@ -60,7 +60,17 @@ ships as a single static binary under 9 MB.
 
 ## Screenshots
 
-<!-- L7: 4 screenshots will be added here — mobile grid, mobile focus, events, settings. Reserve the layout slot; image files land in docs/screenshots/. -->
+Mobile PWA, installed to the iOS home screen.
+
+<p align="center">
+  <img src="docs/screenshots/mobile-grid.jpg" alt="Skua camera grid — Cameras list with HD/ECO toggle and online status" width="280">
+  <img src="docs/screenshots/mobile-focus.jpg" alt="Skua single-camera focus view — WebRTC live stream with camera switcher" width="280">
+  <img src="docs/screenshots/mobile-events.jpg" alt="Skua events list — filterable by camera, group, and detection type" width="280">
+</p>
+<p align="center">
+  <img src="docs/screenshots/mobile-settings.jpg" alt="Skua settings — appearance and camera configuration" width="280">
+  <img src="docs/screenshots/mobile-event-modal.jpg" alt="Skua event detail — inline clip playback with download and Open in Frigate" width="280">
+</p>
 
 ## Requirements
 
