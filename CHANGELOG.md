@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-05-29
+
+### Fixed
+
+- Focus-view LQ on cameras without a Sub stream: quality is now resolved
+  per-camera (a Sub-less camera always uses Main), the LQ segment is
+  greyed out with a hint, and opening such a camera while the global
+  pref is `sub` no longer triggers a `StreamError` from the WHEP `400 no
+  stream configured for quality`. The global LQ choice is left untouched
+  so Sub-capable cameras keep it.
+- DesktopFocus stream-name labels show the camera's real go2rtc stream
+  name (Frigate-truth Main/Sub) instead of a fabricated `*_h264` string.
+
 ## [0.8.1] — 2026-05-28
 
 ### Changed
@@ -352,6 +365,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/skua-app/skua/releases/tag/v0.8.2
 [0.8.1]: https://github.com/skua-app/skua/releases/tag/v0.8.1
 [0.8.0]: https://github.com/skua-app/skua/releases/tag/v0.8.0

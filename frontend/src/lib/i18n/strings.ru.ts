@@ -100,6 +100,7 @@ export const ui = {
   backLabel: 'Назад',
   streamLabel: 'Поток',
   qualityLabel: 'Качество',
+  subUnavailable: 'Доп. поток не настроен',
   viewAll: 'посм. все →',
   secondsShort: 'с',
   noSignal: 'нет сигнала',

@@ -99,6 +99,7 @@ export const ui = {
   backLabel: 'Back',
   streamLabel: 'Stream',
   qualityLabel: 'Quality',
+  subUnavailable: 'No sub stream configured',
   viewAll: 'View all →',
   secondsShort: 's',
   noSignal: 'no signal',

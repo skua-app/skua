@@ -16,7 +16,8 @@
 
   type Props = {
     camera: Camera | null
-    streamQuality: 'main' | 'sub'
+    effectiveQuality: 'main' | 'sub'
+    subAvailable: boolean
     audioAvailable: boolean
     isMuted: boolean
     isPaused: boolean
@@ -39,7 +40,8 @@
 
   let {
     camera,
-    streamQuality,
+    effectiveQuality,
+    subAvailable,
     audioAvailable,
     isMuted,
     isPaused,
@@ -143,10 +145,10 @@
     })
   })
 
-  const qualityOptions = [
+  const qualityOptions = $derived([
     { value: 'main' as const, label: 'HQ' },
-    { value: 'sub' as const, label: 'LQ' }
-  ]
+    { value: 'sub' as const, label: 'LQ', disabled: !subAvailable }
+  ])
 </script>
 
 <div class="mf-root">
@@ -229,12 +231,15 @@
     <div class="mf-meta-left">
       <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.streamLabel}</Mono>
       <Segmented
-        value={streamQuality}
+        value={effectiveQuality}
         options={qualityOptions}
         onChange={(v) => {
-          if (v !== streamQuality) toggleQuality()
+          if (v !== effectiveQuality) toggleQuality()
         }}
       />
+      {#if !subAvailable}
+        <Mono size={9} color="var(--text-3)" letterSpacing={0.3}>{ui.subUnavailable}</Mono>
+      {/if}
     </div>
     <div class="mf-meta-right">
       <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.qualityLabel}</Mono>

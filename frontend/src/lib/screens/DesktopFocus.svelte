@@ -16,7 +16,8 @@
 
   type Props = {
     camera: Camera | null
-    streamQuality: 'main' | 'sub'
+    effectiveQuality: 'main' | 'sub'
+    subAvailable: boolean
     audioAvailable: boolean
     isMuted: boolean
     isPaused: boolean
@@ -39,7 +40,8 @@
 
   let {
     camera,
-    streamQuality,
+    effectiveQuality,
+    subAvailable,
     audioAvailable,
     isMuted,
     isPaused,
@@ -89,10 +91,19 @@
 
   const otherCameras = $derived(camerasStore.cameras.filter((c) => c.id !== camera?.id).slice(0, 6))
 
-  const qualityOptions = [
+  const qualityOptions = $derived([
     { value: 'main' as const, label: 'HQ' },
-    { value: 'sub' as const, label: 'LQ' }
-  ]
+    { value: 'sub' as const, label: 'LQ', disabled: !subAvailable }
+  ])
+
+  // Real go2rtc stream name from the camera (Frigate-truth), selected by the
+  // active quality. Stream overrides are server-side only and not visible to
+  // the frontend, so this is the configured Main/Sub name — never a
+  // fabricated *_h264 string. Empty (shouldn't happen for Main) → render
+  // nothing.
+  const streamName = $derived(
+    effectiveQuality === 'sub' ? (camera?.streams.sub ?? '') : (camera?.streams.main ?? '')
+  )
 
   const RECENT_LIMIT = 6
 
@@ -152,9 +163,9 @@
       </button>
       <div class="df-divider"></div>
       <span class="df-cam-name">{camera?.name ?? '—'}</span>
-      <Mono color="var(--text-3)" size={11}>
-        {camera ? `${camera.id}_main_h264` : ''}
-      </Mono>
+      {#if streamName}
+        <Mono color="var(--text-3)" size={11}>{streamName}</Mono>
+      {/if}
       <span class="df-status">
         <OnlineDot online={camera?.online ?? null} size={5} />
         <Mono size={10} color="var(--text-2)" letterSpacing={0.5}>
@@ -164,12 +175,15 @@
     </div>
     <div class="df-topbar-right">
       <Segmented
-        value={streamQuality}
+        value={effectiveQuality}
         options={qualityOptions}
         onChange={(v) => {
-          if (v !== streamQuality) toggleQuality()
+          if (v !== effectiveQuality) toggleQuality()
         }}
       />
+      {#if !subAvailable}
+        <Mono size={10} color="var(--text-3)" letterSpacing={0.3}>{ui.subUnavailable}</Mono>
+      {/if}
       <div class="df-divider"></div>
       <IconBtn
         icon="activity"
@@ -240,9 +254,9 @@
         </div>
         <div class="df-controls-right">
           <Mono size={10} color="var(--text-3)" letterSpacing={0.4}>
-            <span class="df-id-strong"
-              >{camera?.id ?? ''}_{streamQuality === 'main' ? 'main' : 'sub'}_h264</span
-            >{videoCodec ? ` · ${videoCodec}` : ''}{resolution ? ` · ${resolution}` : ''}
+            {#if streamName}<span class="df-id-strong">{streamName}</span>{/if}{videoCodec
+              ? ` · ${videoCodec}`
+              : ''}{resolution ? ` · ${resolution}` : ''}
           </Mono>
           <IconBtn icon="fullscreen" label="full" onclick={toggleFullscreen} size={34} />
         </div>

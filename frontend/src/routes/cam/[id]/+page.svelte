@@ -27,6 +27,12 @@
   let isPaused = $state(false)
   let isMuted = $state(prefsStore.mutedByDefault)
   let streamQuality = $state<'main' | 'sub'>('main')
+  // A camera only has an LQ option when Frigate exposes a Sub stream for it.
+  const subAvailable = $derived(!!camera?.streams.sub)
+  // Effective quality clamps the persisted (global) pref to what the current
+  // camera can serve: a Sub-less camera always resolves to 'main', so a
+  // persisted 'sub' pref never drives a WHEP connect that the BFF would 400.
+  const effectiveQuality = $derived<'main' | 'sub'>(subAvailable ? streamQuality : 'main')
   let streamHasAudio = $state(false)
   // Drives the snapshot-poster crossfade and spinner stage text. Flips true on
   // the native `playing` event (first frame painted) and back to false on
@@ -57,7 +63,7 @@
       await startWhep({
         camId: cam.id,
         videoEl,
-        quality: streamQuality,
+        quality: effectiveQuality,
         signal: controller.signal,
         getMuted: () => isMuted,
         onStateChange(s, reason) {
@@ -101,6 +107,9 @@
   }
 
   function toggleQuality() {
+    // Defense in depth: the LQ segment is also disabled in the UI when the
+    // camera has no Sub stream. Never persist or connect to 'sub' here.
+    if (!subAvailable) return
     const next = streamQuality === 'main' ? 'sub' : 'main'
     streamQuality = next
     prefsStore.setStreamQuality(next)
@@ -304,7 +313,8 @@
 {#if isDesktop}
   <DesktopFocus
     {camera}
-    {streamQuality}
+    {effectiveQuality}
+    {subAvailable}
     {audioAvailable}
     {isMuted}
     {isPaused}
@@ -330,7 +340,8 @@
 {:else}
   <MobileFocus
     {camera}
-    {streamQuality}
+    {effectiveQuality}
+    {subAvailable}
     {audioAvailable}
     {isMuted}
     {isPaused}

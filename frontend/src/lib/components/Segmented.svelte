@@ -1,5 +1,5 @@
 <script lang="ts" generics="T extends string">
-  type Option = { value: T; label: string }
+  type Option = { value: T; label: string; disabled?: boolean }
   type Props = {
     value: T
     options: Option[]
@@ -16,7 +16,10 @@
       type="button"
       class="seg"
       class:active={opt.value === value}
-      onclick={() => onChange(opt.value)}
+      disabled={opt.disabled}
+      onclick={() => {
+        if (!opt.disabled) onChange(opt.value)
+      }}
     >
       {opt.label}
     </button>
@@ -50,11 +53,15 @@
     padding: 7px 14px;
     font-size: 12px;
   }
-  .seg:hover {
+  .seg:not(:disabled):hover {
     color: var(--text);
   }
   .seg.active {
     color: var(--bg);
     background: var(--accent);
+  }
+  .seg:disabled {
+    color: var(--text-3);
+    cursor: not-allowed;
   }
 </style>

@@ -650,6 +650,7 @@ These known issues are recorded but not yet fixed:
 | **E6** | Per-camera go2rtc stream override editor in /settings; /settings IA redesign (desktop rail + scroll-spy, mobile single-column) | **DONE** | v0.7.0 |
 | **Public Launch** | Rebrand to Skua, desensitize, English baseline, public-grade docs, MIT, public migration | in progress | v0.8.0 |
 | **patch** | header domain + app-name rebrand residue fix, manifest color sync | **DONE** | v0.8.1 |
+| **patch** | focus LQ fix for cameras without a Sub stream (per-camera effective quality, greyed-out LQ + hint) + DesktopFocus real stream-name labels | **DONE** | v0.8.2 |
 | E7+ | PTZ, semantic search, multi-user prefs | unscheduled | |
 
 - BFF exposes: `/api/config`, `/api/cameras` (now carrying `groups[]`),
