@@ -81,10 +81,12 @@ Mobile PWA, installed to the iOS home screen.
 - Docker and Docker Compose v2 on the host (Linux, x86_64 or aarch64).
 - A trusted LAN where the Docker host is reachable from the client
   devices that will use Skua.
-- Cameras configured in Frigate with H.264 `*_main_h264` aliases for
-  iOS WebRTC compatibility (see
+- Each camera needs an H.264 go2rtc stream for the focus view (iOS
+  Safari WebRTC does not play H.265), pointed at by `live.streams.Main`
+  in the Frigate config. The go2rtc alias name is your choice, not a
+  required pattern (see
   [docs/setup/frigate-config.md](docs/setup/frigate-config.md) for the
-  alias and ICE-candidates configuration).
+  stream-source and ICE-candidates setup).
 - Optional: a reverse proxy with HTTPS if you want iPhone
   home-screen install (PWA install requires TLS).
 

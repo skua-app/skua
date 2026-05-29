@@ -11,7 +11,7 @@ TypeScript-style definitions.
 // GET /api/cameras
 type Camera = {
   id: string
-  name: string         // user-supplied override (see /api/camera-names) else config.Cameras default
+  name: string         // user-supplied override (see /api/camera-names) else the Frigate-sourced default from the camera registry (cameras.yaml)
   online: boolean
   snapshot_url: string
   capabilities: {
@@ -20,8 +20,8 @@ type Camera = {
     // NOTE: audio is NOT in capabilities — detected at runtime from WHEP stream
   }
   streams: {
-    main: string   // go2rtc stream name (always *_main_h264)
-    sub: string    // go2rtc stream name
+    main: string   // go2rtc stream name from cameras.<id>.live.streams.Main; the alias name is arbitrary (user-chosen, no required pattern)
+    sub: string    // go2rtc stream name from cameras.<id>.live.streams.Sub; "" when the camera has no Sub stream (focus-view LQ unavailable, v0.8.2)
   }
   groups: string[]  // group ids this camera belongs to; 0 or 1 element (single-membership)
 }
@@ -144,7 +144,7 @@ type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
 type Group = {
   id: string         // uuid v4, server-generated
   name: string       // 1..30 chars after trim; unique case-insensitive
-  camera_ids: string[]  // each must exist in config.Cameras; no duplicates
+  camera_ids: string[]  // each must exist in the camera registry (sourced from Frigate, persisted to cameras.yaml); no duplicates
 }
 
 // Single-membership invariant: a camera belongs to at most one group at a
@@ -180,7 +180,8 @@ type GroupErrorBody = {
 
 // GET /api/camera-names → { names: { [cam_id]: string } }
 //   Returns ONLY cameras with an explicit override. Cameras absent from the
-//   map use their config.Cameras default — which is already merged into
+//   map use their Frigate-sourced default from the camera registry
+//   (cameras.yaml) — which is already merged into
 //   /api/cameras under .name, so the UI rarely needs to call this endpoint
 //   directly (settings reads .name from camerasStore).
 
