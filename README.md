@@ -234,6 +234,13 @@ write to it — the BFF fails on its first write (`cameras.yaml`,
 empty, so the UI never comes up. The failure shows up in `docker logs
 skua` as a `permission denied` write error.
 
+Skua also detects this case at startup and serves a styled setup page on
+its normal port instead of leaving the browser at connection-refused —
+visit the Skua URL and you'll see the problem and the fix described
+inline. The page polls `/healthz` in the background and auto-reloads
+into the real app once you apply one of the fixes below and run `docker
+compose restart skua`.
+
 Two ways to fix it:
 
 - **Use a Docker named volume** — let Docker manage ownership for you:
@@ -269,9 +276,13 @@ above.
   ```
 
 - Check the BFF logs: `docker logs skua`.
-- If Frigate was unreachable on first start, Skua fails fast with
-  a clear log line — see CLAUDE.md §12 ("Camera registry is loaded
-  once at startup").
+- If Frigate was unreachable on the very first start — before any
+  camera snapshot has been cached to `cameras.yaml` — Skua serves a
+  setup page on its normal port with Frigate-specific instructions
+  instead of failing to start, and auto-reloads into the real app
+  once Frigate is reachable and the container is restarted. The same
+  fail-fast log line is still emitted; see CLAUDE.md §12 ("Camera
+  registry is loaded once at startup").
 
 ### PWA not installable on iPhone
 

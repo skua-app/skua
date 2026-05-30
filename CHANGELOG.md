@@ -14,6 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-05-30
+
+### Added
+
+- Emergency setup page: when the BFF can't start because the `/data`
+  volume isn't writable by the container's non-root uid (65532), or
+  because Frigate is unreachable on the very first start with no
+  cached camera snapshot, Skua now serves a self-contained styled
+  page on its normal port explaining the problem and the fix,
+  instead of exiting with the browser left at connection-refused.
+  The page auto-reloads into the app once the issue is fixed and the
+  container is restarted.
+
+### Fixed
+
+- Startup error when `/data` is not writable now prints an actionable
+  diagnostic naming the required uid/gid (65532) and the two
+  remedies (`chown -R 65532:65532 <dir>` or a named Docker volume),
+  and no longer repeats the `cameras:` prefix.
+
 ## [0.8.3] — 2026-05-30
 
 ### Changed
@@ -376,7 +396,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.3...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.4...HEAD
+[0.8.4]: https://github.com/skua-app/skua/releases/tag/v0.8.4
 [0.8.3]: https://github.com/skua-app/skua/releases/tag/v0.8.3
 [0.8.2]: https://github.com/skua-app/skua/releases/tag/v0.8.2
 [0.8.1]: https://github.com/skua-app/skua/releases/tag/v0.8.1

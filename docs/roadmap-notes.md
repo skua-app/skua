@@ -132,3 +132,23 @@ household either lack a microphone path or ship without ISAPI — see
 `docs/hikvision-no-web-sku.md`). Beyond that, E7+ in §13 covers PTZ,
 semantic search, and multi-user prefs, none of which have a near-term
 trigger.
+
+**v0.8.4 is a launch-hardening patch prompted by the first public
+issue (#1):** a fresh install failed because the host `./data` bind
+mount was owned by `root` and the distroless non-root uid (65532)
+could not write to it, leaving the data folder empty and the browser
+at connection-refused. Two changes ship together. First, the startup
+stderr block for an unwritable `/data` is now an actionable
+diagnostic naming the required uid/gid and the two concrete remedies
+(`chown -R 65532:65532 <dir>` or a named Docker volume), with the
+redundant `cameras:` prefix removed. Second, a new
+`internal/emergency` package serves a self-contained styled setup
+page on the normal port instead of letting `main.go` exit on the two
+startup blockers (unwritable `/data` via `fs.ErrPermission`, or
+Frigate unreachable on the very first start with no `cameras.yaml`
+snapshot to fall back on). The page polls `/healthz` every three
+seconds and auto-reloads into the real app once the operator applies
+the fix and runs `docker compose restart skua` — emergency
+`/healthz` returns 503 so the reload only fires when the normal
+server returns 200. Only the `camerasStore` blocker routes into
+emergency mode; the other stores keep `os.Exit(1)`.

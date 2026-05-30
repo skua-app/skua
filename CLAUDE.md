@@ -401,6 +401,19 @@ emitted by the BFF: `event.new`, `event.end`, `camera.online`,
   — Compose users need `chown -R 65532:65532 ./data` once or a Docker
   named volume. Documented in README Troubleshooting.
 
+- **Emergency setup-page mode for the two startup blockers.** When
+  `cameras.New` returns an error that unwraps to `fs.ErrPermission` on the
+  data dir, or any error on a first start where no `cameras.yaml` snapshot
+  exists yet, `main.go` calls `internal/emergency.Serve` instead of
+  `os.Exit(1)`. The emergency server binds the normal port and serves a
+  self-contained styled page (status 200 on every GET; 503 on `/healthz`
+  and on every `/api/*` path so the page's `fetch('/healthz')` poller only
+  reloads when the normal server returns 200 "ok" after a healthy
+  restart). Only the camerasStore blocker routes here — prefs / groups /
+  names / capabilities / streamoverrides / wsURL keep their `os.Exit(1)`.
+  The operator-facing stderr diagnostic from the prior commit still fires
+  before emergency mode is entered.
+
 - **Stream override layer applies server-side only inside the WHEP handler.**
   `GET /api/cameras` still surfaces Frigate-truth main/sub names from
   cameras.yaml — the override merge happens at WHEP-negotiation time. This
