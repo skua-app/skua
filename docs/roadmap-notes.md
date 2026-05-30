@@ -26,12 +26,12 @@ recommendations in SECURITY.md.
 - [x] L6 Legal and community meta (LICENSE MIT, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, issue templates)
 - [x] L8 CHANGELOG.md covering v0.1.0..v0.8.0
 - [x] L9 GHA release workflow with multi-arch and auto release notes
-- [ ] L10 GHCR public visibility flip
+- [x] L10 GHCR public visibility flip
 - [x] L11 Squash and migrate to public repo, tag v0.8.0
 - [x] L7 Real screenshots in docs/screenshots/ (deferred — synthetic Frigate rig built post-migration)
 - [ ] L12 Announce (r/selfhosted, r/homelab, Frigate Discord, Show HN)
 
-**Current deployed state:** v0.7.0 is the shipped tag. The household app
+**Current deployed state:** v0.8.4 is the shipped tag. The household app
 is feature-complete for live + events + groups + per-camera names + the
 dynamic-camera-discovery loop, and per-camera go2rtc stream overrides can
 now be edited from /settings. v0.4.0
@@ -133,22 +133,52 @@ household either lack a microphone path or ship without ISAPI — see
 semantic search, and multi-user prefs, none of which have a near-term
 trigger.
 
-**v0.8.4 is a launch-hardening patch prompted by the first public
-issue (#1):** a fresh install failed because the host `./data` bind
-mount was owned by `root` and the distroless non-root uid (65532)
-could not write to it, leaving the data folder empty and the browser
-at connection-refused. Two changes ship together. First, the startup
-stderr block for an unwritable `/data` is now an actionable
-diagnostic naming the required uid/gid and the two concrete remedies
-(`chown -R 65532:65532 <dir>` or a named Docker volume), with the
-redundant `cameras:` prefix removed. Second, a new
-`internal/emergency` package serves a self-contained styled setup
-page on the normal port instead of letting `main.go` exit on the two
-startup blockers (unwritable `/data` via `fs.ErrPermission`, or
-Frigate unreachable on the very first start with no `cameras.yaml`
-snapshot to fall back on). The page polls `/healthz` every three
-seconds and auto-reloads into the real app once the operator applies
-the fix and runs `docker compose restart skua` — emergency
-`/healthz` returns 503 so the reload only fires when the normal
-server returns 200. Only the `camerasStore` blocker routes into
-emergency mode; the other stores keep `os.Exit(1)`.
+**v0.8.x — Public Launch and first-run hardening.** v0.8.0 was the
+Public Launch tag itself: rebrand from the private development name
+to Skua, desensitize the repo (no real hosts, ports, or domains in
+source), English baseline for UI strings with `strings.ru.ts` kept
+as a backup for a future runtime locale-switching PR, MIT license,
+`CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md` / issue
+templates, the v0.1.0..v0.8.0 CHANGELOG, a public squash-migration
+to `github.com/skua-app/skua`, and a multi-arch GHA release workflow
+publishing to public GHCR. v0.8.1 cleaned up rebrand residue in the
+header (no placeholder domain — desktop wordmark only, mobile shows
+the live host) and aligned the PWA manifest `theme_color` /
+`background_color` to `#0a0b0d`. v0.8.2 fixed focus-view LQ on
+cameras without a Sub stream: quality now resolves per-camera (a
+Sub-less camera always uses Main), the LQ segment is greyed out with
+a hint, and DesktopFocus labels show the real go2rtc stream name
+instead of a fabricated `*_h264` string. v0.8.3 documented the
+distroless non-root uid (65532) requirement on `/data` in the README
+Troubleshooting + Configuration sections and as an inline comment in
+`compose.yaml` — no runtime change. v0.8.4 was a launch-hardening
+patch prompted by the first public issue (#1): a fresh install
+failed because the host `./data` bind mount was owned by `root` and
+the container uid 65532 could not write to it, leaving the data
+folder empty and the browser at connection-refused. Two changes
+shipped together — the startup stderr block for an unwritable
+`/data` became an actionable diagnostic naming the required uid/gid
+and the two concrete remedies (`chown -R 65532:65532 <dir>` or a
+named Docker volume), and a new `internal/emergency` package serves
+a self-contained styled setup page on the normal port instead of
+letting `main.go` exit on the two startup blockers (unwritable
+`/data` via `fs.ErrPermission`, or Frigate unreachable on the very
+first start with no `cameras.yaml` snapshot to fall back on). The
+page polls `/healthz` every three seconds and auto-reloads into the
+real app once the operator applies the fix and runs
+`docker compose restart skua` — emergency `/healthz` returns 503 so
+the reload only fires when the normal server returns 200. Only the
+`camerasStore` blocker routes into emergency mode; the other stores
+keep `os.Exit(1)`.
+
+**What's next.** The only open Public Launch item is L12 announce —
+Frigate Discord, then r/selfhosted, then r/homelab, then Show HN —
+which is copywriting, not code, sequenced warm-to-cold (see
+`LAUNCH.md`). After that, E7 (v0.9.0) is first-run onboarding +
+runtime config UI as described in CLAUDE.md §13: browser-based setup
+when `FRIGATE_URL` / `GO2RTC_URL` are unset, building on the
+`internal/emergency` server pattern to replace the current
+.env-only hard requirement at startup, with the entered config
+persisted under `/data` and the BFF reconnecting without a container
+restart. PTZ / semantic search / multi-user (E8+) remain
+unscheduled with no near-term trigger.

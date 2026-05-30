@@ -668,10 +668,13 @@ These known issues are recorded but not yet fixed:
 | **E5** | Dynamic camera discovery from Frigate (refresh + orphan cleanup) | **DONE** | v0.6.0 |
 | **patch** | E6 sprint A — backend: per-camera go2rtc stream override store + endpoints (no UI) | **DONE** | v0.6.1 |
 | **E6** | Per-camera go2rtc stream override editor in /settings; /settings IA redesign (desktop rail + scroll-spy, mobile single-column) | **DONE** | v0.7.0 |
-| **Public Launch** | Rebrand to Skua, desensitize, English baseline, public-grade docs, MIT, public migration | in progress | v0.8.0 |
+| **Public Launch** | Rebrand to Skua, desensitize, English baseline, public-grade docs, MIT, public migration | **DONE** | v0.8.0 |
 | **patch** | header domain + app-name rebrand residue fix, manifest color sync | **DONE** | v0.8.1 |
 | **patch** | focus LQ fix for cameras without a Sub stream (per-camera effective quality, greyed-out LQ + hint) + DesktopFocus real stream-name labels | **DONE** | v0.8.2 |
-| E7+ | PTZ, semantic search, multi-user prefs | unscheduled | |
+| **patch** | Docs: note /data must be writable by the container non-root uid (65532); README Troubleshooting + Configuration + compose comment | **DONE** | v0.8.3 |
+| **patch** | First-run hardening from issue #1: actionable /data permission diagnostic + styled emergency setup page (internal/emergency) served instead of os.Exit on the two startup blockers | **DONE** | v0.8.4 |
+| **E7** | First-run onboarding + runtime config UI: Frigate/go2rtc URLs configurable from the browser instead of .env-only; removes the hard FRIGATE_URL-required fatal at startup | planned | v0.9.0 |
+| E8+ | PTZ, semantic search, multi-user prefs | unscheduled | — |
 
 - BFF exposes: `/api/config`, `/api/cameras` (now carrying `groups[]`),
   `/api/prefs` (now including `grid_filter`), `/api/events` + per-event
@@ -698,6 +701,14 @@ These known issues are recorded but not yet fixed:
   `/api/config`, persistent `cameras.yaml`, `POST /api/cameras/refresh`,
   SSE `camera.added`/`camera.removed`, `capabilities.yaml` override layer
   (hand-edited until C.1).
+- v0.9.0 (E7) will make the deployment self-configuring: when
+  `FRIGATE_URL` / `GO2RTC_URL` are unset, the BFF starts into a
+  browser-based first-run setup flow (building on the
+  `internal/emergency` server pattern) instead of the current hard
+  fatal in `config.Load`, persists the entered config under `/data`,
+  and reconnects. This folds "onboarding" and "runtime config UI" into
+  one surface. PTZ / semantic search / multi-user (E8+) remain
+  unscheduled.
 
 Detailed notes on the latest deployed state in docs/roadmap-notes.md.
 
