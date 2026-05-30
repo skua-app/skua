@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{{.Title}}</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      :root {
+        --bg: #0a0b0d;
+        --surface: rgba(255, 255, 255, 0.025);
+        --border: rgba(255, 255, 255, 0.07);
+        --border-strong: rgba(255, 255, 255, 0.12);
+        --text: #f5f6f7;
+        --text-2: rgba(245, 246, 247, 0.58);
+        --text-3: rgba(245, 246, 247, 0.34);
+        --accent: oklch(0.78 0.1 200);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+      body {
+        padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+        padding-top: calc(24px + env(safe-area-inset-top));
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      main.card {
+        width: 100%;
+        max-width: 560px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 28px 22px 24px;
+        margin-top: 6vh;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 26px;
+      }
+      .logo-mark {
+        width: 28px;
+        height: 28px;
+        position: relative;
+        display: inline-block;
+        flex: none;
+      }
+      .bracket {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+      }
+      .tl {
+        top: 0;
+        left: 0;
+        border-top: 1.5px solid var(--accent);
+        border-left: 1.5px solid var(--accent);
+      }
+      .tr {
+        top: 0;
+        right: 0;
+        border-top: 1.5px solid var(--accent);
+        border-right: 1.5px solid var(--accent);
+      }
+      .bl {
+        bottom: 0;
+        left: 0;
+        border-bottom: 1.5px solid var(--accent);
+        border-left: 1.5px solid var(--accent);
+      }
+      .br {
+        bottom: 0;
+        right: 0;
+        border-bottom: 1.5px solid var(--accent);
+        border-right: 1.5px solid var(--accent);
+      }
+      .wordmark {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+      h1 {
+        font-size: 21px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+        line-height: 1.25;
+        margin-bottom: 14px;
+      }
+      p {
+        color: var(--text-2);
+        font-size: 14px;
+        line-height: 1.55;
+        margin-bottom: 12px;
+      }
+      p.label {
+        color: var(--text-3);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-top: 16px;
+        margin-bottom: 6px;
+      }
+      .code {
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        color: var(--text);
+        margin-bottom: 8px;
+        overflow-x: auto;
+        white-space: pre;
+        word-break: keep-all;
+      }
+      .or {
+        font-size: 11px;
+        color: var(--text-3);
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin: 8px 0 10px;
+      }
+      .mono-inline {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        color: var(--text);
+      }
+      footer {
+        margin-top: 26px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      footer a {
+        color: var(--text-2);
+        font-size: 13px;
+        text-decoration: none;
+        border-bottom: 1px dotted var(--text-3);
+      }
+      footer a:hover {
+        color: var(--text);
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-3);
+        font-size: 12px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.92);
+        }
+        50% {
+          opacity: 0.95;
+          transform: scale(1.1);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">
+        <div class="logo-mark" aria-hidden="true">
+          <span class="bracket tl"></span>
+          <span class="bracket tr"></span>
+          <span class="bracket bl"></span>
+          <span class="bracket br"></span>
+        </div>
+        <span class="wordmark">skua</span>
+      </div>
+
+      {{if eq .Reason "data_not_writable"}}
+        <h1>Skua can't write to its data directory</h1>
+        <p>
+          The container runs as a non-root user with uid/gid
+          <span class="mono-inline">65532</span>, but the data directory isn't
+          writable by it. Skua needs to store the camera list, your preferences,
+          and group settings there, so it can't start until this is fixed.
+        </p>
+        <p class="label">Path</p>
+        <div class="code">{{.Detail}}</div>
+        <p class="label">Fix with one of</p>
+        <div class="code">chown -R 65532:65532 {{.Detail}}</div>
+        <div class="or">or</div>
+        <p>
+          Switch to a named Docker volume in your compose file. Docker manages
+          permissions for named volumes automatically, so there's nothing to
+          chown.
+        </p>
+        <p class="label">Then restart the container</p>
+        <div class="code">docker compose restart skua</div>
+      {{else}}
+        <h1>Skua can't reach Frigate</h1>
+        <p>
+          On first start Skua reads the camera list from Frigate's API. There's
+          no cached snapshot on disk yet, so it can't continue until Frigate
+          responds.
+        </p>
+        <p class="label">Configured target</p>
+        <div class="code">{{.Detail}}</div>
+        <p class="label">Check that</p>
+        <p>
+          Frigate is running, and
+          <span class="mono-inline">FRIGATE_URL</span> points at Frigate's
+          internal API on port <span class="mono-inline">5000</span>. Not the
+          authed UI on <span class="mono-inline">8971</span>, and remapped if
+          your compose file moved it.
+        </p>
+        <p class="label">Then restart the container</p>
+        <div class="code">docker compose restart skua</div>
+      {{end}}
+
+      <footer>
+        <a
+          href="https://github.com/skua-app/skua#troubleshooting"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Troubleshooting</a
+        >
+        <span class="status" aria-live="polite">
+          <span class="dot" aria-hidden="true"></span>
+          Waiting for restart…
+        </span>
+      </footer>
+    </main>
+    <script>
+      (function () {
+        function poll() {
+          fetch("/healthz", { cache: "no-store" })
+            .then(function (r) {
+              if (r && r.ok) {
+                location.reload();
+              }
+            })
+            .catch(function () {
+              /* still emergency or mid-restart; keep polling */
+            });
+        }
+        setInterval(poll, 3000);
+      })();
+    </script>
+  </body>
+</html>

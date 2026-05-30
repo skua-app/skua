@@ -18,6 +18,7 @@ import (
 	"github.com/skua-app/skua/internal/cameras"
 	"github.com/skua-app/skua/internal/capabilities"
 	"github.com/skua-app/skua/internal/config"
+	"github.com/skua-app/skua/internal/emergency"
 	"github.com/skua-app/skua/internal/events"
 	"github.com/skua-app/skua/internal/frigate"
 	"github.com/skua-app/skua/internal/go2rtc"
@@ -63,7 +64,22 @@ func main() {
 
 	camerasStore, err := cameras.New(cfg.CamerasPath, frigateClient)
 	if err != nil {
-		diagnoseCameraStoreError(err, cfg.CamerasPath)
+		// Print the operator-facing stderr diagnostic first (matches the
+		// previous behaviour for ops logs), then route the browser into
+		// emergency mode instead of dying silently with connection-refused.
+		printCameraStoreDiagnostic(err, cfg.CamerasPath)
+
+		reason := emergency.ReasonFrigateUnreachable
+		detail := cfg.FrigateURL
+		if errors.Is(err, fs.ErrPermission) {
+			reason = emergency.ReasonDataNotWritable
+			detail = filepath.Dir(cfg.CamerasPath)
+		}
+		logger.Error("entering emergency mode", "reason", string(reason), "error", err)
+		if serveErr := emergency.Serve(cfg.Port, reason, detail); serveErr != nil {
+			fmt.Fprintf(os.Stderr, "emergency: %v\n", serveErr)
+		}
+		os.Exit(1)
 	}
 	logger.Info("cameras loaded", "path", cfg.CamerasPath, "count", len(camerasStore.Snapshot()))
 
@@ -199,16 +215,16 @@ func main() {
 	logger.Info("server stopped")
 }
 
-// diagnoseCameraStoreError prints an actionable stderr message and exits. The
-// /data volume must be writable by uid/gid 65532 (the distroless `nonroot`
-// user); a root-owned bind mount makes cameras.New fail on first write with a
-// terse fs.ErrPermission deep in the chain. We surface the two concrete
-// remedies (chown the host dir, or switch to a named Docker volume) plus a
-// link to the README troubleshooting section. All other error paths keep the
-// original "cameras: <err>" one-liner.
+// printCameraStoreDiagnostic emits the operator-facing stderr block for a
+// cameras.New failure. The /data volume must be writable by uid/gid 65532
+// (the distroless `nonroot` user); a root-owned bind mount makes cameras.New
+// fail on first write with a terse fs.ErrPermission deep in the chain. We
+// surface the two concrete remedies (chown the host dir, or switch to a
+// named Docker volume) plus a link to the README troubleshooting section.
+// All other error paths fall back to the original "cameras: <err>" one-liner.
 //
-// Runs before slog is configured — stderr only, no structured logging.
-func diagnoseCameraStoreError(err error, camerasPath string) {
+// Does NOT exit — the caller decides whether to enter emergency mode or quit.
+func printCameraStoreDiagnostic(err error, camerasPath string) {
 	if errors.Is(err, fs.ErrPermission) {
 		dir := filepath.Dir(camerasPath)
 		fmt.Fprintf(os.Stderr, "cameras: cannot write to data directory: %s\n", dir)
@@ -219,10 +235,9 @@ func diagnoseCameraStoreError(err error, camerasPath string) {
 		fmt.Fprintln(os.Stderr, "  Or switch to a named Docker volume (Docker manages permissions automatically).")
 		fmt.Fprintln(os.Stderr)
 		fmt.Fprintln(os.Stderr, "See: https://github.com/skua-app/skua#container-wont-start--data-folder-stays-empty")
-		os.Exit(1)
+		return
 	}
 	fmt.Fprintf(os.Stderr, "cameras: %v\n", err)
-	os.Exit(1)
 }
 
 func logEmbedTree(logger *slog.Logger, fsys fs.FS) {
