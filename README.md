@@ -165,7 +165,10 @@ the canonical reference.
 
 All `_PATH` variables are container-side paths. The default
 `./data:/data` volume mount in the Quick Start compose maps them all
-under a single host directory.
+under a single host directory. That host directory must be writable by
+the container's non-root uid (65532) — see the
+[Container won't start / data folder stays empty](#container-wont-start--data-folder-stays-empty)
+troubleshooting note below.
 
 ## Build from source
 
@@ -220,6 +223,41 @@ The Dockerfile produces a distroless single-binary image around 9 MB.
   multi-tenant product.
 
 ## Troubleshooting
+
+### Container won't start / data folder stays empty
+
+The Skua image is built on `gcr.io/distroless/static-debian12:nonroot` and
+runs as the `nonroot` user (uid/gid 65532). A freshly created host `./data`
+directory is usually owned by `root`, which means the container cannot
+write to it — the BFF fails on its first write (`cameras.yaml`,
+`prefs.json`, and the other YAML stores) and the data folder is left
+empty, so the UI never comes up. The failure shows up in `docker logs
+skua` as a `permission denied` write error.
+
+Two ways to fix it:
+
+- **Use a Docker named volume** — let Docker manage ownership for you:
+
+  ```yaml
+  volumes:
+    - skua-data:/data
+
+  volumes:
+    skua-data:
+  ```
+
+- **Keep the bind mount and `chown` the host directory once** before
+  starting the container:
+
+  ```bash
+  mkdir -p ./data
+  sudo chown -R 65532:65532 ./data
+  docker compose up -d
+  ```
+
+`chmod 777 ./data` also works but is broader than necessary and not
+recommended on a host you care about — prefer one of the two options
+above.
 
 ### Grid shows no cameras / all offline
 

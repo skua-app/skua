@@ -17,6 +17,9 @@ services:
       PREFS_PATH: "/data/prefs.json"
       GROUPS_CONFIG_PATH: "/data/groups.yaml"
     volumes:
+      # The container runs as non-root (uid/gid 65532, distroless nonroot),
+      # so ./data must be writable by it — `chown -R 65532:65532 ./data`
+      # once on the host, or switch to a Docker named volume.
       - ./data:/data
     healthcheck:
       test: ["CMD", "/server", "-healthcheck"]

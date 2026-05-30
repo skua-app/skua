@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-05-30
+
+### Changed
+
+- Documented that the container runs as the distroless non-root uid
+  (65532) and that the host `./data` directory must be writable by it; a
+  root-owned bind mount makes the BFF fail on first write with the data
+  folder left empty. Added a Troubleshooting subsection to `README.md`, a
+  note to the Configuration section, and an inline comment in
+  `compose.yaml`. No runtime change.
+
 ## [0.8.2] — 2026-05-29
 
 ### Fixed
@@ -365,7 +376,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/skua-app/skua/releases/tag/v0.8.3
 [0.8.2]: https://github.com/skua-app/skua/releases/tag/v0.8.2
 [0.8.1]: https://github.com/skua-app/skua/releases/tag/v0.8.1
 [0.8.0]: https://github.com/skua-app/skua/releases/tag/v0.8.0

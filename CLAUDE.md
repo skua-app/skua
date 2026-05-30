@@ -394,6 +394,13 @@ emitted by the BFF: `event.new`, `event.end`, `camera.online`,
   cameras.yaml on disk → BFF fails fast (homelab expectation: surface the
   upstream outage explicitly rather than serving an empty UI).
 
+- **The /data volume must be writable by uid 65532.** The runtime image is
+  `gcr.io/distroless/static-debian12:nonroot` with `USER nonroot` (uid/gid
+  65532). A root-owned bind mount makes the BFF fail on first write
+  (cameras.yaml, prefs.json, the YAML stores) with the data dir left empty
+  — Compose users need `chown -R 65532:65532 ./data` once or a Docker
+  named volume. Documented in README Troubleshooting.
+
 - **Stream override layer applies server-side only inside the WHEP handler.**
   `GET /api/cameras` still surfaces Frigate-truth main/sub names from
   cameras.yaml — the override merge happens at WHEP-negotiation time. This
