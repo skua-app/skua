@@ -6,8 +6,10 @@ services:
     ports:
       - "3200:3200"
     environment:
-      # Frigate's REST API. Use whatever hostname resolves to your Frigate
-      # container — `frigate` works if both run on the same Docker network.
+      # FRIGATE_URL and GO2RTC_URL are optional from v0.9.0 — omit them and
+      # open http://<docker-host>:3200 to enter them in the first-run setup
+      # wizard, which saves to /data/config.yaml. Env always wins over the
+      # overlay file, so setting them here keeps the wizard out of the way.
       FRIGATE_URL: "http://frigate:5000"
       GO2RTC_URL: "http://frigate:1984"
       LOG_LEVEL: "info"

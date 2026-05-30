@@ -43,6 +43,15 @@ HTTPS, the app still loads in Safari but cannot be installed to the home
 screen. Users who want install-to-home-screen need a real TLS cert via a
 reverse proxy or tunnel.
 
+**Runtime config (E7).** From v0.9.0 the Frigate and go2rtc URLs are
+configurable at runtime through a first-run setup wizard served on the
+normal port — `.env`-only deployment is no longer required. Precedence is
+env > file overlay (`/data/config.yaml`); env values are env-locked in the
+wizard UI. The wizard is server-rendered Go (no SvelteKit route, no SW)
+and reconfiguration is restart-based: a successful save persists the
+overlay and exits the process so the container restart policy boots the
+fresh config.
+
 ## 3. Architecture (Concept B: BFF + PWA)
 
 ```
@@ -110,6 +119,12 @@ Direct media path (WebRTC, low-latency live):
 
 **Compose stack & persistent data:** host-defined; see `compose.yaml`.
 **GHCR image:** `ghcr.io/skua-app/skua:<tag>`
+
+**Container `/data` directory** holds every persistent file: `prefs.json`,
+`cameras.yaml`, `groups.yaml`, `camera_names.yaml`, `capabilities.yaml`,
+`stream_overrides.yaml`, and `config.yaml` (E7 runtime config overlay
+written by the first-run wizard). All paths are overridable via env
+(`*_PATH` / `RUNTIME_CONFIG_PATH`). Must be writable by uid/gid 65532.
 
 ## 6. Camera inventory and capabilities
 
@@ -414,6 +429,23 @@ emitted by the BFF: `event.new`, `event.end`, `camera.online`,
   The operator-facing stderr diagnostic from the prior commit still fires
   before emergency mode is entered.
 
+- **First-run setup wizard (E7) is server-rendered and restart-based.**
+  When `cfg.NeedsSetup` is true (no env or overlay-file `FrigateURL`),
+  `main.go` runs `internal/setup.Serve` instead of the normal stack. A
+  successful `POST /api/setup/save` writes `/data/config.yaml` and closes
+  a restart channel; `setup.Serve` returns nil so `main.go` calls
+  `os.Exit(0)` and the container's restart policy (`unless-stopped` /
+  `always`) brings the process back up against the new file. No
+  hot-reload of the BFF or clients — restart is the only path. The
+  unreachable-wizard branch is only taken when `cfg.FrigateURLFromEnv`
+  is false; when the URL is env-locked, the informational emergency
+  page is served instead (since the operator can't fix env from the
+  browser). Note: on an already-installed PWA the cached service worker
+  shell can shadow the wizard on the app's origin, so the wizard is
+  reliable on a fresh browser / first run, which is the target case;
+  installed-PWA users will need to clear site data or hit a different
+  device to drive the wizard.
+
 - **Stream override layer applies server-side only inside the WHEP handler.**
   `GET /api/cameras` still surfaces Frigate-truth main/sub names from
   cameras.yaml — the override merge happens at WHEP-negotiation time. This
@@ -673,7 +705,8 @@ These known issues are recorded but not yet fixed:
 | **patch** | focus LQ fix for cameras without a Sub stream (per-camera effective quality, greyed-out LQ + hint) + DesktopFocus real stream-name labels | **DONE** | v0.8.2 |
 | **patch** | Docs: note /data must be writable by the container non-root uid (65532); README Troubleshooting + Configuration + compose comment | **DONE** | v0.8.3 |
 | **patch** | First-run hardening from issue #1: actionable /data permission diagnostic + styled emergency setup page (internal/emergency) served instead of os.Exit on the two startup blockers | **DONE** | v0.8.4 |
-| **E7** | First-run onboarding + runtime config UI: Frigate/go2rtc URLs configurable from the browser instead of .env-only; removes the hard FRIGATE_URL-required fatal at startup | planned | v0.9.0 |
+| **E7** | First-run onboarding + runtime config UI: Frigate/go2rtc URLs configurable from the browser instead of .env-only; removes the hard FRIGATE_URL-required fatal at startup | **DONE** | v0.9.0 |
+| **E7.1** | In-app /settings URL editor (live re-edit of the wizard-entered values from inside the SPA) | deferred | — |
 | E8+ | PTZ, semantic search, multi-user prefs | unscheduled | — |
 
 - BFF exposes: `/api/config`, `/api/cameras` (now carrying `groups[]`),
@@ -701,13 +734,21 @@ These known issues are recorded but not yet fixed:
   `/api/config`, persistent `cameras.yaml`, `POST /api/cameras/refresh`,
   SSE `camera.added`/`camera.removed`, `capabilities.yaml` override layer
   (hand-edited until C.1).
-- v0.9.0 (E7) will make the deployment self-configuring: when
-  `FRIGATE_URL` / `GO2RTC_URL` are unset, the BFF starts into a
-  browser-based first-run setup flow (building on the
-  `internal/emergency` server pattern) instead of the current hard
-  fatal in `config.Load`, persists the entered config under `/data`,
-  and reconnects. This folds "onboarding" and "runtime config UI" into
-  one surface. PTZ / semantic search / multi-user (E8+) remain
+- v0.9.0 (E7) made the deployment self-configuring: when `FRIGATE_URL` /
+  `GO2RTC_URL` are unset, `config.Load` returns `NeedsSetup=true` instead
+  of the prior hard fatal, and `main.go` runs `internal/setup.Serve`
+  against the same port. The wizard test-connects (POST `/api/setup/test`)
+  and persists (POST `/api/setup/save`) to `internal/runtimeconfig` at
+  `/data/config.yaml`. Reconfiguration is restart-based: a successful
+  save signals a clean process exit and the container restart policy
+  brings the BFF back configured. Env wins over the overlay file
+  (`*FromEnv` provenance is propagated to the wizard so env-set fields
+  render read-only). The same wizard, with prefill + an error banner, is
+  also served when `cameras.New` hits a `frigate-unreachable` error AND
+  the URL is editable (came from the overlay, not env); env-locked
+  failures still serve the existing informational emergency page.
+  E7.1 (in-app `/settings` URL editor) is deferred. PTZ / semantic
+  search / multi-user (E8+) remain
   unscheduled.
 
 Detailed notes on the latest deployed state in docs/roadmap-notes.md.

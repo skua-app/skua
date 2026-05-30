@@ -26,6 +26,8 @@ import (
 	applog "github.com/skua-app/skua/internal/log"
 	"github.com/skua-app/skua/internal/names"
 	"github.com/skua-app/skua/internal/prefs"
+	"github.com/skua-app/skua/internal/runtimeconfig"
+	"github.com/skua-app/skua/internal/setup"
 	"github.com/skua-app/skua/internal/sse"
 	"github.com/skua-app/skua/internal/static"
 	"github.com/skua-app/skua/internal/streamoverrides"
@@ -54,6 +56,38 @@ func main() {
 		logEmbedTree(logger, staticFS)
 	}
 
+	// runtimeconfig overlay is the second tier of the env > file precedence
+	// chain. We build it here regardless of NeedsSetup so both the setup
+	// wizard and the unreachable-wizard branch below can share one Store.
+	runtimeConfigStore, err := runtimeconfig.New(cfg.RuntimeConfigPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "runtime config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// First-run setup: no env-supplied or file-supplied FrigateURL. Serve
+	// the wizard in place of the normal stack. A successful save triggers
+	// a clean process exit so the container's restart policy boots the
+	// fresh config.
+	if cfg.NeedsSetup {
+		logger.Info("entering setup mode", "reason", "frigate_url_not_set", "runtime_config_path", cfg.RuntimeConfigPath)
+		opts := setup.Options{
+			Mode:    setup.ModeInitial,
+			Prefill: runtimeConfigStore.Get(),
+			Locked: setup.LockedFields{
+				FrigateURL:   cfg.FrigateURLFromEnv,
+				FrigateUIURL: cfg.FrigateUIURLFromEnv,
+				Go2RTCURL:    cfg.Go2RTCURLFromEnv,
+			},
+		}
+		if err := setup.Serve(cfg.Port, runtimeConfigStore, opts); err != nil {
+			fmt.Fprintf(os.Stderr, "setup: %v\n", err)
+			os.Exit(1)
+		}
+		logger.Info("setup complete, exiting for restart")
+		os.Exit(0)
+	}
+
 	prefsStore, err := prefs.New(cfg.PrefsPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "prefs: %v\n", err)
@@ -66,20 +100,60 @@ func main() {
 	if err != nil {
 		// Print the operator-facing stderr diagnostic first (matches the
 		// previous behaviour for ops logs), then route the browser into
-		// emergency mode instead of dying silently with connection-refused.
+		// either the setup wizard or the informational emergency page
+		// depending on what the operator can actually fix from the
+		// browser.
 		printCameraStoreDiagnostic(err, cfg.CamerasPath)
 
-		reason := emergency.ReasonFrigateUnreachable
-		detail := cfg.FrigateURL
-		if errors.Is(err, fs.ErrPermission) {
-			reason = emergency.ReasonDataNotWritable
-			detail = filepath.Dir(cfg.CamerasPath)
+		switch {
+		case errors.Is(err, fs.ErrPermission):
+			// Data dir is read-only. The wizard couldn't persist anything
+			// anyway — keep the informational chown page.
+			detail := filepath.Dir(cfg.CamerasPath)
+			logger.Error("entering emergency mode", "reason", string(emergency.ReasonDataNotWritable), "error", err)
+			if serveErr := emergency.Serve(cfg.Port, emergency.ReasonDataNotWritable, detail); serveErr != nil {
+				fmt.Fprintf(os.Stderr, "emergency: %v\n", serveErr)
+			}
+			os.Exit(1)
+
+		case !cfg.FrigateURLFromEnv:
+			// URL came from the overlay file (or was implicitly empty —
+			// but NeedsSetup would have caught that). Operator can fix
+			// it in the browser, so serve the wizard prefilled with the
+			// current values and an explanatory banner.
+			logger.Error("entering setup mode", "reason", "frigate_unreachable", "frigate_url", cfg.FrigateURL, "error", err)
+			opts := setup.Options{
+				Mode: setup.ModeUnreachable,
+				Prefill: runtimeconfig.Values{
+					FrigateURL:   cfg.FrigateURL,
+					FrigateUIURL: cfg.FrigateUIURL,
+					Go2RTCURL:    cfg.Go2RTCURL,
+				},
+				Locked: setup.LockedFields{
+					FrigateURL:   cfg.FrigateURLFromEnv,
+					FrigateUIURL: cfg.FrigateUIURLFromEnv,
+					Go2RTCURL:    cfg.Go2RTCURLFromEnv,
+				},
+				ErrMessage: fmt.Sprintf("Cannot reach Frigate at %s. Update the URL below, test the connection, then save to restart.", cfg.FrigateURL),
+			}
+			if serveErr := setup.Serve(cfg.Port, runtimeConfigStore, opts); serveErr != nil {
+				fmt.Fprintf(os.Stderr, "setup: %v\n", serveErr)
+				os.Exit(1)
+			}
+			logger.Info("setup complete, exiting for restart")
+			os.Exit(0)
+
+		default:
+			// FRIGATE_URL is env-locked. The operator can't fix it from
+			// the browser — env will win at next boot — so the
+			// informational emergency page is the honest response.
+			detail := cfg.FrigateURL
+			logger.Error("entering emergency mode", "reason", string(emergency.ReasonFrigateUnreachable), "error", err)
+			if serveErr := emergency.Serve(cfg.Port, emergency.ReasonFrigateUnreachable, detail); serveErr != nil {
+				fmt.Fprintf(os.Stderr, "emergency: %v\n", serveErr)
+			}
+			os.Exit(1)
 		}
-		logger.Error("entering emergency mode", "reason", string(reason), "error", err)
-		if serveErr := emergency.Serve(cfg.Port, reason, detail); serveErr != nil {
-			fmt.Fprintf(os.Stderr, "emergency: %v\n", serveErr)
-		}
-		os.Exit(1)
 	}
 	logger.Info("cameras loaded", "path", cfg.CamerasPath, "count", len(camerasStore.Snapshot()))
 

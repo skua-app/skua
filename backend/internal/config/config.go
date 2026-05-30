@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/skua-app/skua/internal/runtimeconfig"
 )
 
 type Config struct {
@@ -25,6 +27,20 @@ type Config struct {
 	CamerasPath         string
 	CapabilitiesPath    string
 	StreamOverridesPath string
+	RuntimeConfigPath   string
+
+	// Provenance flags — true when the corresponding URL came from a
+	// non-empty environment variable. The setup wizard renders env-sourced
+	// fields read-only so the operator can't try to "save" over them via
+	// the browser when the container env will win on next boot.
+	FrigateURLFromEnv   bool
+	Go2RTCURLFromEnv    bool
+	FrigateUIURLFromEnv bool
+
+	// NeedsSetup is true when the effective FrigateURL is empty after
+	// merging env and the on-disk overlay. main.go routes the browser
+	// into the setup wizard instead of normal boot.
+	NeedsSetup bool
 }
 
 func Load() (*Config, error) {
@@ -32,9 +48,6 @@ func Load() (*Config, error) {
 		Port:                env("PORT", "3200"),
 		LogLevel:            env("LOG_LEVEL", "info"),
 		LogFormat:           env("LOG_FORMAT", "json"),
-		FrigateURL:          env("FRIGATE_URL", ""),
-		FrigateUIURL:        env("FRIGATE_UI_URL", ""),
-		Go2RTCURL:           env("GO2RTC_URL", ""),
 		SnapshotCacheTTL:    mustDuration(env("SNAPSHOT_CACHE_TTL", "15s")),
 		HTTPTimeout:         mustDuration(env("HTTP_TIMEOUT", "5s")),
 		ShutdownTimeout:     mustDuration(env("SHUTDOWN_TIMEOUT", "10s")),
@@ -46,12 +59,27 @@ func Load() (*Config, error) {
 		CamerasPath:         env("CAMERAS_CONFIG_PATH", "/data/cameras.yaml"),
 		CapabilitiesPath:    env("CAPABILITIES_CONFIG_PATH", "/data/capabilities.yaml"),
 		StreamOverridesPath: env("STREAM_OVERRIDES_CONFIG_PATH", "/data/stream_overrides.yaml"),
+		RuntimeConfigPath:   env("RUNTIME_CONFIG_PATH", "/data/config.yaml"),
 	}
 
-	var errs []string
-	if cfg.FrigateURL == "" {
-		errs = append(errs, "FRIGATE_URL is required")
+	frigateEnv := os.Getenv("FRIGATE_URL")
+	frigateUIEnv := os.Getenv("FRIGATE_UI_URL")
+	go2rtcEnv := os.Getenv("GO2RTC_URL")
+
+	cfg.FrigateURLFromEnv = frigateEnv != ""
+	cfg.FrigateUIURLFromEnv = frigateUIEnv != ""
+	cfg.Go2RTCURLFromEnv = go2rtcEnv != ""
+
+	overlay, err := runtimeconfig.New(cfg.RuntimeConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("config: %w", err)
 	}
+	file := overlay.Get()
+
+	cfg.FrigateURL = firstNonEmpty(frigateEnv, file.FrigateURL)
+	cfg.Go2RTCURL = firstNonEmpty(go2rtcEnv, file.Go2RTCURL)
+	cfg.FrigateUIURL = firstNonEmpty(frigateUIEnv, file.FrigateUIURL)
+
 	cfg.FrigateURL = strings.TrimRight(cfg.FrigateURL, "/")
 	if cfg.FrigateUIURL == "" {
 		cfg.FrigateUIURL = cfg.FrigateURL
@@ -61,6 +89,9 @@ func Load() (*Config, error) {
 		cfg.Go2RTCURL = strings.TrimRight(cfg.Go2RTCURL, "/")
 	}
 
+	cfg.NeedsSetup = cfg.FrigateURL == ""
+
+	var errs []string
 	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	if !validLevels[cfg.LogLevel] {
 		errs = append(errs, fmt.Sprintf("LOG_LEVEL must be one of debug|info|warn|error, got %q", cfg.LogLevel))
@@ -81,6 +112,15 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func mustDuration(s string) time.Duration {

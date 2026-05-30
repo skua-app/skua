@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{{.Title}}</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      :root {
+        --bg: #0a0b0d;
+        --surface: rgba(255, 255, 255, 0.025);
+        --border: rgba(255, 255, 255, 0.07);
+        --border-strong: rgba(255, 255, 255, 0.12);
+        --text: #f5f6f7;
+        --text-2: rgba(245, 246, 247, 0.58);
+        --text-3: rgba(245, 246, 247, 0.34);
+        --accent: oklch(0.78 0.1 200);
+        --ok: oklch(0.74 0.14 145);
+        --bad: oklch(0.66 0.18 25);
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+      body {
+        padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+        padding-top: calc(24px + env(safe-area-inset-top));
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+      }
+      main.card {
+        width: 100%;
+        max-width: 560px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 28px 22px 24px;
+        margin-top: 6vh;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 26px;
+      }
+      .logo-mark {
+        width: 28px;
+        height: 28px;
+        position: relative;
+        display: inline-block;
+        flex: none;
+      }
+      .bracket {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+      }
+      .tl {
+        top: 0;
+        left: 0;
+        border-top: 1.5px solid var(--accent);
+        border-left: 1.5px solid var(--accent);
+      }
+      .tr {
+        top: 0;
+        right: 0;
+        border-top: 1.5px solid var(--accent);
+        border-right: 1.5px solid var(--accent);
+      }
+      .bl {
+        bottom: 0;
+        left: 0;
+        border-bottom: 1.5px solid var(--accent);
+        border-left: 1.5px solid var(--accent);
+      }
+      .br {
+        bottom: 0;
+        right: 0;
+        border-bottom: 1.5px solid var(--accent);
+        border-right: 1.5px solid var(--accent);
+      }
+      .wordmark {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.2px;
+      }
+      h1 {
+        font-size: 21px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+        line-height: 1.25;
+        margin-bottom: 14px;
+      }
+      p {
+        color: var(--text-2);
+        font-size: 14px;
+        line-height: 1.55;
+        margin-bottom: 12px;
+      }
+      .label {
+        color: var(--text-3);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-top: 16px;
+        margin-bottom: 6px;
+        display: block;
+      }
+      .mono-inline {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        color: var(--text);
+      }
+      .code {
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        color: var(--text);
+        margin-bottom: 8px;
+        overflow-x: auto;
+        white-space: pre;
+        word-break: keep-all;
+      }
+      input[type="text"],
+      input[type="url"] {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        color: var(--text);
+        outline: none;
+        transition: border-color 0.15s ease;
+      }
+      input[type="text"]:focus,
+      input[type="url"]:focus {
+        border-color: var(--accent);
+      }
+      input[disabled] {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--text-3);
+        margin-top: 4px;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 22px;
+      }
+      button {
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        padding: 10px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--border-strong);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        cursor: pointer;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease;
+      }
+      button:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      button.primary {
+        border-color: color-mix(in oklch, var(--accent) 60%, transparent);
+        background: color-mix(in oklch, var(--accent) 16%, transparent);
+      }
+      button.primary:hover:not(:disabled) {
+        background: color-mix(in oklch, var(--accent) 24%, transparent);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .result {
+        margin-top: 14px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 13px;
+      }
+      .result-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        line-height: 1.45;
+      }
+      .result-row + .result-row {
+        margin-top: 6px;
+      }
+      .result-label {
+        color: var(--text-2);
+        min-width: 72px;
+      }
+      .result-status {
+        font-weight: 500;
+      }
+      .result-status.ok {
+        color: var(--ok);
+      }
+      .result-status.bad {
+        color: var(--bad);
+      }
+      .result-status.skip {
+        color: var(--text-3);
+      }
+      .result-detail {
+        color: var(--text-3);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+      .banner {
+        border: 1px solid color-mix(in oklch, var(--bad) 40%, var(--border));
+        background: color-mix(in oklch, var(--bad) 10%, transparent);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 18px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text);
+      }
+      .waiting {
+        display: none;
+        align-items: center;
+        gap: 10px;
+        margin-top: 18px;
+        color: var(--text-2);
+        font-size: 13px;
+      }
+      .waiting.show {
+        display: flex;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.92);
+        }
+        50% {
+          opacity: 0.95;
+          transform: scale(1.1);
+        }
+      }
+      footer {
+        margin-top: 26px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      footer a {
+        color: var(--text-2);
+        font-size: 13px;
+        text-decoration: none;
+        border-bottom: 1px dotted var(--text-3);
+      }
+      footer a:hover {
+        color: var(--text);
+      }
+      .fallback {
+        display: none;
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--text-2);
+      }
+      .fallback.show {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">
+        <div class="logo-mark" aria-hidden="true">
+          <span class="bracket tl"></span>
+          <span class="bracket tr"></span>
+          <span class="bracket bl"></span>
+          <span class="bracket br"></span>
+        </div>
+        <span class="wordmark">skua</span>
+      </div>
+
+      {{if eq .Mode "unreachable"}}
+        <h1>Finish Skua setup</h1>
+        <p>
+          Skua couldn't reach Frigate with the URL it has on file. Check
+          the URL and connection, then test and save.
+        </p>
+        {{if .ErrMessage}}
+          <div class="banner" role="alert">{{.ErrMessage}}</div>
+        {{end}}
+      {{else}}
+        <h1>Welcome to Skua</h1>
+        <p>
+          Point Skua at your Frigate instance to get started. The internal
+          API runs on port <span class="mono-inline">5000</span> — not the
+          authed UI on <span class="mono-inline">8971</span>.
+        </p>
+      {{end}}
+
+      <div id="form">
+        <label class="label" for="frigate_url">Frigate URL (required)</label>
+        {{if .LockFrigate}}
+          <div class="code" id="frigate_url_locked">{{.FrigateURL}}</div>
+          <div class="hint">Set via <span class="mono-inline">FRIGATE_URL</span> environment variable.</div>
+        {{else}}
+          <input
+            type="url"
+            id="frigate_url"
+            name="frigate_url"
+            placeholder="http://frigate:5000"
+            autocomplete="off"
+            spellcheck="false"
+            value="{{.FrigateURL}}"
+          />
+          <div class="hint">Example: <span class="mono-inline">http://frigate.local:5000</span></div>
+        {{end}}
+
+        <label class="label" for="go2rtc_url">go2rtc URL (optional)</label>
+        {{if .LockGo2RTC}}
+          <div class="code" id="go2rtc_url_locked">{{.Go2RTCURL}}</div>
+          <div class="hint">Set via <span class="mono-inline">GO2RTC_URL</span> environment variable.</div>
+        {{else}}
+          <input
+            type="url"
+            id="go2rtc_url"
+            name="go2rtc_url"
+            placeholder="http://frigate:1984"
+            autocomplete="off"
+            spellcheck="false"
+            value="{{.Go2RTCURL}}"
+          />
+          <div class="hint">Needed for WebRTC live view. Leave blank to skip.</div>
+        {{end}}
+
+        <label class="label" for="frigate_ui_url">Frigate UI URL (optional)</label>
+        {{if .LockUI}}
+          <div class="code" id="frigate_ui_url_locked">{{.FrigateUIURL}}</div>
+          <div class="hint">Set via <span class="mono-inline">FRIGATE_UI_URL</span> environment variable.</div>
+        {{else}}
+          <input
+            type="url"
+            id="frigate_ui_url"
+            name="frigate_ui_url"
+            placeholder="http://frigate:8971"
+            autocomplete="off"
+            spellcheck="false"
+            value="{{.FrigateUIURL}}"
+          />
+          <div class="hint">Defaults to the Frigate URL if blank. Used for "Open in Frigate" links.</div>
+        {{end}}
+
+        <div class="actions">
+          <button type="button" id="test_btn">Test connection</button>
+          <button type="button" id="save_btn" class="primary">Save and start</button>
+        </div>
+
+        <div id="result" class="result" hidden>
+          <div class="result-row">
+            <span class="result-label">Frigate</span>
+            <span id="frigate_status" class="result-status"></span>
+            <span id="frigate_detail" class="result-detail"></span>
+          </div>
+          <div class="result-row">
+            <span class="result-label">go2rtc</span>
+            <span id="go2rtc_status" class="result-status"></span>
+            <span id="go2rtc_detail" class="result-detail"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="waiting" class="waiting" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="waiting_text">Saving and restarting Skua…</span>
+      </div>
+
+      <div id="fallback" class="fallback">
+        Saved. If the app doesn't load on its own within a few seconds,
+        restart the container:
+        <div class="code">docker compose restart skua</div>
+      </div>
+
+      <footer>
+        <a
+          href="https://github.com/skua-app/skua#first-run-setup"
+          target="_blank"
+          rel="noopener noreferrer"
+          >Setup guide</a
+        >
+        <span class="result-detail">First-run setup</span>
+      </footer>
+    </main>
+
+    <script>
+      (function () {
+        var lockFrigate = {{if .LockFrigate}}true{{else}}false{{end}};
+        var lockUI = {{if .LockUI}}true{{else}}false{{end}};
+        var lockGo2RTC = {{if .LockGo2RTC}}true{{else}}false{{end}};
+
+        function val(id) {
+          var el = document.getElementById(id);
+          return el ? el.value.trim() : "";
+        }
+
+        function collect() {
+          return {
+            frigate_url: lockFrigate ? "" : val("frigate_url"),
+            go2rtc_url: lockGo2RTC ? "" : val("go2rtc_url"),
+            frigate_ui_url: lockUI ? "" : val("frigate_ui_url"),
+          };
+        }
+
+        function setStatus(id, ok, skipped, detail) {
+          var el = document.getElementById(id);
+          var d = document.getElementById(id.replace("_status", "_detail"));
+          el.classList.remove("ok", "bad", "skip");
+          if (skipped) {
+            el.classList.add("skip");
+            el.textContent = "Skipped";
+          } else if (ok) {
+            el.classList.add("ok");
+            el.textContent = "OK";
+          } else {
+            el.classList.add("bad");
+            el.textContent = "Failed";
+          }
+          d.textContent = detail || "";
+        }
+
+        function showResult() {
+          document.getElementById("result").hidden = false;
+        }
+
+        function setButtonsDisabled(disabled) {
+          document.getElementById("test_btn").disabled = disabled;
+          document.getElementById("save_btn").disabled = disabled;
+        }
+
+        function flashBadge(id, text) {
+          var el = document.getElementById(id);
+          var original = el.textContent;
+          el.textContent = text;
+          setTimeout(function () {
+            el.textContent = original;
+          }, 1500);
+        }
+
+        document.getElementById("test_btn").addEventListener("click", function () {
+          setButtonsDisabled(true);
+          var payload = collect();
+          // Test endpoint also takes the locked values from the page
+          // for an honest probe — the server never persists from /test.
+          if (lockFrigate) payload.frigate_url = {{.FrigateURL}};
+          if (lockGo2RTC) payload.go2rtc_url = {{.Go2RTCURL}};
+          fetch("/api/setup/test", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) {
+              showResult();
+              setStatus("frigate_status", resp.frigate.ok, false, resp.frigate.error || "");
+              setStatus("go2rtc_status", resp.go2rtc.ok, resp.go2rtc.skipped, resp.go2rtc.error || "");
+            })
+            .catch(function (err) {
+              showResult();
+              setStatus("frigate_status", false, false, String(err));
+              setStatus("go2rtc_status", false, false, "");
+            })
+            .finally(function () {
+              setButtonsDisabled(false);
+            });
+        });
+
+        document.getElementById("save_btn").addEventListener("click", function () {
+          setButtonsDisabled(true);
+          var payload = collect();
+          fetch("/api/setup/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+            .then(function (r) {
+              return r.json().then(function (body) { return { status: r.status, body: body }; });
+            })
+            .then(function (out) {
+              if (out.status >= 200 && out.status < 300) {
+                document.getElementById("form").style.display = "none";
+                document.getElementById("waiting").classList.add("show");
+                startPolling();
+              } else {
+                setButtonsDisabled(false);
+                showResult();
+                var msg = (out.body && out.body.message) || "Save failed.";
+                setStatus("frigate_status", false, false, msg);
+              }
+            })
+            .catch(function (err) {
+              setButtonsDisabled(false);
+              showResult();
+              setStatus("frigate_status", false, false, String(err));
+            });
+        });
+
+        function startPolling() {
+          var ticks = 0;
+          var interval = setInterval(function () {
+            ticks++;
+            fetch("/healthz", { cache: "no-store" })
+              .then(function (r) {
+                if (r && r.ok) {
+                  clearInterval(interval);
+                  location.reload();
+                }
+              })
+              .catch(function () {
+                /* mid-restart, keep polling */
+              });
+            if (ticks >= 10) {
+              document.getElementById("fallback").classList.add("show");
+            }
+          }, 3000);
+        }
+      })();
+    </script>
+  </body>
+</html>

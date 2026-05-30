@@ -14,6 +14,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0]
+
+### Added
+
+- First-run setup wizard: when `FRIGATE_URL` is not set in the
+  environment and no overlay file exists, Skua serves an interactive
+  setup page on its normal port instead of exiting. The wizard
+  test-connects to Frigate and go2rtc before saving and persists the
+  entered URLs to `/data/config.yaml`. After a successful save the
+  process exits cleanly so the container restart policy boots into
+  the configured app. The same wizard is also served when the
+  configured Frigate URL came from the overlay file and Frigate is
+  unreachable at startup; the form is prefilled and a banner
+  explains the failure.
+- Runtime config overlay (`internal/runtimeconfig`) backed by
+  `/data/config.yaml` with `frigate_url`, `frigate_ui_url`, and
+  `go2rtc_url` keys. Path is configurable via `RUNTIME_CONFIG_PATH`.
+- `POST /api/setup/test` and `POST /api/setup/save` endpoints on
+  the setup-mode server. Both are stripped of env-locked fields
+  server-side so a tampered payload cannot pollute the overlay file.
+
+### Changed
+
+- `FRIGATE_URL` is no longer required at startup. When the effective
+  Frigate URL is empty after merging env and the overlay file, the
+  BFF enters setup mode instead of failing with a config error.
+  Env variables continue to win over the overlay file, so existing
+  env-driven deployments are unaffected.
+- When `cameras.New` reports Frigate as unreachable and the URL is
+  editable (came from the overlay file, not env), Skua now serves
+  the setup wizard prefilled with the current URLs and an error
+  banner — replacing the informational emergency page in that one
+  case. The env-locked case and the `/data` not-writable case keep
+  the existing emergency page.
+
 ## [0.8.4] — 2026-05-30
 
 ### Added

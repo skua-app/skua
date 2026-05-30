@@ -127,6 +127,22 @@ Mobile PWA, installed to the iOS home screen.
 If the grid is empty or all cameras show offline, check the
 Troubleshooting section below.
 
+### First-run setup
+
+From v0.9.0, the `FRIGATE_URL` and `GO2RTC_URL` environment variables
+are optional. Omit them in your compose file and Skua boots into a
+browser-based setup wizard on its normal port. Open
+`http://<docker-host>:3200`, enter the Frigate URL (and optionally the
+go2rtc URL and a public Frigate UI URL), click **Test connection** to
+verify Skua can reach them, then **Save and start**. The wizard writes
+the values to `/data/config.yaml` and the container restarts into the
+configured app.
+
+Env variables always win over the file overlay, so a value set in
+`FRIGATE_URL` cannot be changed from the wizard — the field renders
+read-only with a hint. To switch back to wizard-driven config, remove
+the env var and restart the container.
+
 ### With HTTPS and a friendly hostname (optional)
 
 If you want iPhone home-screen install, a real TLS cert, or a friendly
@@ -145,9 +161,9 @@ the canonical reference.
 
 | Variable | Default | Required | Notes |
 |---|---|---|---|
-| `FRIGATE_URL` | — | Yes | Frigate internal API base URL. Use port 5000 (no auth), not `:8971` (the authed UI port). |
-| `FRIGATE_UI_URL` | falls back to `FRIGATE_URL` | No | Public URL of the Frigate UI, used for "Open in Frigate" deep-links from the events list. Must be reachable from the user's device. |
-| `GO2RTC_URL` | — | No | go2rtc REST API for WHEP signaling. Optional in E1; BFF starts without it. |
+| `FRIGATE_URL` | — | No | Frigate internal API base URL. Use port 5000 (no auth), not `:8971` (the authed UI port). When unset, Skua serves the first-run setup wizard and persists the entered value to `/data/config.yaml`. |
+| `FRIGATE_UI_URL` | falls back to `FRIGATE_URL` | No | Public URL of the Frigate UI, used for "Open in Frigate" deep-links from the events list. Must be reachable from the user's device. Also settable via the wizard. |
+| `GO2RTC_URL` | — | No | go2rtc REST API for WHEP signaling. Required for WebRTC live view; BFF starts without it. Also settable via the wizard. |
 | `PORT` | `3200` | No | Port the BFF listens on. |
 | `LOG_LEVEL` | `info` | No | `debug` / `info` / `warn` / `error`. |
 | `LOG_FORMAT` | `json` | No | `json` / `text`. |
@@ -162,6 +178,7 @@ the canonical reference.
 | `CAMERAS_CONFIG_PATH` | `/data/cameras.yaml` | No | Camera registry persisted from Frigate config; auto-created at first startup when Frigate is reachable. Used as a fallback snapshot when Frigate is unreachable on subsequent starts. |
 | `CAPABILITIES_CONFIG_PATH` | `/data/capabilities.yaml` | No | Per-camera `talk_back` / `ptz` overrides — not exposed by Frigate's config, hand-edited on the host until a future editor lands. |
 | `STREAM_OVERRIDES_CONFIG_PATH` | `/data/stream_overrides.yaml` | No | Per-camera go2rtc stream-name overrides; applied only inside the WHEP handler. `GET /api/cameras` still surfaces Frigate-truth stream names. |
+| `RUNTIME_CONFIG_PATH` | `/data/config.yaml` | No | Runtime config overlay written by the first-run wizard. Stores `frigate_url`, `frigate_ui_url`, `go2rtc_url`. Env vars above always win over this file. |
 
 All `_PATH` variables are container-side paths. The default
 `./data:/data` volume mount in the Quick Start compose maps them all
@@ -277,12 +294,18 @@ above.
 
 - Check the BFF logs: `docker logs skua`.
 - If Frigate was unreachable on the very first start — before any
-  camera snapshot has been cached to `cameras.yaml` — Skua serves a
-  setup page on its normal port with Frigate-specific instructions
-  instead of failing to start, and auto-reloads into the real app
-  once Frigate is reachable and the container is restarted. The same
-  fail-fast log line is still emitted; see CLAUDE.md §12 ("Camera
-  registry is loaded once at startup").
+  camera snapshot has been cached to `cameras.yaml` — Skua serves one
+  of two pages depending on how the URL was configured:
+  - **URL came from the wizard / overlay file** (no `FRIGATE_URL` env
+    var): the setup wizard renders prefilled with the current URL and
+    an explanatory banner. Fix the URL in the browser, test, save, and
+    Skua restarts into the working config.
+  - **URL came from `FRIGATE_URL` env var**: an informational emergency
+    page describes the issue and the fix is in the env file. Browser
+    editing is not offered because env wins over the overlay file at
+    next boot — restart the container after correcting the value.
+  The same fail-fast log line is still emitted; see CLAUDE.md §12
+  ("Camera registry is loaded once at startup").
 
 ### PWA not installable on iPhone
 

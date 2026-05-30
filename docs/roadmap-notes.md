@@ -174,11 +174,67 @@ keep `os.Exit(1)`.
 **What's next.** The only open Public Launch item is L12 announce —
 Frigate Discord, then r/selfhosted, then r/homelab, then Show HN —
 which is copywriting, not code, sequenced warm-to-cold (see
-`LAUNCH.md`). After that, E7 (v0.9.0) is first-run onboarding +
-runtime config UI as described in CLAUDE.md §13: browser-based setup
-when `FRIGATE_URL` / `GO2RTC_URL` are unset, building on the
-`internal/emergency` server pattern to replace the current
-.env-only hard requirement at startup, with the entered config
-persisted under `/data` and the BFF reconnecting without a container
-restart. PTZ / semantic search / multi-user (E8+) remain
+`LAUNCH.md`). PTZ / semantic search / multi-user (E8+) remain
 unscheduled with no near-term trigger.
+
+## E7 — First-run setup wizard and runtime config overlay (v0.9.0)
+
+v0.9.0 removed the `FRIGATE_URL`-required hard fatal at startup and
+made Skua self-configuring in the browser. Three packages cooperate:
+
+- `internal/runtimeconfig` is a thread-safe, YAML-backed store over
+  a single overlay file (default `/data/config.yaml`), modelled on
+  the `internal/streamoverrides` house style — flat envelope,
+  atomic temp+rename write, fail-fast on malformed YAML, no file
+  created until the first save.
+- `internal/config` reads the overlay in `Load()` and resolves each
+  URL with **env > file** precedence, then exposes provenance flags
+  (`FrigateURLFromEnv`, `Go2RTCURLFromEnv`, `FrigateUIURLFromEnv`)
+  and a `NeedsSetup` boolean. The prior "FRIGATE_URL is required"
+  fatal is gone; `LOG_LEVEL` / `LOG_FORMAT` validation stays fatal.
+- `internal/setup` is a server-rendered Go wizard that evolves the
+  `internal/emergency` page pattern — same tokens, same brackets,
+  same `/healthz`-poll-and-reload script — plus an interactive
+  panel with **Test connection** (`POST /api/setup/test`,
+  ephemeral probes against `frigate.GetStats` and
+  `go2rtc.GetStreams`, never persists) and **Save and start**
+  (`POST /api/setup/save`, validates with `url.Parse`, persists via
+  the runtimeconfig store, then closes a restart channel that
+  `Serve` selects on to shut down cleanly). Env-set fields render
+  read-only with a "set via X environment variable" hint and are
+  stripped from save POSTs server-side so a tampered payload can't
+  pollute the overlay file.
+
+Reconfiguration is **restart-based, not hot-reload.** After a
+successful save, `setup.Serve` returns and `main.go` exits 0; the
+container's `restart: unless-stopped` policy brings the BFF back
+against the new file. This is the same shape the emergency page
+already relied on, and it keeps the boot path linear — no client
+re-wiring, no SSE drain.
+
+The wizard has two entry modes:
+
+- **Initial** — `cfg.NeedsSetup == true`. Empty fields, no banner.
+  Replaces the prior `os.Exit(1)` on missing `FRIGATE_URL`.
+- **Unreachable** — `cameras.New` returned a frigate-unreachable
+  error **and** `!cfg.FrigateURLFromEnv`. The wizard is prefilled
+  with the current overlay values and shows an error banner. This
+  is the **Q5=B unreachable-wizard rule**: only serve the editable
+  wizard when the operator can actually fix the URL from the
+  browser. When the URL is env-locked, the prior informational
+  `internal/emergency` `ReasonFrigateUnreachable` page is served
+  instead, because env will win at next boot regardless of what
+  the wizard could save. The `fs.ErrPermission` data-not-writable
+  path also keeps the informational emergency page — a read-only
+  data dir means the wizard couldn't persist anything anyway.
+
+Caveat carried in CLAUDE.md §12: on an already-installed PWA, the
+cached service worker can shadow the unreachable-wizard at the app
+origin. The wizard is reliable on a fresh browser / first run,
+which is the target deployment case.
+
+E7.1 — an in-app `/settings` URL editor that lets you re-enter
+the URLs from inside the SPA without a container restart — is
+deferred. The restart-based wizard covers the first-run case and
+the URL-changed-by-mistake recovery case; live re-edit is a
+separate shape worth its own sprint.
