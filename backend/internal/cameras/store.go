@@ -95,7 +95,7 @@ func New(path string, frigateClient *frigate.Client) (*Store, error) {
 	if data, err := os.ReadFile(path); err == nil {
 		var fs fileSchema
 		if err := yaml.Unmarshal(data, &fs); err != nil {
-			return nil, fmt.Errorf("cameras: parse %s: %w", path, err)
+			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
 		if fs.Cameras == nil {
 			fs.Cameras = []CameraSpec{}
@@ -103,7 +103,7 @@ func New(path string, frigateClient *frigate.Client) (*Store, error) {
 		s.cameras = fs.Cameras
 		hasDisk = true
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("cameras: read %s: %w", path, err)
+		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), frigateConfigTimeout)
@@ -112,7 +112,7 @@ func New(path string, frigateClient *frigate.Client) (*Store, error) {
 	cfg, err := frigateClient.GetConfig(ctx)
 	if err != nil {
 		if !hasDisk {
-			return nil, fmt.Errorf("cameras: frigate config unreachable and no on-disk snapshot at %s: %w", path, err)
+			return nil, fmt.Errorf("frigate config unreachable and no on-disk snapshot at %s: %w", path, err)
 		}
 		slog.Warn("cameras: frigate config unreachable, using on-disk snapshot", "path", path, "count", len(s.cameras), "error", err)
 		return s, nil
@@ -298,15 +298,20 @@ func cloneSpecs(in []CameraSpec) []CameraSpec {
 	return out
 }
 
-// atomicWrite serializes specs to disk via temp + rename.
+// atomicWrite serializes specs to disk via temp + rename. Error messages
+// here are bare (no "cameras:" prefix) because main.go's diagnostic prefixes
+// them once; keeping the prefix here as well would produce "cameras: cameras:
+// create temp: ..." in the user-facing stderr output. The %w wrapping
+// preserves the unwrap chain, so errors.Is(err, fs.ErrPermission) still
+// matches an underlying EACCES on /data.
 func (s *Store) atomicWrite(specs []CameraSpec) error {
 	dir := filepath.Dir(s.path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("cameras: mkdir %s: %w", dir, err)
+		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, "cameras-*.tmp")
 	if err != nil {
-		return fmt.Errorf("cameras: create temp: %w", err)
+		return fmt.Errorf("create temp: %w", err)
 	}
 	tmpPath := tmp.Name()
 
@@ -316,24 +321,24 @@ func (s *Store) atomicWrite(specs []CameraSpec) error {
 	if err := enc.Encode(payload); err != nil {
 		_ = tmp.Close()
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("cameras: encode: %w", err)
+		return fmt.Errorf("encode: %w", err)
 	}
 	if err := enc.Close(); err != nil {
 		_ = tmp.Close()
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("cameras: close encoder: %w", err)
+		return fmt.Errorf("close encoder: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("cameras: close temp: %w", err)
+		return fmt.Errorf("close temp: %w", err)
 	}
 	if err := os.Chmod(tmpPath, 0o644); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("cameras: chmod temp: %w", err)
+		return fmt.Errorf("chmod temp: %w", err)
 	}
 	if err := os.Rename(tmpPath, s.path); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("cameras: rename: %w", err)
+		return fmt.Errorf("rename: %w", err)
 	}
 	return nil
 }

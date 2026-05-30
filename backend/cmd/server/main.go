@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -62,8 +63,7 @@ func main() {
 
 	camerasStore, err := cameras.New(cfg.CamerasPath, frigateClient)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "cameras: %v\n", err)
-		os.Exit(1)
+		diagnoseCameraStoreError(err, cfg.CamerasPath)
 	}
 	logger.Info("cameras loaded", "path", cfg.CamerasPath, "count", len(camerasStore.Snapshot()))
 
@@ -197,6 +197,32 @@ func main() {
 		logger.Error("shutdown error", "error", err)
 	}
 	logger.Info("server stopped")
+}
+
+// diagnoseCameraStoreError prints an actionable stderr message and exits. The
+// /data volume must be writable by uid/gid 65532 (the distroless `nonroot`
+// user); a root-owned bind mount makes cameras.New fail on first write with a
+// terse fs.ErrPermission deep in the chain. We surface the two concrete
+// remedies (chown the host dir, or switch to a named Docker volume) plus a
+// link to the README troubleshooting section. All other error paths keep the
+// original "cameras: <err>" one-liner.
+//
+// Runs before slog is configured — stderr only, no structured logging.
+func diagnoseCameraStoreError(err error, camerasPath string) {
+	if errors.Is(err, fs.ErrPermission) {
+		dir := filepath.Dir(camerasPath)
+		fmt.Fprintf(os.Stderr, "cameras: cannot write to data directory: %s\n", dir)
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "The /data volume must be writable by the container user (uid/gid 65532).")
+		fmt.Fprintln(os.Stderr, "Fix with one of:")
+		fmt.Fprintf(os.Stderr, "  chown -R 65532:65532 %s\n", dir)
+		fmt.Fprintln(os.Stderr, "  Or switch to a named Docker volume (Docker manages permissions automatically).")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "See: https://github.com/skua-app/skua#container-wont-start--data-folder-stays-empty")
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "cameras: %v\n", err)
+	os.Exit(1)
 }
 
 func logEmbedTree(logger *slog.Logger, fsys fs.FS) {

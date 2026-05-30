@@ -2,7 +2,9 @@ package cameras
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -176,6 +178,31 @@ func TestRefresh_FrigateErrorLeavesStateUntouched(t *testing.T) {
 	}
 	if addedCalled || removedCalled {
 		t.Errorf("hooks should not fire on error; added=%v removed=%v", addedCalled, removedCalled)
+	}
+}
+
+// TestAtomicWrite_PermissionErrorUnwrapsToFsErrPermission guards the contract
+// main.go's diagnoseCameraStoreError depends on: when the data directory is
+// not writable by the running uid, the error returned from atomicWrite (and
+// therefore from cameras.New on the boot path) must unwrap to fs.ErrPermission
+// so the actionable stderr diagnostic fires instead of the terse default.
+func TestAtomicWrite_PermissionErrorUnwrapsToFsErrPermission(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission test requires non-root user; mode bits don't restrict root")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatalf("chmod tempdir read-only: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+
+	store := &Store{path: filepath.Join(dir, "cameras.yaml")}
+	err := store.atomicWrite([]CameraSpec{{ID: "cam1", Name: "cam1", StreamMain: "cam1_main"}})
+	if err == nil {
+		t.Fatal("expected error writing into read-only directory, got nil")
+	}
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("errors.Is(err, fs.ErrPermission) = false; chain: %v", err)
 	}
 }
 
