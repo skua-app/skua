@@ -31,7 +31,7 @@ recommendations in SECURITY.md.
 - [x] L7 Real screenshots in docs/screenshots/ (deferred — synthetic Frigate rig built post-migration)
 - [ ] L12 Announce (r/selfhosted, r/homelab, Frigate Discord, Show HN) — in progress (Frigate Discord first; see LAUNCH.md)
 
-**Current deployed state:** v0.9.0 is the shipped tag. The household app
+**Current deployed state:** v0.10.0 is the shipped tag. The household app
 is feature-complete for live + events + groups + per-camera names + the
 dynamic-camera-discovery loop, and per-camera go2rtc stream overrides can
 now be edited from /settings. v0.4.0
