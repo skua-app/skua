@@ -94,12 +94,9 @@ Mobile PWA, installed to the iOS home screen.
 
 ### Run with Docker Compose
 
-1. Create a directory for Skua and a `compose.yaml` with the
-   following contents. Replace `http://frigate:5000` with whatever
-   hostname or IP resolves to your Frigate container (if Frigate runs
-   in the same Docker network, `frigate` is enough).
+1. Create a directory for Skua and a `compose.yaml`:
 
-   ```yaml
+```yaml
    services:
      skua:
        image: ghcr.io/skua-app/skua:latest
@@ -107,41 +104,48 @@ Mobile PWA, installed to the iOS home screen.
        restart: unless-stopped
        ports:
          - "3200:3200"
-       environment:
-         FRIGATE_URL: "http://frigate:5000"
-         GO2RTC_URL: "http://frigate:1984"
        volumes:
          - ./data:/data
-   ```
+```
 
 2. Start the container:
 
-   ```bash
+```bash
    docker compose up -d
-   ```
+```
 
 3. Open `http://<docker-host>:3200` from a device on the same network.
-   The grid should populate within a second or two as cameras come
-   online.
+   On first run Skua shows a setup wizard. Enter your Frigate URL (and
+   optionally the go2rtc URL and a public Frigate UI URL), click
+   **Test connection** to confirm Skua can reach them, then **Save and
+   start**. Skua writes the values to `/data/config.yaml` and restarts
+   into the app; the grid populates within a second or two as cameras
+   come online.
+
+   Use the host or IP that resolves to your Frigate container — if
+   Frigate runs in the same Docker network, `frigate` is enough
+   (`http://frigate:5000` for the API, `http://frigate:1984` for
+   go2rtc).
 
 If the grid is empty or all cameras show offline, check the
 Troubleshooting section below.
 
-### First-run setup
+### Configure with environment variables instead (optional)
 
-From v0.9.0, the `FRIGATE_URL` and `GO2RTC_URL` environment variables
-are optional. Omit them in your compose file and Skua boots into a
-browser-based setup wizard on its normal port. Open
-`http://<docker-host>:3200`, enter the Frigate URL (and optionally the
-go2rtc URL and a public Frigate UI URL), click **Test connection** to
-verify Skua can reach them, then **Save and start**. The wizard writes
-the values to `/data/config.yaml` and the container restarts into the
-configured app.
+If you prefer declarative config in your compose file (for GitOps or
+reproducible deployments), set the URLs as environment variables and
+skip the wizard:
 
-Env variables always win over the file overlay, so a value set in
-`FRIGATE_URL` cannot be changed from the wizard — the field renders
-read-only with a hint. To switch back to wizard-driven config, remove
-the env var and restart the container.
+```yaml
+    environment:
+      FRIGATE_URL: "http://frigate:5000"
+      GO2RTC_URL: "http://frigate:1984"
+```
+
+Environment variables always win over the wizard's `/data/config.yaml`
+overlay. A value set in `FRIGATE_URL` cannot be changed from the wizard —
+the field renders read-only with a hint. To switch back to
+wizard-driven config, remove the env var and restart the container.
 
 ### With HTTPS and a friendly hostname (optional)
 

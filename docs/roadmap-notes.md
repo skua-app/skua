@@ -29,9 +29,9 @@ recommendations in SECURITY.md.
 - [x] L10 GHCR public visibility flip
 - [x] L11 Squash and migrate to public repo, tag v0.8.0
 - [x] L7 Real screenshots in docs/screenshots/ (deferred — synthetic Frigate rig built post-migration)
-- [ ] L12 Announce (r/selfhosted, r/homelab, Frigate Discord, Show HN)
+- [ ] L12 Announce (r/selfhosted, r/homelab, Frigate Discord, Show HN) — in progress (Frigate Discord first; see LAUNCH.md)
 
-**Current deployed state:** v0.8.4 is the shipped tag. The household app
+**Current deployed state:** v0.9.0 is the shipped tag. The household app
 is feature-complete for live + events + groups + per-camera names + the
 dynamic-camera-discovery loop, and per-camera go2rtc stream overrides can
 now be edited from /settings. v0.4.0
@@ -171,7 +171,7 @@ the reload only fires when the normal server returns 200. Only the
 `camerasStore` blocker routes into emergency mode; the other stores
 keep `os.Exit(1)`.
 
-**What's next.** The only open Public Launch item is L12 announce —
+**What's next.** The only open Public Launch item is L12 announce (in progress) —
 Frigate Discord, then r/selfhosted, then r/homelab, then Show HN —
 which is copywriting, not code, sequenced warm-to-cold (see
 `LAUNCH.md`). PTZ / semantic search / multi-user (E8+) remain
