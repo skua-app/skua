@@ -94,6 +94,7 @@ func newStreamingRouter(
 		nil,
 		capabilities.NewForTest(nil),
 		overridesStore,
+		RuntimeConfigDeps{},
 	)
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	return NewRouter(h, sse.NewHub(logger), logger, staticFS), upstream, overridesStore

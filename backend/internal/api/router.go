@@ -22,6 +22,10 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/config", h.handleConfig)
+		r.Get("/runtime-config", h.handleGetRuntimeConfig)
+		r.Put("/runtime-config", h.handlePutRuntimeConfig)
+		r.Post("/runtime-config/test", h.handleTestRuntimeConfig)
+		r.Post("/runtime-config/restart", h.handleRestartRuntimeConfig)
 		r.Get("/cameras", h.handleCameras)
 		r.Post("/cameras/refresh", h.handleRefreshCameras)
 		r.Get("/go2rtc/streams", h.handleListGo2RTCStreams)

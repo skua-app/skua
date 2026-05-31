@@ -36,7 +36,7 @@ func testSpaFS() fstest.MapFS {
 
 func testRouter(fsys fstest.MapFS) http.Handler {
 	logger := applog.New("error", "text")
-	h := NewHandler(logger, nil, nil, nil, nil, "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil)
+	h := NewHandler(logger, nil, nil, nil, nil, "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
 	return NewRouter(h, sse.NewHub(logger), logger, fsys)
 }
 

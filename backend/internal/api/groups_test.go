@@ -28,7 +28,7 @@ func newGroupsTestRouter(t *testing.T) (http.Handler, *groups.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := NewHandler(logger, nil, nil, nil, cameras.NewForTest(cams), "", nil, "", 0, &http.Client{}, nil, store, nil, capabilities.NewForTest(nil), nil)
+	h := NewHandler(logger, nil, nil, nil, cameras.NewForTest(cams), "", nil, "", 0, &http.Client{}, nil, store, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	return NewRouter(h, sse.NewHub(logger), logger, staticFS), store
 }
@@ -168,7 +168,7 @@ func TestHandleCameras_IncludesGroups(t *testing.T) {
 	logger := applog.New("error", "text")
 	camsSpec := []config.CameraSpec{{ID: "cam1"}, {ID: "cam2"}, {ID: "cam3"}}
 	checker := makeChecker(nil, camsSpec, map[string]bool{"cam1": true, "cam2": true, "cam3": true})
-	h := NewHandler(logger, nil, nil, checker, cameras.NewForTest(camsSpec), "", nil, "", 0, &http.Client{}, nil, store, nil, capabilities.NewForTest(nil), nil)
+	h := NewHandler(logger, nil, nil, checker, cameras.NewForTest(camsSpec), "", nil, "", 0, &http.Client{}, nil, store, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)
 

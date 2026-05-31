@@ -14,6 +14,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0]
+
+### Added
+
+- In-app Connection editor in `/settings`: edit the Frigate, go2rtc, and
+  Frigate UI URLs from inside the app. The form has explicit Test, Save,
+  and Apply (restart now) actions. Save writes `/data/config.yaml`;
+  Apply triggers a clean process exit so the container restart policy
+  boots the new overlay. Env-locked fields render read-only with a hint
+  and are stripped from PUT bodies server-side.
+- `GET` / `PUT /api/runtime-config` returning `{effective, overlay,
+  locked}` and persisting the overlay file.
+- `POST /api/runtime-config/test` runs the same upstream probes the
+  first-run wizard uses (Frigate `GetStats`, go2rtc `GetStreams`).
+- `POST /api/runtime-config/restart` returns `202 {status:"restarting"}`
+  and triggers the BFF's shutdown-select restart branch.
+- `internal/probe` package: shared ephemeral upstream-probe logic
+  (`Frigate`, `Go2RTC`, `ValidateURL`, `Report`) so the setup wizard and
+  the new runtime-config editor reuse a single implementation.
+
+### Changed
+
+- The setup wizard's test-connect endpoint now delegates to
+  `internal/probe`. External JSON shape and behaviour are unchanged.
+- `main.go`'s shutdown select gained a second branch watching a restart
+  channel so the runtime-config editor's Apply funnels into the same
+  graceful `srv.Shutdown` as the SIGINT/SIGTERM path. The signal-driven
+  shutdown path is byte-identical in behaviour.
+
 ## [0.9.0] — 2026-05-31
 
 ### Added

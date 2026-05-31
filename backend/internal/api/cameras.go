@@ -19,6 +19,7 @@ import (
 	"github.com/skua-app/skua/internal/groups"
 	"github.com/skua-app/skua/internal/names"
 	"github.com/skua-app/skua/internal/prefs"
+	"github.com/skua-app/skua/internal/runtimeconfig"
 	"github.com/skua-app/skua/internal/streamoverrides"
 )
 
@@ -169,6 +170,25 @@ func (oc *OnlineChecker) IsOnline(id string) bool {
 	return oc.status[id]
 }
 
+// RuntimeConfigDeps bundles the runtime-config wiring threaded through
+// NewHandler in E7.1. Grouped into one struct so the constructor stays
+// readable as the URL fields, provenance booleans, and the restart
+// closer would otherwise add seven positional args.
+type RuntimeConfigDeps struct {
+	Store               *runtimeconfig.Store
+	FrigateURL          string // effective resolved URL (env or overlay or "")
+	FrigateUIURL        string // effective resolved URL with FrigateURL fallback
+	Go2RTCURL           string // effective resolved URL (may be "")
+	FrigateURLFromEnv   bool
+	FrigateUIURLFromEnv bool
+	Go2RTCURLFromEnv    bool
+	// RequestRestart closes the main shutdown-select's restart channel
+	// exactly once. Calling it from /api/runtime-config/restart triggers
+	// a graceful Shutdown and a process exit so the container restart
+	// policy boots the new overlay file.
+	RequestRestart func()
+}
+
 // Handler holds dependencies for the API routes.
 type Handler struct {
 	logger          *slog.Logger
@@ -186,6 +206,7 @@ type Handler struct {
 	names           *names.Store
 	capabilities    *capabilities.Store
 	streamOverrides *streamoverrides.Store
+	runtime         RuntimeConfigDeps
 }
 
 func NewHandler(
@@ -204,6 +225,7 @@ func NewHandler(
 	namesStore *names.Store,
 	capabilitiesStore *capabilities.Store,
 	streamOverridesStore *streamoverrides.Store,
+	runtime RuntimeConfigDeps,
 ) *Handler {
 	return &Handler{
 		logger:          logger,
@@ -221,6 +243,7 @@ func NewHandler(
 		names:           namesStore,
 		capabilities:    capabilitiesStore,
 		streamOverrides: streamOverridesStore,
+		runtime:         runtime,
 	}
 }
 

@@ -32,7 +32,7 @@ func newNamesTestRouter(t *testing.T) (http.Handler, *names.Store, []config.Came
 		t.Fatal(err)
 	}
 	checker := makeChecker(nil, cams, map[string]bool{"cam1": true, "cam2": true})
-	h := NewHandler(logger, nil, nil, checker, cameras.NewForTest(cams), "", nil, "", 0, &http.Client{}, nil, nil, store, capabilities.NewForTest(nil), nil)
+	h := NewHandler(logger, nil, nil, checker, cameras.NewForTest(cams), "", nil, "", 0, &http.Client{}, nil, nil, store, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	return NewRouter(h, sse.NewHub(logger), logger, staticFS), store, cams
 }

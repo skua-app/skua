@@ -390,6 +390,7 @@ Endpoint groups exposed by the BFF, with status:
 - `camera-names` (GET, PUT; YAML-backed) — stable
 - `stream-overrides` (GET, PUT; YAML-backed, per-installation; merges into WHEP handler only, not /api/cameras) — stable
 - `go2rtc` (GET streams list; pass-through to go2rtc /api/streams) — stable
+- `runtime-config` (GET; PUT; POST `/test`; POST `/restart`) — stable. Reads/writes the wizard overlay `/data/config.yaml`. GET returns `{effective, overlay, locked}`; PUT validates, drops env-locked fields server-side, and persists; `/test` runs the same `internal/probe` checks as the setup wizard; `/restart` closes the main shutdown-select restart channel so the container restart policy boots the new overlay file. See E7.1 in §13.
 
 See docs/api-contract.md for the full TypeScript-style definitions, error
 shapes, storage paths, defaults, and the clip pipeline.
@@ -445,6 +446,23 @@ emitted by the BFF: `event.new`, `event.end`, `camera.online`,
   reliable on a fresh browser / first run, which is the target case;
   installed-PWA users will need to clear site data or hit a different
   device to drive the wizard.
+
+- **Connection editor (E7.1) and setup wizard share the same overlay and
+  restart shape.** Both `/settings → Connection` and the first-run wizard
+  read/write the same `/data/config.yaml` via `internal/runtimeconfig`
+  and rely on the container restart policy for "Apply". The /settings
+  editor is an *explicit* form — Save writes the overlay (effective URLs
+  do not change until the next start) and Apply is a separate destructive
+  control that calls `POST /api/runtime-config/restart`. That endpoint
+  closes a restart channel; the main shutdown-select sees it, runs the
+  same graceful `srv.Shutdown` as SIGTERM, then exits 0. There is no
+  hot-reload of any client (`frigateClient`, `eventsClient`, the SSE hub,
+  the events LRU): swapping them mid-process would leak open connections
+  and risk cache/subscriber drift, so a clean exit + container bounce is
+  the only path. Env-locked URLs are read-only in the UI **and** stripped
+  from PUT bodies server-side — the SPA could be bypassed but the env
+  value would win at next boot anyway, so storing the operator's attempt
+  in the overlay would only confuse a future reader.
 
 - **Stream override layer applies server-side only inside the WHEP handler.**
   `GET /api/cameras` still surfaces Frigate-truth main/sub names from
@@ -706,7 +724,7 @@ These known issues are recorded but not yet fixed:
 | **patch** | Docs: note /data must be writable by the container non-root uid (65532); README Troubleshooting + Configuration + compose comment | **DONE** | v0.8.3 |
 | **patch** | First-run hardening from issue #1: actionable /data permission diagnostic + styled emergency setup page (internal/emergency) served instead of os.Exit on the two startup blockers | **DONE** | v0.8.4 |
 | **E7** | First-run onboarding + runtime config UI: Frigate/go2rtc URLs configurable from the browser instead of .env-only; removes the hard FRIGATE_URL-required fatal at startup | **DONE** | v0.9.0 |
-| **E7.1** | In-app /settings URL editor (live re-edit of the wizard-entered values from inside the SPA) | deferred | — |
+| **E7.1** | In-app /settings → Connection editor for Frigate/go2rtc/UI URLs: explicit Test/Save/Apply, restart-based; `internal/probe` extraction shared with the setup wizard; `/api/runtime-config` GET/PUT, `/test`, `/restart` | **DONE** | v0.10.0 |
 | E8+ | PTZ, semantic search, multi-user prefs | unscheduled | — |
 
 - BFF exposes: `/api/config`, `/api/cameras` (now carrying `groups[]`),
@@ -747,9 +765,15 @@ These known issues are recorded but not yet fixed:
   also served when `cameras.New` hits a `frigate-unreachable` error AND
   the URL is editable (came from the overlay, not env); env-locked
   failures still serve the existing informational emergency page.
-  E7.1 (in-app `/settings` URL editor) is deferred. PTZ / semantic
-  search / multi-user (E8+) remain
-  unscheduled.
+  v0.10.0 (E7.1) added an in-app `/settings → Connection` editor that
+  reads/writes the same overlay file via `/api/runtime-config`,
+  test-connects via `/api/runtime-config/test`, and triggers a clean
+  restart via `/api/runtime-config/restart`. The probe logic was
+  extracted into `internal/probe` so both surfaces share one
+  implementation; `main.go`'s shutdown select gained a second branch
+  watching a restart channel so Apply funnels into the same graceful
+  `srv.Shutdown` as SIGTERM. PTZ / semantic search / multi-user (E8+)
+  remain unscheduled.
 
 Detailed notes on the latest deployed state in docs/roadmap-notes.md.
 

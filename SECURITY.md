@@ -48,7 +48,13 @@ the corresponding fix release.
 ### What Skua does not protect against
 
 - Anyone with network reach to the BFF can list cameras, view
-  snapshots, view stored events, and change preferences.
+  snapshots, view stored events, and change preferences. This also
+  covers `/settings → Connection` (E7.1) — the in-app editor for the
+  Frigate / go2rtc URLs and its Apply (restart now) action have no
+  app-level auth, consistent with the LAN-only-by-design posture.
+  Apply triggers a self-bounce of the BFF container via the restart
+  policy, not a data-exfil path; a reverse proxy with auth in front
+  of Skua gates this and every other endpoint identically.
 - There is no rate limiting, no audit log, and no per-user isolation.
 - The events list includes thumbnails of motion events without
   redaction.

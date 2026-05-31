@@ -163,6 +163,13 @@ Skua reads its configuration from environment variables. Full
 descriptions live in [.env.example](.env.example). The table below is
 the canonical reference.
 
+After first run, the Frigate / go2rtc / Frigate UI URLs can also be
+edited from **Settings → Connection** in the app. The form has separate
+Test, Save, and Apply (restart now) actions; Save updates
+`/data/config.yaml` and Apply triggers a container restart so the new
+values take effect. Env-set fields render read-only with a hint —
+environment variables always win over the on-disk overlay at next boot.
+
 | Variable | Default | Required | Notes |
 |---|---|---|---|
 | `FRIGATE_URL` | — | No | Frigate internal API base URL. Use port 5000 (no auth), not `:8971` (the authed UI port). When unset, Skua serves the first-run setup wizard and persists the entered value to `/data/config.yaml`. |

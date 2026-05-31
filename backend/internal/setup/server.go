@@ -34,13 +34,11 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/skua-app/skua/internal/frigate"
-	"github.com/skua-app/skua/internal/go2rtc"
+	"github.com/skua-app/skua/internal/probe"
 	"github.com/skua-app/skua/internal/runtimeconfig"
 )
 
@@ -93,17 +91,6 @@ type testRequest struct {
 	Go2RTCURL  string `json:"go2rtc_url"`
 }
 
-type targetResult struct {
-	OK      bool   `json:"ok"`
-	Skipped bool   `json:"skipped,omitempty"`
-	Error   string `json:"error,omitempty"`
-}
-
-type testResponse struct {
-	Frigate targetResult `json:"frigate"`
-	Go2RTC  targetResult `json:"go2rtc"`
-}
-
 type saveRequest struct {
 	FrigateURL   string `json:"frigate_url"`
 	FrigateUIURL string `json:"frigate_ui_url"`
@@ -152,9 +139,9 @@ func Handler(store *runtimeconfig.Store, opts Options, restart chan<- struct{}) 
 			writeAPIError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 			return
 		}
-		resp := testResponse{
-			Frigate: probeFrigate(r.Context(), req.FrigateURL, opts.TestTimeout),
-			Go2RTC:  probeGo2RTC(r.Context(), req.Go2RTCURL, opts.TestTimeout),
+		resp := probe.Report{
+			Frigate: probe.Frigate(r.Context(), req.FrigateURL, opts.TestTimeout),
+			Go2RTC:  probe.Go2RTC(r.Context(), req.Go2RTCURL, opts.TestTimeout),
 		}
 		writeJSON(w, http.StatusOK, resp)
 	})
@@ -194,18 +181,18 @@ func Handler(store *runtimeconfig.Store, opts Options, restart chan<- struct{}) 
 			writeAPIError(w, http.StatusBadRequest, "frigate_url_required", "Frigate URL is required.")
 			return
 		}
-		if err := validateURL(values.FrigateURL); err != nil {
+		if err := probe.ValidateURL(values.FrigateURL); err != nil {
 			writeAPIError(w, http.StatusBadRequest, "frigate_url_invalid", fmt.Sprintf("Frigate URL: %s", err))
 			return
 		}
 		if values.Go2RTCURL != "" {
-			if err := validateURL(values.Go2RTCURL); err != nil {
+			if err := probe.ValidateURL(values.Go2RTCURL); err != nil {
 				writeAPIError(w, http.StatusBadRequest, "go2rtc_url_invalid", fmt.Sprintf("go2rtc URL: %s", err))
 				return
 			}
 		}
 		if values.FrigateUIURL != "" {
-			if err := validateURL(values.FrigateUIURL); err != nil {
+			if err := probe.ValidateURL(values.FrigateUIURL); err != nil {
 				writeAPIError(w, http.StatusBadRequest, "frigate_ui_url_invalid", fmt.Sprintf("Frigate UI URL: %s", err))
 				return
 			}
@@ -297,82 +284,6 @@ func titleFor(m Mode) string {
 	default:
 		return "Skua — first-run setup"
 	}
-}
-
-func probeFrigate(ctx context.Context, raw string, timeout time.Duration) targetResult {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return targetResult{Error: "Frigate URL is empty"}
-	}
-	if err := validateURL(trimmed); err != nil {
-		return targetResult{Error: err.Error()}
-	}
-	base := strings.TrimRight(trimmed, "/")
-
-	client := frigate.NewClient(base, timeout)
-	probeCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	if _, err := client.GetStats(probeCtx); err != nil {
-		return targetResult{Error: humanError(err)}
-	}
-	return targetResult{OK: true}
-}
-
-func probeGo2RTC(ctx context.Context, raw string, timeout time.Duration) targetResult {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return targetResult{Skipped: true}
-	}
-	if err := validateURL(trimmed); err != nil {
-		return targetResult{Error: err.Error()}
-	}
-	base := strings.TrimRight(trimmed, "/")
-
-	httpClient := &http.Client{Timeout: timeout}
-	client := go2rtc.New(base, httpClient)
-	probeCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	if _, err := client.GetStreams(probeCtx); err != nil {
-		return targetResult{Error: humanError(err)}
-	}
-	return targetResult{OK: true}
-}
-
-func validateURL(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("not a valid URL")
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("must start with http:// or https://")
-	}
-	if u.Host == "" {
-		return fmt.Errorf("missing host")
-	}
-	return nil
-}
-
-// humanError strips the deepest layer of network noise off a wrapped
-// error so the wizard panel shows a short, readable line. Go's net
-// package nests several layers (op > addr > dial > syscall); the
-// outermost frame is usually the most useful.
-func humanError(err error) string {
-	msg := err.Error()
-	if i := strings.Index(msg, ": "); i > 0 && i < len(msg)-2 {
-		// keep last segment ("connection refused", "no such host", ...)
-		last := msg
-		for {
-			j := strings.Index(last, ": ")
-			if j < 0 || j >= len(last)-2 {
-				break
-			}
-			last = last[j+2:]
-		}
-		if last != "" {
-			return last
-		}
-	}
-	return msg
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

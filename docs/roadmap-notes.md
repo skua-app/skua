@@ -233,8 +233,62 @@ cached service worker can shadow the unreachable-wizard at the app
 origin. The wizard is reliable on a fresh browser / first run,
 which is the target deployment case.
 
-E7.1 — an in-app `/settings` URL editor that lets you re-enter
-the URLs from inside the SPA without a container restart — is
-deferred. The restart-based wizard covers the first-run case and
-the URL-changed-by-mistake recovery case; live re-edit is a
-separate shape worth its own sprint.
+E7.1 — an in-app `/settings` URL editor — landed in v0.10.0; see
+the next section.
+
+## E7.1 — In-app Connection editor (v0.10.0)
+
+v0.10.0 added a `/settings → Connection` section that reads and
+writes the same `internal/runtimeconfig` overlay file the first-run
+wizard uses. Reconfiguration stays restart-based, not hot-reload:
+swapping `frigateClient` / `eventsClient` / the SSE hub / the events
+LRU mid-process would leak open connections and risk subscriber
+drift, so a clean exit + container bounce is the only path. The UI
+makes that explicit by splitting Save and Apply.
+
+The form has three actions:
+
+- **Test connection** runs ephemeral probes against the entered URLs
+  via `POST /api/runtime-config/test`. Never persists.
+- **Save** writes the overlay via `PUT /api/runtime-config`. Cheap:
+  the effective in-memory URLs don't change until the next start,
+  and a `Saved. Restart to apply.` hint is rendered.
+- **Apply (restart now)** is a separate destructive control. It
+  opens an inline confirm (matching the `GroupCard` confirm-delete
+  pattern, no `window.confirm`), then calls
+  `POST /api/runtime-config/restart`. That endpoint closes a
+  restart channel in `main.go`; the shutdown-select sees it, runs
+  the same graceful `srv.Shutdown` as SIGTERM, and exits 0. The
+  page switches to a Restarting… state with a `/healthz` poller
+  that reloads on 200; a ~30s fallback note suggests
+  `docker compose restart skua` if the bounce takes longer.
+
+Three implementation choices worth recording:
+
+- **Probe extraction.** The setup wizard's test-connect logic moved
+  into `internal/probe` (`Frigate`, `Go2RTC`, `ValidateURL`,
+  `Report`). Both surfaces now share one implementation; the wizard
+  delegates to `probe.Frigate(...)` / `probe.Go2RTC(...)` and the
+  external JSON shape is unchanged so no client coupling regressed.
+- **Restart wiring.** `main.go` builds a buffered restart channel +
+  `sync.Once` closer **before** `api.NewHandler`. The closer is
+  threaded into the handler via a new `RuntimeConfigDeps` struct
+  (kept the constructor signature readable instead of seven trailing
+  positional args). The shutdown block became a `select` over
+  `quit` and `restart`; both branches funnel into the same
+  `srv.Shutdown(ctx)`, and only the restart branch calls
+  `os.Exit(0)`. The signal-driven path is byte-identical in
+  behaviour, which keeps `docker compose restart skua` and the
+  Docker SIGTERM lifecycle untouched.
+- **Env precedence preserved.** `Env > file` resolution stays exactly
+  as v0.9.0 left it. The new endpoints expose the same `*FromEnv`
+  provenance the wizard already used: env-locked fields render
+  read-only in the SPA **and** are stripped from PUT bodies
+  server-side. The SPA could be bypassed, but env wins at next boot
+  anyway, so storing the operator's attempt in the overlay would
+  only confuse a future reader.
+
+Caveat carried in CLAUDE.md §12: the iPhone PWA still cold-relaunches
+after Apply because the SW shell cache survives the restart bounce —
+the polling reload picks it up. Installed-PWA users see exactly the
+same recovery as a normal container restart.

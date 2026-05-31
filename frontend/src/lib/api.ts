@@ -384,3 +384,104 @@ export async function setStreamOverride(
   if (!res.ok) throw await parseStreamOverrideError(res)
   return res.json() as Promise<Override>
 }
+
+// Runtime config editor (E7.1). The /settings → Connection section reads
+// effective + overlay + locked from GET, writes via PUT, probes via /test,
+// and triggers a process-level restart via /restart so the container's
+// restart policy boots the new overlay file.
+export type RuntimeConfigURLs = {
+  frigate_url: string
+  frigate_ui_url: string
+  go2rtc_url: string
+}
+
+export type RuntimeConfigLocked = {
+  frigate_url: boolean
+  frigate_ui_url: boolean
+  go2rtc_url: boolean
+}
+
+export type RuntimeConfig = {
+  effective: RuntimeConfigURLs
+  overlay: RuntimeConfigURLs
+  locked: RuntimeConfigLocked
+}
+
+export type ProbeResult = {
+  ok: boolean
+  skipped?: boolean
+  error?: string
+}
+
+export type ProbeReport = {
+  frigate: ProbeResult
+  go2rtc: ProbeResult
+}
+
+export type RuntimeConfigErrorCode =
+  | 'invalid_body'
+  | 'frigate_url_required'
+  | 'frigate_url_invalid'
+  | 'go2rtc_url_invalid'
+  | 'frigate_ui_url_invalid'
+  | 'data_not_writable'
+  | 'internal'
+
+export type RuntimeConfigErrorBody = {
+  error: RuntimeConfigErrorCode
+  message: string
+}
+
+export class RuntimeConfigApiError extends Error {
+  code: RuntimeConfigErrorCode
+  status: number
+  constructor(body: RuntimeConfigErrorBody, status: number) {
+    super(body.message)
+    this.code = body.error
+    this.status = status
+  }
+}
+
+async function parseRuntimeConfigError(res: Response): Promise<RuntimeConfigApiError> {
+  let body: RuntimeConfigErrorBody
+  try {
+    body = (await res.json()) as RuntimeConfigErrorBody
+  } catch {
+    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
+  }
+  return new RuntimeConfigApiError(body, res.status)
+}
+
+export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
+  const res = await fetch('/api/runtime-config')
+  if (!res.ok) throw await parseRuntimeConfigError(res)
+  return res.json() as Promise<RuntimeConfig>
+}
+
+export async function testRuntimeConfig(
+  frigate_url: string,
+  go2rtc_url: string
+): Promise<ProbeReport> {
+  const res = await fetch('/api/runtime-config/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ frigate_url, go2rtc_url })
+  })
+  if (!res.ok) throw await parseRuntimeConfigError(res)
+  return res.json() as Promise<ProbeReport>
+}
+
+export async function saveRuntimeConfig(values: RuntimeConfigURLs): Promise<RuntimeConfig> {
+  const res = await fetch('/api/runtime-config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(values)
+  })
+  if (!res.ok) throw await parseRuntimeConfigError(res)
+  return res.json() as Promise<RuntimeConfig>
+}
+
+export async function restartRuntimeConfig(): Promise<void> {
+  const res = await fetch('/api/runtime-config/restart', { method: 'POST' })
+  if (!res.ok) throw await parseRuntimeConfigError(res)
+}

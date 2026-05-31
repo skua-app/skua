@@ -3,26 +3,30 @@
   import AppearanceSection from '$lib/components/settings/AppearanceSection.svelte'
   import CamerasSection from '$lib/components/settings/CamerasSection.svelte'
   import GroupsSection from '$lib/components/settings/GroupsSection.svelte'
+  import ConnectionSection from '$lib/components/settings/ConnectionSection.svelte'
   import { streamOverridesStore } from '$lib/stores/streamOverrides.svelte'
   import { go2rtcStreamsStore } from '$lib/stores/go2rtcStreams.svelte'
+  import { runtimeConfigStore } from '$lib/stores/runtimeConfig.svelte'
   import { ui } from '$lib/i18n/strings'
 
   let width = $state(0)
   const isDesktop = $derived(width >= 900)
 
-  type SectionId = 'appearance' | 'cameras' | 'groups'
+  type SectionId = 'appearance' | 'cameras' | 'groups' | 'connection'
   const railItems: { id: SectionId; label: string }[] = [
     { id: 'appearance', label: ui.sectionAppearance },
     { id: 'cameras', label: ui.sectionCameras },
-    { id: 'groups', label: ui.sectionGroups }
+    { id: 'groups', label: ui.sectionGroups },
+    { id: 'connection', label: ui.sectionConnection }
   ]
   let activeSection = $state<SectionId>('appearance')
 
-  // Both stores are lazy-inited here so non-settings sessions don't pay the
-  // shell-mount cost. groupsStore + camerasStore stay layout-inited.
+  // /settings-only stores are lazy-inited here so non-settings sessions don't
+  // pay the shell-mount cost. groupsStore + camerasStore stay layout-inited.
   onMount(() => {
     streamOverridesStore.init()
     go2rtcStreamsStore.init()
+    runtimeConfigStore.init()
   })
 
   // Desktop scroll-spy: pick the section with the highest intersection ratio
@@ -73,6 +77,7 @@
       <AppearanceSection />
       <CamerasSection />
       <GroupsSection />
+      <ConnectionSection />
     </main>
   </div>
 {:else}
@@ -80,6 +85,7 @@
     <AppearanceSection />
     <CamerasSection />
     <GroupsSection />
+    <ConnectionSection />
   </div>
 {/if}
 

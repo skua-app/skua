@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/skua-app/skua/internal/probe"
 	"github.com/skua-app/skua/internal/runtimeconfig"
 )
 
@@ -237,7 +238,7 @@ func TestTest_ReturnsFrigateError(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
-	var resp testResponse
+	var resp probe.Report
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -281,7 +282,7 @@ func TestTest_ReachesUpstreamHappyPath(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
-	var resp testResponse
+	var resp probe.Report
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -293,22 +294,5 @@ func TestTest_ReachesUpstreamHappyPath(t *testing.T) {
 	}
 }
 
-func TestValidateURL(t *testing.T) {
-	cases := []struct {
-		in      string
-		wantErr bool
-	}{
-		{"http://frigate:5000", false},
-		{"https://frigate.example.com", false},
-		{"ftp://frigate:5000", true},
-		{"frigate:5000", true},
-		{"", true},
-		{"http://", true},
-	}
-	for _, c := range cases {
-		err := validateURL(c.in)
-		if (err != nil) != c.wantErr {
-			t.Errorf("validateURL(%q) err = %v, wantErr = %v", c.in, err, c.wantErr)
-		}
-	}
-}
+// URL validation lives in internal/probe and is covered by probe_test.go
+// after the E7.1 extraction.

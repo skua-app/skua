@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -191,6 +192,19 @@ func main() {
 	}
 	logger.Info("stream overrides loaded", "path", cfg.StreamOverridesPath, "count", len(streamOverridesStore.All()))
 
+	// restart is closed by the /api/runtime-config/restart handler when the
+	// operator presses "Apply" in /settings. main's shutdown select watches
+	// both this and the SIGINT/SIGTERM quit channel; either branch funnels
+	// into the same srv.Shutdown. On the restart branch main exits 0 after
+	// Shutdown so the container restart policy boots the new overlay file.
+	// The sync.Once wrapper keeps the closer idempotent under concurrent
+	// Apply presses from multiple tabs.
+	restart := make(chan struct{})
+	var restartOnce sync.Once
+	requestRestart := func() {
+		restartOnce.Do(func() { close(restart) })
+	}
+
 	checker := api.NewOnlineChecker(frigateClient, camerasStore, cfg.SnapshotCacheTTL, logger)
 	httpClient := &http.Client{}
 	go2rtcClient := go2rtc.New(cfg.Go2RTCURL, httpClient)
@@ -257,6 +271,16 @@ func main() {
 		namesStore,
 		capabilitiesStore,
 		streamOverridesStore,
+		api.RuntimeConfigDeps{
+			Store:               runtimeConfigStore,
+			FrigateURL:          cfg.FrigateURL,
+			FrigateUIURL:        cfg.FrigateUIURL,
+			Go2RTCURL:           cfg.Go2RTCURL,
+			FrigateURLFromEnv:   cfg.FrigateURLFromEnv,
+			FrigateUIURLFromEnv: cfg.FrigateUIURLFromEnv,
+			Go2RTCURLFromEnv:    cfg.Go2RTCURLFromEnv,
+			RequestRestart:      requestRestart,
+		},
 	)
 	router := api.NewRouter(h, hub, logger, staticFS)
 
@@ -278,15 +302,30 @@ func main() {
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
 
-	logger.Info("shutting down")
+	var restarting bool
+	select {
+	case <-quit:
+		logger.Info("shutting down")
+	case <-restart:
+		// Apply pressed in /settings → restart-bounce via the container's
+		// restart policy. Fall through to the same graceful Shutdown the
+		// SIGTERM path runs, then exit 0 below.
+		restarting = true
+		logger.Info("restart requested via settings")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("shutdown error", "error", err)
 	}
 	logger.Info("server stopped")
+
+	if restarting {
+		logger.Info("restart requested via settings, exiting for restart")
+		os.Exit(0)
+	}
 }
 
 // printCameraStoreDiagnostic emits the operator-facing stderr block for a
