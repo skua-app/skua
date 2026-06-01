@@ -282,3 +282,56 @@ func TestOnlineChecker_MissingCamera(t *testing.T) {
 		t.Error("cam99 should be offline: not present in stats")
 	}
 }
+
+// TestHandleSnapshot_UnknownCameraReturns404 verifies the boundary check
+// rejects unknown camera ids before they reach Frigate.
+func TestHandleSnapshot_UnknownCameraReturns404(t *testing.T) {
+	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Fatalf("upstream must not be called for unknown camera, got path %q", r.URL.Path)
+	}))
+	defer fakeFrigate.Close()
+
+	camSpecs := []config.CameraSpec{{ID: "cam1", Name: "Cam 1", StreamMain: "cam1_main"}}
+	logger := applog.New("error", "text")
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
+	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": true})
+	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
+
+	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
+	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam999/snapshot.jpg", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d (body=%s)", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleSnapshot_HostileIDReturns400 verifies the format check rejects
+// ids containing characters that would alter the upstream Frigate URL
+// (percent-encoded "/", etc.) before reaching the client.
+func TestHandleSnapshot_HostileIDReturns400(t *testing.T) {
+	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Fatalf("upstream must not be called for hostile id, got path %q", r.URL.Path)
+	}))
+	defer fakeFrigate.Close()
+
+	camSpecs := []config.CameraSpec{{ID: "cam1", Name: "Cam 1", StreamMain: "cam1_main"}}
+	logger := applog.New("error", "text")
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
+	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": true})
+	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
+
+	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
+	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/abc%2F..%2Fadmin/snapshot.jpg", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (body=%s)", w.Code, w.Body.String())
+	}
+}

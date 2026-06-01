@@ -299,6 +299,14 @@ func (c *Client) ServeClip(ctx context.Context, eventID string, w http.ResponseW
 	} else {
 		w.Header().Set("Content-Disposition", "inline")
 	}
+	// Clear the server's WriteTimeout for this response: a legitimate slow
+	// download of a clip up to clipMaxBytes (64 MiB) can outlive the default
+	// HTTPTimeout*2 window, and being killed mid-stream would truncate the
+	// file. Same pattern used by the SSE handler. Best-effort: some
+	// ResponseWriters don't expose deadlines via the controller, in which
+	// case the error is ignored (events.Client has no logger field; adding
+	// one just for a degradation log isn't worth the dependency).
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 	// Zero modtime makes http.ServeContent skip If-Modified-Since handling
 	// and rely on the ETag we set above.
 	http.ServeContent(w, r, "", modTime, bytes.NewReader(buf))

@@ -95,6 +95,57 @@ func TestHandleEvents_BadBefore(t *testing.T) {
 	}
 }
 
+func TestValidUpstreamID(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"1779310931.839109-kv3b4h", true},
+		{"cam5", true},
+		{"front_door", true},
+		{"A_b.1-2", true},
+		{"", false},
+		{"../etc", false},
+		{"a/b", false},
+		{"a?b", false},
+		{"a#b", false},
+		{"a b", false},
+		{"a%2Fb", false}, // percent-encoded "/" — the "%" itself is rejected
+		{"cam5;rm", false},
+	}
+	for _, c := range cases {
+		if got := validUpstreamID(c.in); got != c.want {
+			t.Errorf("validUpstreamID(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestHandleEventClip_RejectsHostileID(t *testing.T) {
+	router, _ := eventsRouterWith(t, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Fatalf("upstream must not be called for hostile id, got path %q", r.URL.Path)
+	}))
+	// chi captures everything between two slashes into {id}, so "%2F" stays
+	// percent-encoded in the path segment and validUpstreamID rejects "%".
+	req := httptest.NewRequest(http.MethodGet, "/api/events/abc%2F..%2Fadmin/clip.mp4", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (body=%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleEventThumbnail_RejectsHostileID(t *testing.T) {
+	router, _ := eventsRouterWith(t, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Fatalf("upstream must not be called for hostile id, got path %q", r.URL.Path)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/events/abc%20def/thumbnail.jpg", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
+	}
+}
+
 func TestHandleEventThumbnail_ImmutableCache(t *testing.T) {
 	jpegBytes := []byte{0xff, 0xd8, 0xff, 0xe0}
 	router, _ := eventsRouterWith(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

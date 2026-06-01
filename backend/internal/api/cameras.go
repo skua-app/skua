@@ -326,6 +326,14 @@ func writeRefreshError(w http.ResponseWriter, logger *slog.Logger, status int, c
 
 func (h *Handler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid camera id", nil)
+		return
+	}
+	if _, ok := h.cameras.Find(id); !ok {
+		writeError(w, h.logger, http.StatusNotFound, "camera not found", nil)
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()

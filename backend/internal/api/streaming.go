@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -76,7 +77,7 @@ func (h *Handler) handleWhep(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 	}
 
-	upstream := fmt.Sprintf("%s/api/webrtc?src=%s&type=whep", h.go2rtcURL, streamName)
+	upstream := fmt.Sprintf("%s/api/webrtc?src=%s&type=whep", h.go2rtcURL, url.QueryEscape(streamName))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstream, r.Body)
 	if err != nil {
@@ -165,8 +166,18 @@ func (h *Handler) handleTileJPEG(w http.ResponseWriter, r *http.Request) {
 	}
 
 	srcB := src.Bounds()
+	if srcB.Dx() <= 0 || srcB.Dy() <= 0 {
+		writeError(w, h.logger, http.StatusBadGateway, "invalid source image dimensions", nil)
+		return
+	}
 	dstW := 320
 	dstH := srcB.Dy() * dstW / srcB.Dx()
+	// Clamp dstH to 1 in case an extremely wide/short source rounds the
+	// scaled height to zero — image.NewRGBA with a zero-area rect would
+	// produce a blank tile that jpeg.Encode rejects.
+	if dstH < 1 {
+		dstH = 1
+	}
 	dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
 	draw.BiLinear.Scale(dst, dst.Bounds(), src, srcB, draw.Over, nil)
 

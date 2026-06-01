@@ -101,6 +101,10 @@ func (h *Handler) handleEventClip(w http.ResponseWriter, r *http.Request) {
 		writeError(w, h.logger, http.StatusBadRequest, "missing event id", nil)
 		return
 	}
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid event id", nil)
+		return
+	}
 	var downloadName string
 	if r.URL.Query().Get("download") == "1" {
 		downloadName = "frigate-" + id + ".mp4"
@@ -123,6 +127,10 @@ func (h *Handler) proxyEventImage(w http.ResponseWriter, r *http.Request, name s
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		writeError(w, h.logger, http.StatusBadRequest, "missing event id", nil)
+		return
+	}
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid event id", nil)
 		return
 	}
 
@@ -150,6 +158,30 @@ func (h *Handler) proxyEventImage(w http.ResponseWriter, r *http.Request, name s
 	if _, err := io.Copy(w, body); err != nil {
 		h.logger.Debug("stream event image", "id", id, "name", name, "error", err)
 	}
+}
+
+// validUpstreamID reports whether s is a safe path segment to interpolate
+// into an upstream Frigate URL: non-empty, only [A-Za-z0-9._-]. Frigate
+// event ids are "<unix>-<hash>" and camera ids are config keys, both of
+// which satisfy this; anything else (raw or percent-encoded "/", "?", "#",
+// whitespace, etc.) is malformed or hostile and must be rejected at the
+// HTTP boundary before it reaches any upstream client method.
+func validUpstreamID(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c >= 'A' && c <= 'Z':
+		case c >= '0' && c <= '9':
+		case c == '.' || c == '_' || c == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // splitCSV flattens chi-style repeated query values into a deduped list,
