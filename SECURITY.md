@@ -54,10 +54,31 @@ the corresponding fix release.
   app-level auth, consistent with the LAN-only-by-design posture.
   Apply triggers a self-bounce of the BFF container via the restart
   policy, not a data-exfil path; a reverse proxy with auth in front
-  of Skua gates this and every other endpoint identically.
+  of Skua gates this and every other endpoint identically. See the
+  cross-site note below for what the BFF *does* block on its own.
 - There is no rate limiting, no audit log, and no per-user isolation.
 - The events list includes thumbnails of motion events without
   redaction.
+
+### In-browser cross-site requests are blocked (origin hygiene)
+
+The BFF rejects mutating requests (POST / PUT / PATCH / DELETE on
+`/api/*`) that carry `Sec-Fetch-Site: cross-site`, returning a 403
+with `{"error":"cross_site_blocked"}`. Browsers attach this fetch-
+metadata header to every request and the Fetch spec forbids page JS
+from setting it, so this is enough to stop a malicious external web
+page open in a household user's browser from drive-by-firing endpoints
+like `POST /api/cameras/refresh` or `POST /api/runtime-config/restart`
+(the Apply / restart action of E7.1). Safe methods (GET / HEAD /
+OPTIONS) are not guarded, and requests without `Sec-Fetch-Site` (curl,
+scripts, the healthcheck binary) are allowed through — the in-browser
+threat only exists from browsers, all of which set the header.
+
+This is origin hygiene, not authentication. It does not protect
+against an attacker who can reach the BFF directly (curl from the
+LAN, a host on the same network, etc.) — that scenario is still
+covered by the LAN-only posture above and the reverse-proxy auth
+recommendation below.
 
 ### Out of scope by design
 

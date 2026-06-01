@@ -21,6 +21,7 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 	r.Get("/healthz", handleHealthz)
 
 	r.Route("/api", func(r chi.Router) {
+		r.Use(crossSiteGuard)
 		r.Get("/config", h.handleConfig)
 		r.Get("/runtime-config", h.handleGetRuntimeConfig)
 		r.Put("/runtime-config", h.handlePutRuntimeConfig)
