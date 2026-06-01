@@ -57,8 +57,12 @@ type OnlineChecker struct {
 	nowFn   func() time.Time // injectable for testing; currently unused in logic
 }
 
+// NewOnlineChecker constructs the checker but does NOT start the polling
+// loop — call Start(ctx) in a goroutine for that. Splitting construction
+// from lifecycle mirrors internal/sse.Upstream and gives callers a way to
+// stop the loop on graceful shutdown.
 func NewOnlineChecker(client *frigate.Client, camerasStore *cameras.Store, ttl time.Duration, logger *slog.Logger) *OnlineChecker {
-	oc := &OnlineChecker{
+	return &OnlineChecker{
 		client:  client,
 		cameras: camerasStore,
 		ttl:     ttl,
@@ -66,16 +70,24 @@ func NewOnlineChecker(client *frigate.Client, camerasStore *cameras.Store, ttl t
 		status:  make(map[string]bool),
 		nowFn:   time.Now,
 	}
-	oc.refreshAll()
-	go oc.loop()
-	return oc
 }
 
-func (oc *OnlineChecker) loop() {
+// Start drives the polling loop until ctx is cancelled. Blocks, so callers
+// should run it in a goroutine. Performs one immediate refresh so /api/cameras
+// has data before the first tick fires; each subsequent refresh runs at the
+// configured ttl. Refreshes are bounded by per-call timeouts derived from ctx,
+// so a cancelled parent aborts in-flight Frigate I/O promptly.
+func (oc *OnlineChecker) Start(ctx context.Context) {
+	oc.refreshAll(ctx)
 	ticker := time.NewTicker(oc.ttl)
 	defer ticker.Stop()
-	for range ticker.C {
-		oc.refreshAll()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			oc.refreshAll(ctx)
+		}
 	}
 }
 
@@ -85,36 +97,45 @@ type onlineResult struct {
 	online bool
 }
 
-func (oc *OnlineChecker) refreshAll() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
+// refreshAll polls Frigate /api/stats and (for detection-disabled cameras) the
+// per-camera snapshot endpoint, then atomically swaps the result into
+// oc.status. The full new map is computed off-lock — including draining the
+// probe fan-out — so concurrent IsOnline readers never block on network I/O.
+// Pruning is implicit: the new map contains exactly the cameras present in the
+// current snapshot, so cameras removed since the previous refresh disappear.
+func (oc *OnlineChecker) refreshAll(ctx context.Context) {
 	cams := oc.cameras.Snapshot()
 
-	stats, err := oc.client.GetStats(ctx)
+	statsCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	stats, err := oc.client.GetStats(statsCtx)
 	if err != nil {
-		oc.logger.Warn("frigate stats unavailable, marking all cameras offline", "error", err)
-		oc.mu.Lock()
-		oc.pruneLocked(cams)
-		for _, cam := range cams {
-			oc.status[cam.ID] = false
+		// Suppress the noisy warn when shutdown is cancelling mid-poll.
+		if ctx.Err() == nil {
+			oc.logger.Warn("frigate stats unavailable, marking all cameras offline", "error", err)
 		}
+		offline := make(map[string]bool, len(cams))
+		for _, cam := range cams {
+			offline[cam.ID] = false
+		}
+		oc.mu.Lock()
+		oc.status = offline
 		oc.mu.Unlock()
 		return
 	}
 
-	// Separate cameras into synchronous results and those needing a snapshot probe.
-	syncResults := make([]onlineResult, 0, len(cams))
+	next := make(map[string]bool, len(cams))
 	probeIDs := make([]string, 0)
 
 	for _, cam := range cams {
 		cs, ok := stats.Cameras[cam.ID]
 		if !ok {
-			syncResults = append(syncResults, onlineResult{cam.ID, false})
+			next[cam.ID] = false
 			continue
 		}
 		if cs.CameraFPS > 0 {
-			syncResults = append(syncResults, onlineResult{cam.ID, true})
+			next[cam.ID] = true
 			continue
 		}
 		if !cs.DetectionEnabled {
@@ -122,46 +143,27 @@ func (oc *OnlineChecker) refreshAll() {
 			probeIDs = append(probeIDs, cam.ID)
 			continue
 		}
-		syncResults = append(syncResults, onlineResult{cam.ID, false})
+		next[cam.ID] = false
 	}
 
-	// Fan-out snapshot probes for detection-disabled cameras.
-	probeCh := make(chan onlineResult, len(probeIDs))
-	for _, id := range probeIDs {
-		go func(camID string) {
-			probeCtx, probeCancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer probeCancel()
-			probeCh <- onlineResult{camID, oc.client.ProbeSnapshot(probeCtx, camID)}
-		}(id)
+	if len(probeIDs) > 0 {
+		probeCh := make(chan onlineResult, len(probeIDs))
+		for _, id := range probeIDs {
+			go func(camID string) {
+				probeCtx, probeCancel := context.WithTimeout(ctx, 2*time.Second)
+				defer probeCancel()
+				probeCh <- onlineResult{camID, oc.client.ProbeSnapshot(probeCtx, camID)}
+			}(id)
+		}
+		for range probeIDs {
+			r := <-probeCh
+			next[r.id] = r.online
+		}
 	}
 
 	oc.mu.Lock()
-	oc.pruneLocked(cams)
-	for _, r := range syncResults {
-		oc.status[r.id] = r.online
-	}
-	for range probeIDs {
-		r := <-probeCh
-		oc.status[r.id] = r.online
-	}
+	oc.status = next
 	oc.mu.Unlock()
-}
-
-// pruneLocked removes status entries for cameras no longer present in the
-// snapshot. Caller must hold oc.mu for writing.
-func (oc *OnlineChecker) pruneLocked(cams []cameras.CameraSpec) {
-	if len(oc.status) == 0 {
-		return
-	}
-	present := make(map[string]struct{}, len(cams))
-	for _, c := range cams {
-		present[c.ID] = struct{}{}
-	}
-	for id := range oc.status {
-		if _, ok := present[id]; !ok {
-			delete(oc.status, id)
-		}
-	}
 }
 
 func (oc *OnlineChecker) IsOnline(id string) bool {

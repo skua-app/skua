@@ -229,6 +229,17 @@ func main() {
 	defer upstreamCancel()
 	go upstream.Run(upstreamCtx)
 
+	// OnlineChecker mirrors sse.Upstream's lifecycle: the constructor does
+	// not start the loop; Start(ctx) does and exits on ctx cancel. The
+	// defer covers both shutdown paths (SIGTERM and the restart channel).
+	// First refresh runs inside Start, so /api/cameras may briefly see
+	// "all offline" between server-up and the first Frigate stats round-
+	// trip — acceptable, and the same race the SSE upstream already
+	// tolerates.
+	checkerCtx, checkerCancel := context.WithCancel(context.Background())
+	defer checkerCancel()
+	go checker.Start(checkerCtx)
+
 	// Wire refresh hooks AFTER every store exists. OnAdded broadcasts
 	// camera.added so clients can refetch immediately. OnRemoved broadcasts
 	// camera.removed FIRST, then strips the cam from groups / names /

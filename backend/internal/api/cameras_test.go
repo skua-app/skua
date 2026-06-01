@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -177,7 +178,7 @@ func TestOnlineChecker_StatsOnline(t *testing.T) {
 
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
-	checker.refreshAll()
+	checker.refreshAll(context.Background())
 
 	if !checker.IsOnline("cam1") {
 		t.Error("cam1 should be online (fps > 0)")
@@ -199,7 +200,7 @@ func TestOnlineChecker_StatsError(t *testing.T) {
 
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
-	checker.refreshAll()
+	checker.refreshAll(context.Background())
 
 	if checker.IsOnline("cam1") || checker.IsOnline("cam2") {
 		t.Error("all cameras should be offline when stats request fails")
@@ -226,7 +227,7 @@ func TestOnlineChecker_DetectionDisabledFallback(t *testing.T) {
 
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
-	checker.refreshAll()
+	checker.refreshAll(context.Background())
 
 	if !checker.IsOnline("cam1") {
 		t.Error("cam1 should be online: detection disabled but snapshot responds 200")
@@ -252,7 +253,7 @@ func TestOnlineChecker_DetectionDisabledFallbackOffline(t *testing.T) {
 
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
-	checker.refreshAll()
+	checker.refreshAll(context.Background())
 
 	if checker.IsOnline("cam1") {
 		t.Error("cam1 should be offline: detection disabled and snapshot returns 404")
@@ -276,10 +277,77 @@ func TestOnlineChecker_MissingCamera(t *testing.T) {
 
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
-	checker.refreshAll()
+	checker.refreshAll(context.Background())
 
 	if checker.IsOnline("cam99") {
 		t.Error("cam99 should be offline: not present in stats")
+	}
+}
+
+// TestOnlineChecker_StartReturnsOnCancel verifies the polling loop is
+// stoppable: Start(ctx) must exit promptly once ctx is cancelled (no
+// orphaned goroutine surviving graceful shutdown).
+func TestOnlineChecker_StartReturnsOnCancel(t *testing.T) {
+	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/stats" {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := fmt.Fprint(w, `{"cameras":{}}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer fakeFrigate.Close()
+
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 1 * time.Second})
+	logger := applog.New("error", "text")
+	checker := NewOnlineChecker(client, cameras.NewForTest(nil), 50*time.Millisecond, logger)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		checker.Start(ctx)
+		close(done)
+	}()
+
+	// Give the loop time to enter the ticker select.
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Start did not exit within 2s of ctx cancel")
+	}
+}
+
+// TestOnlineChecker_RefreshPrunesRemovedCameras verifies the full-map-swap
+// in refreshAll implicitly drops cameras that disappeared from the store —
+// no stale "cam2 online" entry lingers after cam2 is removed.
+func TestOnlineChecker_RefreshPrunesRemovedCameras(t *testing.T) {
+	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/stats" {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := fmt.Fprint(w, `{"cameras":{"cam1":{"camera_fps":5,"detection_enabled":true}}}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer fakeFrigate.Close()
+
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 1 * time.Second})
+	// Seed status with a removed cam2 entry; refreshAll's swap must drop it.
+	checker := makeChecker(client, []config.CameraSpec{{ID: "cam1"}}, map[string]bool{"cam2": true})
+	checker.refreshAll(context.Background())
+
+	if !checker.IsOnline("cam1") {
+		t.Error("cam1 should be online")
+	}
+	if checker.IsOnline("cam2") {
+		t.Error("cam2 should have been pruned after refreshAll (no longer in store)")
 	}
 }
 
