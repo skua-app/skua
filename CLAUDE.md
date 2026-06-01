@@ -84,7 +84,7 @@ Direct media path (WebRTC, low-latency live):
 
 | Layer | Choice | Version | Notes |
 |---|---|---|---|
-| Backend language | Go | 1.23+ | Single static binary |
+| Backend language | Go | 1.25+ | Single static binary |
 | HTTP router | go-chi/chi | v5 | |
 | Image resize | golang.org/x/image/draw | latest | Bilinear, for ECO tile.jpg |
 | Logging | log/slog | stdlib | Structured JSON |
@@ -230,14 +230,14 @@ skua/
     │   ├── routes/
     │   │   ├── +layout.svelte       ← shell only: store inits, SW register, lifecycle wiring
     │   │   ├── +layout.ts           ← ssr=false, prerender=false
-    │   │   ├── +error.svelte        ← Russian "Перезагрузить" card; catches bootstrap throws
+    │   │   ├── +error.svelte        ← English "Reload" card; catches bootstrap throws
     │   │   ├── +page.svelte         ← breakpoint switcher: MobileGrid / DesktopGrid
     │   │   ├── cam/[id]/+page.svelte ← breakpoint switcher: MobileFocus / DesktopFocus
     │   │   ├── events/+page.svelte  ← real events list (filters, infinite scroll, modal)
     │   │   └── settings/+page.svelte ← /settings IA shell: rail + scroll-spy (desktop), single-column (mobile); lazy-inits streamOverrides + go2rtcStreams stores
     │   └── lib/
     │       ├── api.ts               ← typed BFF client (includes EventItem types)
-    │       ├── icons.ts             ← ICONS: Record<IconName, IconDef> (21 icons)
+    │       ├── icons.ts             ← ICONS: Record<IconName, IconDef> (23 icons)
     │       ├── lifecycle.svelte.ts  ← onBackground/onForeground hub (iOS PWA snapshot teardown)
     │       ├── streams/whep.ts      ← WHEP client (runtime audio detection)
     │       ├── util/time.ts         ← relativeTimeRu, formatDurationRu
@@ -260,7 +260,7 @@ skua/
     │           ├── BottomSheet.svelte ← reusable slide-up sheet (Escape, body-scroll lock, safe-area inset)
     │           ├── CameraTile.svelte
     │           ├── EventCard.svelte ← 16:9 thumb + meta row (events list)
-    │           ├── EventModal.svelte ← inline clip player + snapshot fallback + "Открыть в Frigate"
+    │           ├── EventModal.svelte ← inline clip player + snapshot fallback + "Open in Frigate"
     │           ├── Icon.svelte
     │           ├── IconBtn.svelte
     │           ├── Segmented.svelte

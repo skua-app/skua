@@ -5,6 +5,23 @@ release tag recorded in CLAUDE.md §13 (Epic roadmap). CLAUDE.md §11 lists
 the endpoint groups and their stable/planned status; this file holds the full
 TypeScript-style definitions.
 
+**Error envelope shapes (known inconsistency).** Two error envelopes coexist
+in the BFF today, and an integrator must parse by endpoint:
+
+- **`{ error: string }`** — a single `error` field whose value is a
+  human-readable message. Emitted by the `writeError` helper in
+  `backend/internal/api/errors.go`. Used by the core E1/E2/E3 endpoints:
+  `cameras` (snapshot.jpg, tile.jpg), `webrtc`, `prefs`, `events` (list,
+  thumbnail.jpg, snapshot.jpg, clip.mp4).
+- **`{ error: string, message: string }`** — a snake_case stable code in
+  `error` plus a human-readable `message`. Emitted by the structured
+  handlers: `groups`, `camera-names`, `cameras/refresh`, `stream-overrides`,
+  `runtime-config`. Frontend stores wrap these into typed `*ApiError`
+  classes that switch on `.code`.
+
+Unifying both envelopes onto the structured shape is tracked as follow-up
+work; until then, the per-endpoint sections below name which shape applies.
+
 ```ts
 // === E1/E2 (stable) ===
 
@@ -36,7 +53,9 @@ type Camera = {
 
 // POST /api/webrtc/:cam_id/whep?quality=main|sub
 // Body: SDP offer (Content-Type: application/sdp)
-// Response: 201, SDP answer. Proxies to go2rtc :1984.
+// Response: SDP answer. The handler relays go2rtc's upstream status
+// verbatim (passthrough via w.WriteHeader(resp.StatusCode)) — go2rtc
+// :1984 returns 200 on success, so 200 is what clients see in practice.
 // quality defaults to "main". Invalid quality → 400.
 // Upstream timeout 10s → 504. Other upstream error → 502.
 
@@ -99,7 +118,11 @@ type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
 // GET  /api/events/:id/clip.mp4?download=1   (Content-Disposition: attachment)
 //
 // Pipeline on a cache miss:
-//   1. Fetch upstream clip from Frigate (30 s context timeout).
+//   1. Fetch upstream clip from Frigate (30 s context timeout — note:
+//      the shared events http.Client.Timeout (HTTP_TIMEOUT, default 5 s)
+//      is the smaller bound and wins in practice today, so 5 s is the
+//      effective ceiling. 30 s is the intended bound; tightening the
+//      contract to match is tracked as follow-up).
 //   2. Buffer into memory with a per-clip cap of 64 MiB (default 30 s @
 //      3500 kbps ≈ 13 MiB; >64 MiB → 502 with "exceeds limit" in the log).
 //   3. Rewrite every `hev1` HEVC sample-entry tag to `hvc1` in place — 4
@@ -156,7 +179,7 @@ type Group = {
 // is auto-created on first write). Malformed YAML at startup → fail-fast.
 
 // Validation errors return 400 with a structured body. The error code is
-// snake_case and stable; message is Russian and meant for direct UI display.
+// snake_case and stable; message is English and meant for direct UI display.
 type GroupErrorBody = {
   error:
     | 'name_empty'
@@ -169,7 +192,7 @@ type GroupErrorBody = {
     | 'empty_patch'
     | 'missing_id'
     | 'internal'
-  message: string  // Russian, ready to display
+  message: string  // English, ready to display
 }
 // Frontend wraps this in GroupApiError (extends Error, carries `.code`) so
 // editor forms can switch on .code for inline placement.
@@ -216,7 +239,7 @@ type RefreshDiff = {
 // SSE events:
 type RefreshErrorBody = {
   error: 'frigate_unreachable' | 'internal'
-  message: string  // Russian, ready to display
+  message: string  // English, ready to display
 }
 
 // SSE event additions (broadcast on /api/stream):
@@ -268,7 +291,7 @@ type RefreshErrorBody = {
 // (empty store). Malformed YAML on load → fail-fast.
 //
 // Validation errors return 4xx/5xx with a structured body { error, message }.
-// Error codes are snake_case and stable; messages are Russian and ready for
+// Error codes are snake_case and stable; messages are English and ready for
 // direct UI display.
 type StreamOverrideErrorBody = {
   error:
@@ -278,9 +301,104 @@ type StreamOverrideErrorBody = {
     | 'go2rtc_unreachable'  // upstream listing failed → 502
     | 'missing_id'          // empty {cam_id} path param
     | 'internal'
-  message: string  // Russian, ready to display
+  message: string  // English, ready to display
 }
 
 // Env: STREAM_OVERRIDES_CONFIG_PATH (default /data/stream_overrides.yaml).
 // See .env.example for host-side mapping options.
+
+// === E7.1 — runtime config (stable) ===
+//
+// The Frigate / go2rtc / Frigate-UI URLs are configurable at runtime
+// through the in-app /settings → Connection editor. The editor reads
+// and writes the same overlay file as the first-run setup wizard
+// (/data/config.yaml via internal/runtimeconfig), with env > file
+// precedence: env-sourced values are "locked" (rendered read-only in
+// the SPA AND stripped from PUT bodies server-side, so a tampered
+// client cannot persist a stale value into the overlay — the env
+// value would win at next boot anyway). Reconfiguration is
+// restart-based: a successful Apply closes the main shutdown-select
+// restart channel, the BFF runs the same graceful srv.Shutdown as
+// SIGTERM, exits 0, and the container restart policy brings it back
+// up against the new overlay. No hot-reload of frigateClient /
+// eventsClient / SSE hub / events LRU.
+
+type RuntimeConfigURLs = {
+  frigate_url: string
+  frigate_ui_url: string
+  go2rtc_url: string
+}
+
+type RuntimeConfigLocked = {
+  frigate_url: boolean      // true → set via FRIGATE_URL env, read-only in UI, stripped from PUT
+  frigate_ui_url: boolean   // true → set via FRIGATE_UI_URL env
+  go2rtc_url: boolean       // true → set via GO2RTC_URL env
+}
+
+type RuntimeConfigResponse = {
+  effective: RuntimeConfigURLs   // what the running process is actually using
+  overlay:   RuntimeConfigURLs   // raw values from /data/config.yaml (empty strings when no overlay)
+  locked:    RuntimeConfigLocked // env-provenance flags
+}
+
+// GET /api/runtime-config → RuntimeConfigResponse
+
+// PUT /api/runtime-config
+//   body: RuntimeConfigURLs   (all three fields; env-locked entries are
+//                              ignored server-side and replaced with the
+//                              current effective value before persistence)
+//   → RuntimeConfigResponse   (effective is unchanged until the next start;
+//                              overlay reflects the new on-disk values)
+//   Validation: probe.ValidateURL on every non-empty field
+//   (parseable, http/https scheme, host present). frigate_url is required
+//   after env-lock stripping; go2rtc_url and frigate_ui_url are optional.
+//
+//   Persistence: atomic write of /data/config.yaml via
+//   internal/runtimeconfig.Store.Save. fs.ErrPermission → 500
+//   data_not_writable (uid/gid 65532 chown hint in the message).
+
+// POST /api/runtime-config/test
+//   body: { frigate_url: string, go2rtc_url: string }
+//     (Frigate-UI URL is not probed — it's a browser-side deep-link target.)
+//   → ProbeReport
+//   Frigate calls GetStats; go2rtc calls GetStreams; each with a 3 s
+//   per-call context timeout. Empty go2rtc_url is "skipped" (Skipped:true,
+//   OK:false, Error:""). Empty frigate_url is a hard error.
+type ProbeResult = {
+  ok: boolean
+  skipped?: boolean   // only emitted for go2rtc when the caller passes ""
+  error?: string      // short message stripped of nested net wrapping
+}
+type ProbeReport = {
+  frigate: ProbeResult
+  go2rtc:  ProbeResult
+}
+
+// POST /api/runtime-config/restart
+//   → 202 { status: "restarting" }
+//   Closes the main shutdown-select restart channel; the process exits 0
+//   via the normal graceful shutdown path and the container restart
+//   policy boots the new overlay file. There is no "in-place reload"
+//   path — swapping clients mid-process would leak open connections and
+//   risk cache / subscriber drift.
+
+// Structured error body { error, message }; codes are snake_case and stable.
+type RuntimeConfigErrorBody = {
+  error:
+    | 'invalid_body'           // malformed JSON or missing field
+    | 'frigate_url_required'   // empty after env-lock stripping
+    | 'frigate_url_invalid'    // probe.ValidateURL failed
+    | 'go2rtc_url_invalid'     // probe.ValidateURL failed
+    | 'frigate_ui_url_invalid' // probe.ValidateURL failed
+    | 'data_not_writable'      // fs.ErrPermission on overlay write (chown 65532)
+    | 'internal'
+  message: string  // English, ready to display
+}
+
+// First-run setup wizard (server-rendered, no SPA route): the
+// internal/setup server exposes POST /api/setup/test and POST /api/setup/save
+// with the same ProbeReport / overlay-write shape. Served only when the
+// BFF has no effective Frigate URL (env+overlay both empty); a successful
+// save triggers the same clean exit + container-restart as
+// /api/runtime-config/restart. Not part of the steady-state SPA surface.
 ```
