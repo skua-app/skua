@@ -34,9 +34,9 @@ jobs:
       # Backend `make check` runs fmt-check + vet + test (lint is delegated here
       # to avoid running golangci-lint twice).
       - name: golangci-lint (backend)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
-          version: latest
+          version: v2.11.4
           working-directory: backend
 
       - name: Backend fmt-check + vet + test
