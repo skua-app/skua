@@ -20,7 +20,6 @@ type Config struct {
 	HTTPTimeout         time.Duration
 	ShutdownTimeout     time.Duration
 	WHEPTimeout         time.Duration
-	StreamProxyTimeout  time.Duration
 	PrefsPath           string
 	GroupsPath          string
 	NamesPath           string
@@ -52,7 +51,6 @@ func Load() (*Config, error) {
 		HTTPTimeout:         mustDuration(env("HTTP_TIMEOUT", "5s")),
 		ShutdownTimeout:     mustDuration(env("SHUTDOWN_TIMEOUT", "10s")),
 		WHEPTimeout:         mustDuration(env("WHEP_TIMEOUT", "10s")),
-		StreamProxyTimeout:  mustDuration(env("STREAM_PROXY_TIMEOUT", "0")),
 		PrefsPath:           env("PREFS_PATH", "/data/prefs.json"),
 		GroupsPath:          env("GROUPS_CONFIG_PATH", "/data/groups.yaml"),
 		NamesPath:           env("CAMERA_NAMES_CONFIG_PATH", "/data/camera_names.yaml"),

@@ -33,7 +33,5 @@
     "vite": "^6.2.0",
     "vite-plugin-pwa": "^0.21.1"
   },
-  "dependencies": {
-    "lucide-svelte": "^1.0.1"
-  }
+  "dependencies": {}
 }
