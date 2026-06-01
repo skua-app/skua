@@ -46,7 +46,7 @@ func newRefreshRouter(
 ) (http.Handler, *cameras.Store, *sse.Hub) {
 	t.Helper()
 	logger := applog.New("error", "text")
-	client := frigate.NewClient(frigateURL, 5*time.Second)
+	client := frigate.NewClient(frigateURL, &http.Client{Timeout: 5 * time.Second})
 	camerasStore := cameras.NewForTestWithFrigate(filepath.Join(t.TempDir(), "cameras.yaml"), client, initialSpecs)
 	checker := makeChecker(client, initialSpecs, map[string]bool{})
 	hub := sse.NewHub(logger)

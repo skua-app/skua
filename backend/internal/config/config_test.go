@@ -235,6 +235,50 @@ func TestLoad_FrigateUIURLEnvWinsOverFile(t *testing.T) {
 	}
 }
 
+func TestLoad_InvalidDurationIsFatal(t *testing.T) {
+	withIsolatedRuntimeConfig(t)
+	t.Setenv("FRIGATE_URL", "http://frigate:5000")
+	t.Setenv("HTTP_TIMEOUT", "5000") // missing unit — must fail loud, not silently 0
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for invalid HTTP_TIMEOUT")
+	}
+}
+
+func TestLoad_InvalidFrigateURLIsFatal(t *testing.T) {
+	withIsolatedRuntimeConfig(t)
+	t.Setenv("FRIGATE_URL", "frigate:5000") // missing scheme
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for scheme-less FRIGATE_URL")
+	}
+}
+
+func TestLoad_EmptyFrigateURLIsNotValidated(t *testing.T) {
+	// Empty FrigateURL is the legitimate first-run NeedsSetup state and must
+	// not fail Load; the wizard handles it.
+	withIsolatedRuntimeConfig(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error for empty FRIGATE_URL: %v", err)
+	}
+	if !cfg.NeedsSetup {
+		t.Errorf("NeedsSetup: want true when no URL is supplied")
+	}
+}
+
+func TestLoad_InvalidGo2RTCURLIsFatal(t *testing.T) {
+	withIsolatedRuntimeConfig(t)
+	t.Setenv("FRIGATE_URL", "http://frigate:5000")
+	t.Setenv("GO2RTC_URL", "not a url")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for malformed GO2RTC_URL")
+	}
+}
+
 func TestLoad_MalformedOverlayIsFatal(t *testing.T) {
 	path := withIsolatedRuntimeConfig(t)
 	writeOverlay(t, path, "frigate_url: [not a string")

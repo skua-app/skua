@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skua-app/skua/internal/probe"
 	"github.com/skua-app/skua/internal/runtimeconfig"
 )
 
@@ -43,14 +44,16 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	var errs []string
+
 	cfg := &Config{
 		Port:                env("PORT", "3200"),
 		LogLevel:            env("LOG_LEVEL", "info"),
 		LogFormat:           env("LOG_FORMAT", "json"),
-		SnapshotCacheTTL:    mustDuration(env("SNAPSHOT_CACHE_TTL", "15s")),
-		HTTPTimeout:         mustDuration(env("HTTP_TIMEOUT", "5s")),
-		ShutdownTimeout:     mustDuration(env("SHUTDOWN_TIMEOUT", "10s")),
-		WHEPTimeout:         mustDuration(env("WHEP_TIMEOUT", "10s")),
+		SnapshotCacheTTL:    parseDuration("SNAPSHOT_CACHE_TTL", env("SNAPSHOT_CACHE_TTL", "15s"), &errs),
+		HTTPTimeout:         parseDuration("HTTP_TIMEOUT", env("HTTP_TIMEOUT", "5s"), &errs),
+		ShutdownTimeout:     parseDuration("SHUTDOWN_TIMEOUT", env("SHUTDOWN_TIMEOUT", "10s"), &errs),
+		WHEPTimeout:         parseDuration("WHEP_TIMEOUT", env("WHEP_TIMEOUT", "10s"), &errs),
 		PrefsPath:           env("PREFS_PATH", "/data/prefs.json"),
 		GroupsPath:          env("GROUPS_CONFIG_PATH", "/data/groups.yaml"),
 		NamesPath:           env("CAMERA_NAMES_CONFIG_PATH", "/data/camera_names.yaml"),
@@ -89,7 +92,6 @@ func Load() (*Config, error) {
 
 	cfg.NeedsSetup = cfg.FrigateURL == ""
 
-	var errs []string
 	validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
 	if !validLevels[cfg.LogLevel] {
 		errs = append(errs, fmt.Sprintf("LOG_LEVEL must be one of debug|info|warn|error, got %q", cfg.LogLevel))
@@ -97,6 +99,27 @@ func Load() (*Config, error) {
 	validFormats := map[string]bool{"json": true, "text": true}
 	if !validFormats[cfg.LogFormat] {
 		errs = append(errs, fmt.Sprintf("LOG_FORMAT must be json|text, got %q", cfg.LogFormat))
+	}
+
+	// Only validate non-empty URLs. An empty FrigateURL is the legitimate
+	// first-run NeedsSetup state — the wizard handles it; failing Load here
+	// would break boot. Same logic for Go2RTCURL (optional) and FrigateUIURL
+	// (falls back to FrigateURL when blank, so empty is already impossible
+	// post-resolution unless FrigateURL is also empty).
+	if cfg.FrigateURL != "" {
+		if err := probe.ValidateURL(cfg.FrigateURL); err != nil {
+			errs = append(errs, fmt.Sprintf("FRIGATE_URL %s", err))
+		}
+	}
+	if cfg.Go2RTCURL != "" {
+		if err := probe.ValidateURL(cfg.Go2RTCURL); err != nil {
+			errs = append(errs, fmt.Sprintf("GO2RTC_URL %s", err))
+		}
+	}
+	if cfg.FrigateUIURL != "" {
+		if err := probe.ValidateURL(cfg.FrigateUIURL); err != nil {
+			errs = append(errs, fmt.Sprintf("FRIGATE_UI_URL %s", err))
+		}
 	}
 
 	if len(errs) > 0 {
@@ -121,9 +144,14 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func mustDuration(s string) time.Duration {
-	d, err := time.ParseDuration(s)
+// parseDuration parses raw as a Go duration string. On failure it appends a
+// readable diagnostic to errs and returns 0; the caller's len(errs) gate then
+// turns the bad value into a Load error rather than silently disabling a
+// timeout (a zero Duration means "no timeout").
+func parseDuration(key, raw string, errs *[]string) time.Duration {
+	d, err := time.ParseDuration(raw)
 	if err != nil {
+		*errs = append(*errs, fmt.Sprintf("%s must be a valid duration (e.g. 5s, 200ms), got %q", key, raw))
 		return 0
 	}
 	return d

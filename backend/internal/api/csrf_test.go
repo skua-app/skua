@@ -33,7 +33,7 @@ func newCSRFRouter(t *testing.T) http.Handler {
 	}))
 	t.Cleanup(fakeFrigate.Close)
 
-	frigateClient := frigate.NewClient(fakeFrigate.URL, 2*time.Second)
+	frigateClient := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 2 * time.Second})
 	camerasStore := cameras.NewForTestWithFrigate(
 		filepath.Join(t.TempDir(), "cameras.yaml"),
 		frigateClient,

@@ -95,7 +95,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	frigateClient := frigate.NewClient(cfg.FrigateURL, cfg.HTTPTimeout)
+	// httpClient is shared by frigate, go2rtc, and the WHEP signaling path.
+	// Timeouts on the Frigate side are governed by each call's context (e.g.
+	// cameras.New uses a 10s ctx for GetConfig, OnlineChecker uses 5s/2s, the
+	// snapshot handler uses 3s); a client-level Timeout would fight those.
+	httpClient := &http.Client{}
+	frigateClient := frigate.NewClient(cfg.FrigateURL, httpClient)
 
 	camerasStore, err := cameras.New(cfg.CamerasPath, frigateClient)
 	if err != nil {
@@ -206,7 +211,6 @@ func main() {
 	}
 
 	checker := api.NewOnlineChecker(frigateClient, camerasStore, cfg.SnapshotCacheTTL, logger)
-	httpClient := &http.Client{}
 	go2rtcClient := go2rtc.New(cfg.Go2RTCURL, httpClient)
 	// No Client.Timeout here: clip fetches must honour handleEventClip's 30s
 	// per-call context, not a 5s blanket cap (which would bound every Range

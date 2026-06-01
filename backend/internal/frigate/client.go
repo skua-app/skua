@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"time"
 )
 
 type Client struct {
@@ -15,12 +14,18 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClient(baseURL string, timeout time.Duration) *Client {
+// NewClient builds a Frigate REST client. Timeout policy lives on the caller:
+// every method here uses http.NewRequestWithContext, so the per-call context
+// deadline is the only bound. Pass a custom *http.Client to share connection
+// pools or impose a client-level timeout (the probe path does this); pass nil
+// to get a fresh &http.Client{} with no Timeout.
+func NewClient(baseURL string, httpClient *http.Client) *Client {
+	if httpClient == nil {
+		httpClient = &http.Client{}
+	}
 	return &Client{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: timeout,
-		},
+		baseURL:    baseURL,
+		httpClient: httpClient,
 	}
 }
 

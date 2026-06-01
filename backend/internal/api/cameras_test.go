@@ -41,7 +41,7 @@ func TestHandleCameras(t *testing.T) {
 		{ID: "cam1", Name: "Cam 1", StreamMain: "cam1_main", StreamSub: "cam1_sub"},
 		{ID: "cam5", Name: "Cam 5", StreamMain: "cam5_main_h264", StreamSub: "cam5_sub"},
 	}
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": true, "cam5": true})
 	logger := applog.New("error", "text")
 	capsStore := capabilities.NewForTest(map[string]capabilities.Capabilities{
@@ -107,7 +107,7 @@ func TestHandleSnapshot(t *testing.T) {
 
 	camSpecs := []config.CameraSpec{{ID: "cam1", Name: "Cam 1", StreamMain: "cam1_main", StreamSub: "cam1_sub"}}
 	logger := applog.New("error", "text")
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": true})
 	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
 
@@ -141,7 +141,7 @@ func TestHandleSnapshotMissing(t *testing.T) {
 
 	camSpecs := []config.CameraSpec{{ID: "cam1", Name: "Cam 1", StreamMain: "cam1_main", StreamSub: "cam1_sub"}}
 	logger := applog.New("error", "text")
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": false})
 	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
 
@@ -175,7 +175,7 @@ func TestOnlineChecker_StatsOnline(t *testing.T) {
 	}))
 	defer fakeFrigate.Close()
 
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
 	checker.refreshAll()
 
@@ -197,7 +197,7 @@ func TestOnlineChecker_StatsError(t *testing.T) {
 	}))
 	defer fakeFrigate.Close()
 
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
 	checker.refreshAll()
 
@@ -224,7 +224,7 @@ func TestOnlineChecker_DetectionDisabledFallback(t *testing.T) {
 	}))
 	defer fakeFrigate.Close()
 
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
 	checker.refreshAll()
 
@@ -250,7 +250,7 @@ func TestOnlineChecker_DetectionDisabledFallbackOffline(t *testing.T) {
 	}))
 	defer fakeFrigate.Close()
 
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
 	checker.refreshAll()
 
@@ -274,7 +274,7 @@ func TestOnlineChecker_MissingCamera(t *testing.T) {
 	}))
 	defer fakeFrigate.Close()
 
-	client := frigate.NewClient(fakeFrigate.URL, 5*time.Second)
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, cameras, make(map[string]bool))
 	checker.refreshAll()
 

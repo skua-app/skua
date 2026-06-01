@@ -57,7 +57,7 @@ func Frigate(ctx context.Context, rawURL string, timeout time.Duration) Result {
 	}
 	base := strings.TrimRight(trimmed, "/")
 
-	client := frigate.NewClient(base, timeout)
+	client := frigate.NewClient(base, &http.Client{Timeout: timeout})
 	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if _, err := client.GetStats(probeCtx); err != nil {

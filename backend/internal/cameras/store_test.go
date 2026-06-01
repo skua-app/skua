@@ -77,7 +77,7 @@ func TestRefresh_AddedCameraAppearsInDiffAndHook(t *testing.T) {
 		"cam1": "cam1_main_h264",
 		"cam2": "cam2_main_h264",
 	})
-	client := frigate.NewClient(srv.URL, 5*time.Second)
+	client := frigate.NewClient(srv.URL, &http.Client{Timeout: 5 * time.Second})
 
 	path := filepath.Join(t.TempDir(), "cameras.yaml")
 	store := NewForTestWithFrigate(path, client, []CameraSpec{
@@ -114,7 +114,7 @@ func TestRefresh_RemovedCameraAppearsInDiffAndHook(t *testing.T) {
 	srv := newFakeFrigate(t, map[string]string{
 		"cam1": "cam1_main_h264",
 	})
-	client := frigate.NewClient(srv.URL, 5*time.Second)
+	client := frigate.NewClient(srv.URL, &http.Client{Timeout: 5 * time.Second})
 
 	path := filepath.Join(t.TempDir(), "cameras.yaml")
 	store := NewForTestWithFrigate(path, client, []CameraSpec{
@@ -153,7 +153,7 @@ func TestRefresh_FrigateErrorLeavesStateUntouched(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
-	client := frigate.NewClient(srv.URL, 5*time.Second)
+	client := frigate.NewClient(srv.URL, &http.Client{Timeout: 5 * time.Second})
 
 	path := filepath.Join(t.TempDir(), "cameras.yaml")
 	initial := []CameraSpec{
@@ -210,7 +210,7 @@ func TestRefresh_EmptyDiffSkipsHooks(t *testing.T) {
 	srv := newFakeFrigate(t, map[string]string{
 		"cam1": "cam1_main_h264",
 	})
-	client := frigate.NewClient(srv.URL, 5*time.Second)
+	client := frigate.NewClient(srv.URL, &http.Client{Timeout: 5 * time.Second})
 
 	path := filepath.Join(t.TempDir(), "cameras.yaml")
 	store := NewForTestWithFrigate(path, client, []CameraSpec{
