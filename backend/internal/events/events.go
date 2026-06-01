@@ -32,6 +32,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -167,6 +168,21 @@ type Client struct {
 	baseURL    string
 	httpClient *http.Client
 	clips      *clipCache
+
+	// inflight collapses concurrent cold misses for the same event id into
+	// one upstream fetch. Keyed by event id; the value's done channel is
+	// closed once the shared fetch completes. See fetchClipShared.
+	inflightMu sync.Mutex
+	inflight   map[string]*clipInflight
+}
+
+// clipInflight is the shared state for one in-progress upstream fetch.
+// buf/err are written exactly once, before done is closed; subsequent
+// readers may safely read them without holding any lock.
+type clipInflight struct {
+	done chan struct{}
+	buf  []byte
+	err  error
 }
 
 func NewClient(baseURL string, httpClient *http.Client) *Client {
@@ -177,6 +193,7 @@ func NewClient(baseURL string, httpClient *http.Client) *Client {
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: httpClient,
 		clips:      newClipCache(clipCacheMaxEntries, clipCacheMaxBytes),
+		inflight:   make(map[string]*clipInflight),
 	}
 }
 
@@ -261,13 +278,12 @@ func (c *Client) List(ctx context.Context, p ListParams) (ListResponse, error) {
 func (c *Client) ServeClip(ctx context.Context, eventID string, w http.ResponseWriter, r *http.Request, downloadName string) error {
 	buf, modTime, ok := c.clips.Get(eventID)
 	if !ok {
-		fetched, err := c.fetchClip(ctx, eventID)
+		fetched, err := c.fetchClipShared(ctx, eventID)
 		if err != nil {
 			return err
 		}
 		buf = fetched
 		modTime = time.Time{}
-		c.clips.Put(eventID, buf, modTime)
 	}
 
 	// Set Content-Type explicitly: http.ServeContent's sniffing relies on the
@@ -287,6 +303,59 @@ func (c *Client) ServeClip(ctx context.Context, eventID string, w http.ResponseW
 	// and rely on the ETag we set above.
 	http.ServeContent(w, r, "", modTime, bytes.NewReader(buf))
 	return nil
+}
+
+// fetchClipShared single-flights concurrent cold misses for the same event
+// id. The first caller spawns the upstream fetch on a context decoupled
+// from any specific request's cancellation, so a probe Range request that
+// gives up mid-fetch (iOS issues 10–20 parallel ranges and frequently
+// cancels the first few) does not poison the sibling waiters. All callers
+// block on the shared done channel; the resulting bytes + cache Put happen
+// exactly once before the inflight entry is released. Errors are shared
+// across waiters but are not cached — a subsequent cold miss retries.
+func (c *Client) fetchClipShared(ctx context.Context, eventID string) ([]byte, error) {
+	c.inflightMu.Lock()
+	if existing, ok := c.inflight[eventID]; ok {
+		c.inflightMu.Unlock()
+		select {
+		case <-existing.done:
+			return existing.buf, existing.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	call := &clipInflight{done: make(chan struct{})}
+	c.inflight[eventID] = call
+	c.inflightMu.Unlock()
+
+	go func() {
+		// Detach from the triggering caller's cancellation but preserve its
+		// deadline if it had one, so the upstream fetch survives a probe
+		// cancel yet remains time-bounded.
+		fetchCtx := context.WithoutCancel(ctx)
+		if d, ok := ctx.Deadline(); ok {
+			var cancel context.CancelFunc
+			fetchCtx, cancel = context.WithDeadline(fetchCtx, d)
+			defer cancel()
+		}
+		buf, err := c.fetchClip(fetchCtx, eventID)
+		call.buf = buf
+		call.err = err
+		if err == nil {
+			c.clips.Put(eventID, buf, time.Time{})
+		}
+		c.inflightMu.Lock()
+		delete(c.inflight, eventID)
+		c.inflightMu.Unlock()
+		close(call.done)
+	}()
+
+	select {
+	case <-call.done:
+		return call.buf, call.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // fetchClip pulls the raw MP4 bytes for eventID from Frigate, capped at

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,6 +39,7 @@ func newTestClient(srvURL string, cache *clipCache) *Client {
 		baseURL:    strings.TrimRight(srvURL, "/"),
 		httpClient: &http.Client{},
 		clips:      cache,
+		inflight:   make(map[string]*clipInflight),
 	}
 }
 
@@ -531,6 +534,160 @@ func TestServeClip_HEADReusesCachedBytes(t *testing.T) {
 	}
 	if got := hits(); got != 1 {
 		t.Errorf("hits after follow-up GET = %d, want 1 (cache reuse across methods)", got)
+	}
+}
+
+// TestServeClip_SingleFlightCollapsesColdMiss fires N concurrent ServeClip
+// calls for the same fresh event id; the upstream handler blocks on a
+// release channel so every goroutine reaches the cold-miss path before any
+// fetch can complete. The single-flight layer must collapse the stampede
+// into exactly one upstream request whose bytes are then shared with every
+// waiter.
+func TestServeClip_SingleFlightCollapsesColdMiss(t *testing.T) {
+	const n = 20
+	var hits int64
+	release := make(chan struct{})
+	arrived := make(chan struct{}, 1)
+	body := []byte("buffered-clip-bytes-for-singleflight-test")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt64(&hits, 1)
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-release
+		w.Header().Set("Content-Type", "video/mp4")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, nil)
+
+	type result struct {
+		body []byte
+		err  error
+	}
+	results := make(chan result, n)
+	var startWG sync.WaitGroup
+	startWG.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			startWG.Done()
+			req := httptest.NewRequest(http.MethodGet, "/api/events/sf-1/clip.mp4", nil)
+			rec := httptest.NewRecorder()
+			err := c.ServeClip(context.Background(), "sf-1", rec, req, "")
+			results <- result{body: rec.Body.Bytes(), err: err}
+		}()
+	}
+	startWG.Wait()
+
+	select {
+	case <-arrived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("upstream never received the cold-miss fetch")
+	}
+	close(release)
+
+	for i := 0; i < n; i++ {
+		select {
+		case r := <-results:
+			if r.err != nil {
+				t.Fatalf("call %d: %v", i, r.err)
+			}
+			if !bytes.Equal(r.body, body) {
+				t.Errorf("call %d: body mismatch (len=%d want=%d)", i, len(r.body), len(body))
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("waiter never returned")
+		}
+	}
+	if got := atomic.LoadInt64(&hits); got != 1 {
+		t.Errorf("upstream hits = %d, want 1 (single-flight should collapse cold misses)", got)
+	}
+}
+
+// TestServeClip_SingleFlightSurvivesFirstCallerCancel asserts that
+// cancelling the request that triggered the shared fetch does not poison
+// sibling waiters: the second caller, joined while the upstream was still
+// blocked, must still receive the bytes once the upstream unblocks. iOS
+// frequently cancels probe Range requests within a few hundred ms; if the
+// first one tore down the shared fetch, every other Range would also fail.
+func TestServeClip_SingleFlightSurvivesFirstCallerCancel(t *testing.T) {
+	var hits int64
+	release := make(chan struct{})
+	arrived := make(chan struct{}, 1)
+	body := []byte("survived-cancel-payload")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt64(&hits, 1)
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-release
+		w.Header().Set("Content-Type", "video/mp4")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, nil)
+
+	type result struct {
+		body []byte
+		err  error
+	}
+
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	first := make(chan result, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/api/events/sf-cancel/clip.mp4", nil)
+		rec := httptest.NewRecorder()
+		err := c.ServeClip(ctx1, "sf-cancel", rec, req, "")
+		first <- result{body: rec.Body.Bytes(), err: err}
+	}()
+
+	// Wait until the upstream handler has actually been invoked; the
+	// inflight entry is in place by the time the goroutine got far enough
+	// to issue the HTTP request.
+	select {
+	case <-arrived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first caller never reached upstream")
+	}
+
+	second := make(chan result, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/api/events/sf-cancel/clip.mp4", nil)
+		rec := httptest.NewRecorder()
+		err := c.ServeClip(context.Background(), "sf-cancel", rec, req, "")
+		second <- result{body: rec.Body.Bytes(), err: err}
+	}()
+
+	cancel1()
+	select {
+	case r := <-first:
+		if !errors.Is(r.err, context.Canceled) {
+			t.Errorf("first caller err = %v, want context.Canceled", r.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("first caller did not return after cancel")
+	}
+
+	close(release)
+	select {
+	case r := <-second:
+		if r.err != nil {
+			t.Fatalf("second caller err = %v", r.err)
+		}
+		if !bytes.Equal(r.body, body) {
+			t.Errorf("second caller body mismatch (len=%d want=%d)", len(r.body), len(body))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second caller never received bytes")
+	}
+	if got := atomic.LoadInt64(&hits); got != 1 {
+		t.Errorf("upstream hits = %d, want 1 (shared fetch must survive first-caller cancel)", got)
 	}
 }
 

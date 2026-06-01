@@ -208,7 +208,11 @@ func main() {
 	checker := api.NewOnlineChecker(frigateClient, camerasStore, cfg.SnapshotCacheTTL, logger)
 	httpClient := &http.Client{}
 	go2rtcClient := go2rtc.New(cfg.Go2RTCURL, httpClient)
-	eventsClient := events.NewClient(cfg.FrigateURL, &http.Client{Timeout: cfg.HTTPTimeout})
+	// No Client.Timeout here: clip fetches must honour handleEventClip's 30s
+	// per-call context, not a 5s blanket cap (which would bound every Range
+	// request body read). List and FetchImage already set their own 5s
+	// contexts, so their effective bound is unchanged.
+	eventsClient := events.NewClient(cfg.FrigateURL, nil)
 
 	hub := sse.NewHub(logger)
 	wsURL, err := sse.DeriveWSURL(cfg.FrigateURL)
