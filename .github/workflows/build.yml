@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  pull_request:
+    branches: [main]
 
 env:
   REGISTRY: ghcr.io
@@ -14,7 +16,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: backend/go.sum
+
+      # golangci-lint action handles install + cache + lint in one step.
+      # Backend `make check` runs fmt-check + vet + test (lint is delegated here
+      # to avoid running golangci-lint twice).
+      - name: golangci-lint (backend)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: backend
+
+      - name: Backend fmt-check + vet + test
+        working-directory: backend
+        run: make fmt-check vet test
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend type-check
+        working-directory: frontend
+        run: npm run check
+
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Frontend format check
+        working-directory: frontend
+        run: npm run format:check
+
   build:
+    if: github.event_name != 'pull_request'
+    needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: read

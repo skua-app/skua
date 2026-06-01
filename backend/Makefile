@@ -1,4 +1,4 @@
-.PHONY: build run test vet lint fmt check clean coverage
+.PHONY: build run test vet lint fmt fmt-check check clean coverage
 
 BIN := bin/server
 
@@ -20,7 +20,10 @@ lint:
 fmt:
 	gofmt -l -w .
 
-check: fmt vet lint test
+fmt-check:
+	@test -z "$$(gofmt -l .)" || { echo "unformatted files:"; gofmt -l .; exit 1; }
+
+check: fmt-check vet lint test
 
 clean:
 	rm -rf bin/
