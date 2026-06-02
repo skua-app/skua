@@ -197,36 +197,39 @@
 
   <div class="df-body">
     <div class="df-video-col">
-      <div class="df-video-frame">
-        {@render videoSnippet()}
+      <div class="df-video-stage">
+        <div class="df-video-frame">
+          {@render videoSnippet()}
 
-        {#if showTimestamp}
-          <div class="ts-chip">
-            <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}>{currentTime}</Mono>
-          </div>
-        {/if}
+          {#if showTimestamp}
+            <div class="ts-chip">
+              <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}>{currentTime}</Mono>
+            </div>
+          {/if}
 
-        {#if showTelemetry}
-          <div class="telemetry-pill">
-            <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>LATENCY</Mono>
-            <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-              {latencyMs !== null ? `${latencyMs} ms` : '—'}
-            </Mono>
-            <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>BITRATE</Mono>
-            <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-              {bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}
-            </Mono>
-            <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>VIDEO</Mono>
-            <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-              {videoCodec ?? '—'}
-              {resolution ?? ''}
-            </Mono>
-            {#if audioAvailable}
-              <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>AUDIO</Mono>
-              <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>{audioCodec ?? '—'}</Mono>
-            {/if}
-          </div>
-        {/if}
+          {#if showTelemetry}
+            <div class="telemetry-pill">
+              <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>LATENCY</Mono>
+              <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
+                {latencyMs !== null ? `${latencyMs} ms` : '—'}
+              </Mono>
+              <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>BITRATE</Mono>
+              <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
+                {bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}
+              </Mono>
+              <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>VIDEO</Mono>
+              <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
+                {videoCodec ?? '—'}
+                {resolution ?? ''}
+              </Mono>
+              {#if audioAvailable}
+                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>AUDIO</Mono>
+                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>{audioCodec ?? '—'}</Mono
+                >
+              {/if}
+            </div>
+          {/if}
+        </div>
       </div>
 
       <div class="df-controls">
@@ -409,9 +412,27 @@
     min-height: 0;
   }
 
+  /* Stage takes the leftover vertical space inside .df-video-col and centers
+     the frame. min-height:0 lets it shrink so the controls row below the
+     frame is never pushed off when the window is shortened. */
+  .df-video-stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Largest 16:9 box that fits both the stage's width and remaining height.
+     width:100% + max-height:100% + aspect-ratio together let the box shrink
+     in either dimension while keeping the ratio, so a short window no longer
+     stretches the picture horizontally (the prior bug). object-fit on
+     .poster / .video-el stays `fill` deliberately — the LQ sub stream is
+     anamorphic and needs the unsquashed stretch to 16:9. */
   .df-video-frame {
     position: relative;
     width: 100%;
+    max-height: 100%;
     aspect-ratio: 16 / 9;
     border-radius: 12px;
     overflow: hidden;
@@ -442,6 +463,7 @@
   }
 
   .df-controls {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;

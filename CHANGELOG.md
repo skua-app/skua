@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Desktop focus view no longer stretches the video horizontally when the
+  browser window is shortened vertically. The frame is now constrained to
+  the largest 16:9 box that fits both the leftover width and height of the
+  video column and is centered when it becomes height-limited, so HQ
+  (main, 16:9) stays correctly proportioned at any window height while the
+  anamorphic LQ (sub, 3:4) stream continues to be stretched to 16:9 via
+  `object-fit: fill` as before. The controls row below the frame stays
+  visible.
+
 ## [0.11.0] — 2026-06-02
 
 ### Added
