@@ -162,8 +162,11 @@ func TestWhep_SubNoOverrideEmptyStreamReturns400(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body["error"] != "no stream configured for quality" {
-		t.Errorf("error = %q, want 'no stream configured for quality'", body["error"])
+	if body["error"] != "no_stream" {
+		t.Errorf("error code = %q, want no_stream", body["error"])
+	}
+	if body["message"] != "no stream configured for quality" {
+		t.Errorf("message = %q, want 'no stream configured for quality'", body["message"])
 	}
 }
 
@@ -203,8 +206,11 @@ func TestWhep_InvalidQualityReturns400(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body["error"] != "quality must be main or sub" {
-		t.Errorf("error = %q, want 'quality must be main or sub'", body["error"])
+	if body["error"] != "bad_request" {
+		t.Errorf("error code = %q, want bad_request", body["error"])
+	}
+	if body["message"] != "quality must be main or sub" {
+		t.Errorf("message = %q, want 'quality must be main or sub'", body["message"])
 	}
 }
 
@@ -221,5 +227,12 @@ func TestWhep_UnknownCameraReturns404(t *testing.T) {
 	}
 	if upstream.requests() != 0 {
 		t.Errorf("expected no upstream calls, got %d", upstream.requests())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "not_found" {
+		t.Errorf("error code = %q, want not_found", body["error"])
 	}
 }

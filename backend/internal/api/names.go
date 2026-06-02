@@ -45,17 +45,17 @@ func (h *Handler) handleListCameraNames(w http.ResponseWriter, _ *http.Request) 
 func (h *Handler) handlePutCameraName(w http.ResponseWriter, r *http.Request) {
 	camID := chi.URLParam(r, "cam_id")
 	if camID == "" {
-		writeNameError(w, h.logger, http.StatusBadRequest, "missing_id", "Camera id is required", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "missing_id", "Camera id is required", nil)
 		return
 	}
 	if h.names == nil {
-		writeNameError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", errors.New("names store not configured"))
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", errors.New("names store not configured"))
 		return
 	}
 
 	var req updateCameraNameRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeNameError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
 		return
 	}
 
@@ -81,22 +81,13 @@ func (h *Handler) handlePutCameraName(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeNameError(w http.ResponseWriter, logger *slog.Logger, status int, code, message string, cause error) {
-	if cause != nil {
-		logger.Error("camera name request failed", "error", cause.Error(), "code", code, "status", status)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "message": message})
-}
-
 func mapNameError(w http.ResponseWriter, logger *slog.Logger, err error) {
 	switch {
 	case errors.Is(err, names.ErrCameraNotFound):
-		writeNameError(w, logger, http.StatusBadRequest, "camera_not_found", "Unknown camera", nil)
+		writeError(w, logger, http.StatusBadRequest, "camera_not_found", "Unknown camera", nil)
 	case errors.Is(err, names.ErrNameTooLong):
-		writeNameError(w, logger, http.StatusBadRequest, "name_too_long", "Name is too long (max 30 characters)", nil)
+		writeError(w, logger, http.StatusBadRequest, "name_too_long", "Name is too long (max 30 characters)", nil)
 	default:
-		writeNameError(w, logger, http.StatusInternalServerError, "internal", "Internal error", err)
+		writeError(w, logger, http.StatusInternalServerError, "internal", "Internal error", err)
 	}
 }

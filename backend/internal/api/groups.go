@@ -49,7 +49,7 @@ func (h *Handler) handleListGroups(w http.ResponseWriter, _ *http.Request) {
 func (h *Handler) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	var req createGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGroupError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
 		return
 	}
 	g, err := h.groups.Create(req.Name)
@@ -67,16 +67,16 @@ func (h *Handler) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		writeGroupError(w, h.logger, http.StatusBadRequest, "missing_id", "Group id is required", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "missing_id", "Group id is required", nil)
 		return
 	}
 	var req updateGroupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeGroupError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
 		return
 	}
 	if req.Name == nil && req.CameraIDs == nil {
-		writeGroupError(w, h.logger, http.StatusBadRequest, "empty_patch", "Nothing to update", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "empty_patch", "Nothing to update", nil)
 		return
 	}
 	g, err := h.groups.Update(id, req.Name, req.CameraIDs)
@@ -93,7 +93,7 @@ func (h *Handler) handleUpdateGroup(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		writeGroupError(w, h.logger, http.StatusBadRequest, "missing_id", "Group id is required", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "missing_id", "Group id is required", nil)
 		return
 	}
 	if err := h.groups.Delete(id); err != nil {
@@ -103,34 +103,23 @@ func (h *Handler) handleDeleteGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// writeGroupError serializes a structured error body so the frontend can
-// switch on the snake_case error code.
-func writeGroupError(w http.ResponseWriter, logger *slog.Logger, status int, code, message string, cause error) {
-	if cause != nil {
-		logger.Error("group request failed", "error", cause.Error(), "code", code, "status", status)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "message": message})
-}
-
 // mapGroupError maps validation/not-found errors to HTTP responses with
 // snake_case codes the frontend can react to inline.
 func mapGroupError(w http.ResponseWriter, logger *slog.Logger, err error) {
 	switch {
 	case errors.Is(err, groups.ErrNotFound):
-		writeGroupError(w, logger, http.StatusNotFound, "not_found", "Group not found", nil)
+		writeError(w, logger, http.StatusNotFound, "not_found", "Group not found", nil)
 	case errors.Is(err, groups.ErrNameEmpty):
-		writeGroupError(w, logger, http.StatusBadRequest, "name_empty", "Group name is required", nil)
+		writeError(w, logger, http.StatusBadRequest, "name_empty", "Group name is required", nil)
 	case errors.Is(err, groups.ErrNameTooLong):
-		writeGroupError(w, logger, http.StatusBadRequest, "name_too_long", "Name is too long (max 30 characters)", nil)
+		writeError(w, logger, http.StatusBadRequest, "name_too_long", "Name is too long (max 30 characters)", nil)
 	case errors.Is(err, groups.ErrNameDuplicate):
-		writeGroupError(w, logger, http.StatusBadRequest, "name_duplicate", "A group with this name already exists", nil)
+		writeError(w, logger, http.StatusBadRequest, "name_duplicate", "A group with this name already exists", nil)
 	case errors.Is(err, groups.ErrCameraNotFound):
-		writeGroupError(w, logger, http.StatusBadRequest, "camera_not_found", "Unknown camera in list", nil)
+		writeError(w, logger, http.StatusBadRequest, "camera_not_found", "Unknown camera in list", nil)
 	case errors.Is(err, groups.ErrDuplicateCamera):
-		writeGroupError(w, logger, http.StatusBadRequest, "duplicate_camera", "List contains duplicate cameras", nil)
+		writeError(w, logger, http.StatusBadRequest, "duplicate_camera", "List contains duplicate cameras", nil)
 	default:
-		writeGroupError(w, logger, http.StatusInternalServerError, "internal", "Internal error", err)
+		writeError(w, logger, http.StatusInternalServerError, "internal", "Internal error", err)
 	}
 }

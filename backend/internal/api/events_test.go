@@ -132,6 +132,13 @@ func TestHandleEventClip_RejectsHostileID(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d (body=%s)", w.Code, w.Body.String())
 	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error body: %v", err)
+	}
+	if body["error"] != "invalid_id" {
+		t.Errorf("error code = %q, want invalid_id", body["error"])
+	}
 }
 
 func TestHandleEventThumbnail_RejectsHostileID(t *testing.T) {

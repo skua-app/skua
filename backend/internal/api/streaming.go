@@ -26,11 +26,11 @@ func (h *Handler) handleWhep(w http.ResponseWriter, r *http.Request) {
 
 	cam, ok := h.cameras.Find(camID)
 	if !ok {
-		writeError(w, h.logger, http.StatusNotFound, "camera not found", nil)
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
 		return
 	}
 	if h.go2rtcURL == "" {
-		writeError(w, h.logger, http.StatusServiceUnavailable, "go2rtc not configured", nil)
+		writeError(w, h.logger, http.StatusServiceUnavailable, "go2rtc_unavailable", "go2rtc not configured", nil)
 		return
 	}
 
@@ -62,11 +62,11 @@ func (h *Handler) handleWhep(w http.ResponseWriter, r *http.Request) {
 			streamName = cam.StreamSub
 		}
 	default:
-		writeError(w, h.logger, http.StatusBadRequest, "quality must be main or sub", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "bad_request", "quality must be main or sub", nil)
 		return
 	}
 	if streamName == "" {
-		writeError(w, h.logger, http.StatusBadRequest, "no stream configured for quality", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "no_stream", "no stream configured for quality", nil)
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *Handler) handleWhep(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, upstream, r.Body)
 	if err != nil {
-		writeError(w, h.logger, http.StatusInternalServerError, "create upstream request", err)
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "create upstream request", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/sdp")
@@ -89,9 +89,9 @@ func (h *Handler) handleWhep(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			writeError(w, h.logger, http.StatusGatewayTimeout, "whep upstream timeout", err)
+			writeError(w, h.logger, http.StatusGatewayTimeout, "upstream_timeout", "whep upstream timeout", err)
 		} else {
-			writeError(w, h.logger, http.StatusBadGateway, "whep upstream error", err)
+			writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "whep upstream error", err)
 		}
 		return
 	}
@@ -103,7 +103,7 @@ func (h *Handler) handleWhep(w http.ResponseWriter, r *http.Request) {
 
 	answer, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeError(w, h.logger, http.StatusBadGateway, "read whep answer", err)
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "read whep answer", err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (h *Handler) handleGetPrefs(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleTileJPEG(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if _, ok := h.cameras.Find(id); !ok {
-		writeError(w, h.logger, http.StatusNotFound, "camera not found", nil)
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (h *Handler) handleTileJPEG(w http.ResponseWriter, r *http.Request) {
 
 	body, _, err := h.frigate.GetSnapshot(ctx, id)
 	if err != nil {
-		writeError(w, h.logger, http.StatusBadGateway, "upstream error", err)
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "upstream error", err)
 		return
 	}
 	defer func() {
@@ -161,13 +161,13 @@ func (h *Handler) handleTileJPEG(w http.ResponseWriter, r *http.Request) {
 
 	src, err := jpeg.Decode(body)
 	if err != nil {
-		writeError(w, h.logger, http.StatusBadGateway, "failed to decode jpeg", err)
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "failed to decode jpeg", err)
 		return
 	}
 
 	srcB := src.Bounds()
 	if srcB.Dx() <= 0 || srcB.Dy() <= 0 {
-		writeError(w, h.logger, http.StatusBadGateway, "invalid source image dimensions", nil)
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "invalid source image dimensions", nil)
 		return
 	}
 	dstW := 320
@@ -192,13 +192,13 @@ func (h *Handler) handleTileJPEG(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handlePutPrefs(w http.ResponseWriter, r *http.Request) {
 	var partial map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&partial); err != nil {
-		writeError(w, h.logger, http.StatusBadRequest, "invalid JSON body", err)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "invalid JSON body", err)
 		return
 	}
 
 	updated, err := h.prefsStore.Update(partial)
 	if err != nil {
-		writeError(w, h.logger, http.StatusBadRequest, err.Error(), nil)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_prefs", err.Error(), nil)
 		return
 	}
 

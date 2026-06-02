@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -57,12 +56,12 @@ func (h *Handler) handleGetRuntimeConfig(w http.ResponseWriter, _ *http.Request)
 
 func (h *Handler) handlePutRuntimeConfig(w http.ResponseWriter, r *http.Request) {
 	if h.runtime.Store == nil {
-		writeRuntimeConfigError(w, h.logger, http.StatusInternalServerError, "internal", "Runtime config store not configured.", nil)
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "Runtime config store not configured.", nil)
 		return
 	}
 	var req runtimeConfigPutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeRuntimeConfigError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body.", err)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body.", err)
 		return
 	}
 
@@ -88,34 +87,34 @@ func (h *Handler) handlePutRuntimeConfig(w http.ResponseWriter, r *http.Request)
 	}
 
 	if values.FrigateURL == "" {
-		writeRuntimeConfigError(w, h.logger, http.StatusBadRequest, "frigate_url_required", "Frigate URL is required.", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "frigate_url_required", "Frigate URL is required.", nil)
 		return
 	}
 	if err := probe.ValidateURL(values.FrigateURL); err != nil {
-		writeRuntimeConfigError(w, h.logger, http.StatusBadRequest, "frigate_url_invalid", fmt.Sprintf("Frigate URL: %s", err), nil)
+		writeError(w, h.logger, http.StatusBadRequest, "frigate_url_invalid", fmt.Sprintf("Frigate URL: %s", err), nil)
 		return
 	}
 	if values.Go2RTCURL != "" {
 		if err := probe.ValidateURL(values.Go2RTCURL); err != nil {
-			writeRuntimeConfigError(w, h.logger, http.StatusBadRequest, "go2rtc_url_invalid", fmt.Sprintf("go2rtc URL: %s", err), nil)
+			writeError(w, h.logger, http.StatusBadRequest, "go2rtc_url_invalid", fmt.Sprintf("go2rtc URL: %s", err), nil)
 			return
 		}
 	}
 	if values.FrigateUIURL != "" {
 		if err := probe.ValidateURL(values.FrigateUIURL); err != nil {
-			writeRuntimeConfigError(w, h.logger, http.StatusBadRequest, "frigate_ui_url_invalid", fmt.Sprintf("Frigate UI URL: %s", err), nil)
+			writeError(w, h.logger, http.StatusBadRequest, "frigate_ui_url_invalid", fmt.Sprintf("Frigate UI URL: %s", err), nil)
 			return
 		}
 	}
 
 	if err := h.runtime.Store.Save(values); err != nil {
 		if errors.Is(err, fs.ErrPermission) {
-			writeRuntimeConfigError(w, h.logger, http.StatusInternalServerError, "data_not_writable",
+			writeError(w, h.logger, http.StatusInternalServerError, "data_not_writable",
 				"Skua's data directory is not writable by the container user (uid/gid 65532). "+
 					"Run chown -R 65532:65532 on the host data directory, or switch to a named Docker volume.", err)
 			return
 		}
-		writeRuntimeConfigError(w, h.logger, http.StatusInternalServerError, "internal", "Could not save runtime config.", err)
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "Could not save runtime config.", err)
 		return
 	}
 
@@ -125,7 +124,7 @@ func (h *Handler) handlePutRuntimeConfig(w http.ResponseWriter, r *http.Request)
 func (h *Handler) handleTestRuntimeConfig(w http.ResponseWriter, r *http.Request) {
 	var req runtimeConfigTestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeRuntimeConfigError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body.", err)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body.", err)
 		return
 	}
 	report := probe.Report{
@@ -140,7 +139,7 @@ func (h *Handler) handleTestRuntimeConfig(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) handleRestartRuntimeConfig(w http.ResponseWriter, _ *http.Request) {
 	if h.runtime.RequestRestart == nil {
-		writeRuntimeConfigError(w, h.logger, http.StatusInternalServerError, "internal", "Restart not available.", nil)
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "Restart not available.", nil)
 		return
 	}
 	h.runtime.RequestRestart()
@@ -175,15 +174,4 @@ func (h *Handler) writeRuntimeConfigResponse(w http.ResponseWriter, status int) 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		h.logger.Error("encode runtime-config response", "error", err)
 	}
-}
-
-// writeRuntimeConfigError serializes a structured error body. Mirrors the
-// groups handler shape so the frontend can switch on the snake_case code.
-func writeRuntimeConfigError(w http.ResponseWriter, logger *slog.Logger, status int, code, message string, cause error) {
-	if cause != nil {
-		logger.Error("runtime config request failed", "error", cause.Error(), "code", code, "status", status)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "message": message})
 }

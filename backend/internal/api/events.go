@@ -31,7 +31,7 @@ func (h *Handler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if s := q.Get("limit"); s != "" {
 		n, err := strconv.Atoi(s)
 		if err != nil || n <= 0 {
-			writeError(w, h.logger, http.StatusBadRequest, "limit must be a positive integer", nil)
+			writeError(w, h.logger, http.StatusBadRequest, "bad_request", "limit must be a positive integer", nil)
 			return
 		}
 		if n > eventsMaxLimit {
@@ -44,7 +44,7 @@ func (h *Handler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if s := q.Get("before"); s != "" {
 		t, err := time.Parse(time.RFC3339, s)
 		if err != nil {
-			writeError(w, h.logger, http.StatusBadRequest, "before must be ISO 8601", err)
+			writeError(w, h.logger, http.StatusBadRequest, "bad_request", "before must be ISO 8601", err)
 			return
 		}
 		before = t
@@ -63,10 +63,12 @@ func (h *Handler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.events.List(ctx, params)
 	if err != nil {
 		status := http.StatusBadGateway
+		code := "upstream_error"
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
 		}
-		writeError(w, h.logger, status, "events upstream error", err)
+		writeError(w, h.logger, status, code, "events upstream error", err)
 		return
 	}
 
@@ -98,11 +100,11 @@ func (h *Handler) handleEventSnapshot(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleEventClip(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		writeError(w, h.logger, http.StatusBadRequest, "missing event id", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "missing event id", nil)
 		return
 	}
 	if !validUpstreamID(id) {
-		writeError(w, h.logger, http.StatusBadRequest, "invalid event id", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid event id", nil)
 		return
 	}
 	var downloadName string
@@ -115,10 +117,12 @@ func (h *Handler) handleEventClip(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.events.ServeClip(ctx, id, w, r, downloadName); err != nil {
 		status := http.StatusBadGateway
+		code := "upstream_error"
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
 		}
-		writeError(w, h.logger, status, "event clip upstream error", err)
+		writeError(w, h.logger, status, code, "event clip upstream error", err)
 		return
 	}
 }
@@ -126,11 +130,11 @@ func (h *Handler) handleEventClip(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) proxyEventImage(w http.ResponseWriter, r *http.Request, name string) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		writeError(w, h.logger, http.StatusBadRequest, "missing event id", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "missing event id", nil)
 		return
 	}
 	if !validUpstreamID(id) {
-		writeError(w, h.logger, http.StatusBadRequest, "invalid event id", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid event id", nil)
 		return
 	}
 
@@ -139,7 +143,7 @@ func (h *Handler) proxyEventImage(w http.ResponseWriter, r *http.Request, name s
 
 	body, etag, err := h.events.FetchImage(ctx, id, name)
 	if err != nil {
-		writeError(w, h.logger, http.StatusBadGateway, "event image upstream error", err)
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "event image upstream error", err)
 		return
 	}
 	defer func() {

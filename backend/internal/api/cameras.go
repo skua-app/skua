@@ -305,7 +305,7 @@ func (h *Handler) handleRefreshCameras(w http.ResponseWriter, r *http.Request) {
 
 	diff, err := h.cameras.Refresh(ctx)
 	if err != nil {
-		writeRefreshError(w, h.logger, http.StatusBadGateway, "frigate_unreachable", "Could not refresh cameras from Frigate", err)
+		writeError(w, h.logger, http.StatusBadGateway, "frigate_unreachable", "Could not refresh cameras from Frigate", err)
 		return
 	}
 
@@ -315,25 +315,14 @@ func (h *Handler) handleRefreshCameras(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// writeRefreshError emits the structured {error, message} body used by the
-// other store-backed endpoints, so the frontend can switch on .code.
-func writeRefreshError(w http.ResponseWriter, logger *slog.Logger, status int, code, message string, cause error) {
-	if cause != nil {
-		logger.Error("cameras refresh failed", "error", cause.Error(), "code", code, "status", status)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "message": message})
-}
-
 func (h *Handler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if !validUpstreamID(id) {
-		writeError(w, h.logger, http.StatusBadRequest, "invalid camera id", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid camera id", nil)
 		return
 	}
 	if _, ok := h.cameras.Find(id); !ok {
-		writeError(w, h.logger, http.StatusNotFound, "camera not found", nil)
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
 		return
 	}
 
@@ -342,7 +331,7 @@ func (h *Handler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	body, etag, err := h.frigate.GetSnapshot(ctx, id)
 	if err != nil {
-		writeError(w, h.logger, http.StatusBadGateway, "snapshot unavailable", err)
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "snapshot unavailable", err)
 		return
 	}
 	defer func() {

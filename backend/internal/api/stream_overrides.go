@@ -37,7 +37,7 @@ type putStreamOverrideRequest struct {
 
 func (h *Handler) handleListGo2RTCStreams(w http.ResponseWriter, r *http.Request) {
 	if h.go2rtc == nil {
-		writeStreamOverrideError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", errors.New("go2rtc client not configured"))
+		writeError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", errors.New("go2rtc client not configured"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), go2rtcListTimeout)
@@ -45,7 +45,7 @@ func (h *Handler) handleListGo2RTCStreams(w http.ResponseWriter, r *http.Request
 
 	names, err := h.go2rtc.GetStreams(ctx)
 	if err != nil {
-		writeStreamOverrideError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", err)
+		writeError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", err)
 		return
 	}
 	if names == nil {
@@ -80,26 +80,26 @@ func (h *Handler) handleListStreamOverrides(w http.ResponseWriter, _ *http.Reque
 func (h *Handler) handlePutStreamOverride(w http.ResponseWriter, r *http.Request) {
 	camID := chi.URLParam(r, "cam_id")
 	if camID == "" {
-		writeStreamOverrideError(w, h.logger, http.StatusBadRequest, "missing_id", "Camera id is required", nil)
+		writeError(w, h.logger, http.StatusBadRequest, "missing_id", "Camera id is required", nil)
 		return
 	}
 	if h.streamOverrides == nil {
-		writeStreamOverrideError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", errors.New("streamOverrides store not configured"))
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", errors.New("streamOverrides store not configured"))
 		return
 	}
 
 	var req putStreamOverrideRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeStreamOverrideError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", err)
 		return
 	}
 	if req.Main == nil || req.Sub == nil {
-		writeStreamOverrideError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", errors.New("main and sub are required"))
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_body", "Invalid request body", errors.New("main and sub are required"))
 		return
 	}
 
 	if _, ok := h.cameras.Find(camID); !ok {
-		writeStreamOverrideError(w, h.logger, http.StatusNotFound, "camera_not_found", "Unknown camera", nil)
+		writeError(w, h.logger, http.StatusNotFound, "camera_not_found", "Unknown camera", nil)
 		return
 	}
 
@@ -108,7 +108,7 @@ func (h *Handler) handlePutStreamOverride(w http.ResponseWriter, r *http.Request
 
 	if main == "" && sub == "" {
 		if err := h.streamOverrides.Forget(camID); err != nil {
-			writeStreamOverrideError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", err)
+			writeError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", err)
 			return
 		}
 		writeStreamOverrideOK(w, h.logger, streamoverrides.Override{})
@@ -116,30 +116,30 @@ func (h *Handler) handlePutStreamOverride(w http.ResponseWriter, r *http.Request
 	}
 
 	if h.go2rtc == nil {
-		writeStreamOverrideError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", errors.New("go2rtc client not configured"))
+		writeError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", errors.New("go2rtc client not configured"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), go2rtcListTimeout)
 	defer cancel()
 	available, err := h.go2rtc.GetStreams(ctx)
 	if err != nil {
-		writeStreamOverrideError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", err)
+		writeError(w, h.logger, http.StatusBadGateway, "go2rtc_unreachable", "go2rtc is unreachable", err)
 		return
 	}
 
 	if main != "" && !slices.Contains(available, main) {
 		msg := fmt.Sprintf("Main stream not found in go2rtc: %s", main)
-		writeStreamOverrideError(w, h.logger, http.StatusBadRequest, "stream_not_found", msg, nil)
+		writeError(w, h.logger, http.StatusBadRequest, "stream_not_found", msg, nil)
 		return
 	}
 	if sub != "" && !slices.Contains(available, sub) {
 		msg := fmt.Sprintf("Sub stream not found in go2rtc: %s", sub)
-		writeStreamOverrideError(w, h.logger, http.StatusBadRequest, "stream_not_found", msg, nil)
+		writeError(w, h.logger, http.StatusBadRequest, "stream_not_found", msg, nil)
 		return
 	}
 
 	if err := h.streamOverrides.Set(camID, main, sub); err != nil {
-		writeStreamOverrideError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", err)
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "Internal error", err)
 		return
 	}
 	writeStreamOverrideOK(w, h.logger, streamoverrides.Override{Main: main, Sub: sub})
@@ -150,13 +150,4 @@ func writeStreamOverrideOK(w http.ResponseWriter, logger *slog.Logger, saved str
 	if err := json.NewEncoder(w).Encode(saved); err != nil {
 		logger.Error("encode stream override response", "error", err)
 	}
-}
-
-func writeStreamOverrideError(w http.ResponseWriter, logger *slog.Logger, status int, code, message string, cause error) {
-	if cause != nil {
-		logger.Error("stream override request failed", "error", cause.Error(), "code", code, "status", status)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": code, "message": message})
 }
