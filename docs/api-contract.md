@@ -1,9 +1,8 @@
 # BFF API contract
 
 This is the canonical BFF contract for Skua. Currency: matches the latest
-release tag recorded in CLAUDE.md §13 (Epic roadmap). CLAUDE.md §11 lists
-the endpoint groups and their stable/planned status; this file holds the full
-TypeScript-style definitions.
+release tag in CHANGELOG.md. This file holds the full TypeScript-style
+endpoint definitions and error shapes.
 
 **Error envelope.** All BFF error responses use a single shape:
 

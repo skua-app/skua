@@ -35,8 +35,9 @@ tracked issue only after the design discussion converges.
 Skua is intentionally a focused live + events viewer for Frigate,
 not a Frigate UI replacement. Features that move it toward "Frigate UI
 v2" — admin tooling, history scrubbing, the recording browser,
-Explore — will be politely declined. Read [CLAUDE.md](CLAUDE.md)
-sections 1 and 2 before proposing anything substantial.
+Explore — will be politely declined. Read the README's overview and
+the "what Skua is / isn't" framing before proposing anything
+substantial.
 
 ## Security issues
 
@@ -50,7 +51,7 @@ Details and threat-model context live in [SECURITY.md](SECURITY.md).
 The full breakdown is in the README's "Build from source" section. The
 short version:
 
-- Go 1.23 or newer for the backend.
+- Go 1.25 or newer for the backend.
 - Node 20 or newer for the frontend.
 - The BFF listens on `:3200`. The Vite dev server runs on `:5173` and
   proxies `/api/*` to the BFF.
@@ -94,9 +95,10 @@ you open a PR.
 
 ## Architecture context
 
-[CLAUDE.md](CLAUDE.md) is the source of architectural truth — read it
-before opening a non-trivial PR. The most useful entries under `docs/`
-to read before extending an existing surface:
+Start with the [README](README.md) for the overview and scope, then
+read [docs/api-contract.md](docs/api-contract.md) for the BFF
+REST/SSE contract before opening a non-trivial PR. Other useful
+entries under `docs/`:
 
 - [docs/api-contract.md](docs/api-contract.md) — the BFF REST/SSE
   contract.
@@ -104,8 +106,6 @@ to read before extending an existing surface:
   event clip pipeline looks the way it does.
 - [docs/hikvision-no-web-sku.md](docs/hikvision-no-web-sku.md) —
   the talk-back case study.
-- [docs/epics/](docs/epics/) — historical epic specs; read the
-  relevant one if your change extends an existing epic's surface.
 
 ## License
 

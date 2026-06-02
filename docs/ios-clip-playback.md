@@ -1,9 +1,9 @@
 # Event clip `<video>` on iOS Safari needs three things from the BFF
 
 Full explanation of the three constraints that shape the
-`/api/events/:id/clip.mp4` pipeline. CLAUDE.md §12 Gotchas lists the
-constraints by name; this file holds the underlying reasoning and the
-implementation details for each fix.
+`/api/events/:id/clip.mp4` pipeline. This file holds the underlying
+reasoning and the implementation details for each of the three
+constraints.
 
 iOS Safari is the strictest consumer of `/api/events/:id/clip.mp4`; the
 endpoint exists in its current shape because of three independent

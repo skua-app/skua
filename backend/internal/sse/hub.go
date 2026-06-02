@@ -3,7 +3,7 @@
 // Topology: one persistent WebSocket from BFF → Frigate /ws (in upstream.go)
 // feeds Hub.Broadcast. Each HTTP SSE client opened against handler.go gets
 // its own bounded channel; slow consumers are evicted rather than backing
-// up the broadcast loop. See docs/epics/E3 §D4.
+// up the broadcast loop.
 package sse
 
 import (

@@ -1,9 +1,8 @@
 # Known issue: Hikvision DS-2CD2443G2-IW (no-web SKU)
 
 Full analysis of why talk-back is architecturally blocked on the OEM
-"no-web" variant of the Hikvision DS-2CD2443G2-IW. CLAUDE.md §12 Gotchas
-holds the short summary; this file holds the underlying investigation and
-the two replacement options.
+"no-web" variant of the Hikvision DS-2CD2443G2-IW. This file holds the
+underlying investigation and the two replacement options.
 
 The DS-2CD2443G2-IW-W is an OEM no-web-interface SKU sold without the
 standard ISAPI surface that the retail DS-2CD2443G2-IW carries. Because

@@ -29,3 +29,8 @@ design_handoff_security_cams/
 
 # Claude Code local state
 .claude/
+
+# Internal development docs (kept locally, not part of the public repo)
+/CLAUDE.md
+/docs/epics/
+/docs/roadmap-notes.md

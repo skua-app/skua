@@ -179,7 +179,8 @@
   }
 
   $effect(() => {
-    // Tracked deps above untrack — see CLAUDE.md §12 "untrack boundary rule".
+    // Untrack boundary: read every dep the effect should re-run on above
+    // untrack(); put the side-effect and fast-changing reads inside.
     // prefsSynced gates the first connect so streamQuality/isMuted reflect
     // the persisted pref instead of the literal defaults.
     const id = camId

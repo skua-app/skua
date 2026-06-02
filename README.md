@@ -318,8 +318,8 @@ above.
     page describes the issue and the fix is in the env file. Browser
     editing is not offered because env wins over the overlay file at
     next boot — restart the container after correcting the value.
-  The same fail-fast log line is still emitted; see CLAUDE.md §12
-  ("Camera registry is loaded once at startup").
+  The same fail-fast log line is still emitted; the camera registry
+  is loaded once at startup.
 
 ### PWA not installable on iPhone
 
@@ -347,8 +347,6 @@ above.
 
 ## Documentation
 
-- [CLAUDE.md](CLAUDE.md) — full architecture context (read this if
-  you intend to contribute).
 - [docs/api-contract.md](docs/api-contract.md) — BFF REST/SSE contract
   with TypeScript-style definitions.
 - [docs/ios-clip-playback.md](docs/ios-clip-playback.md) — the three
@@ -357,7 +355,6 @@ above.
   known-issue case study for the no-web Hikvision SKU.
 - [docs/setup/](docs/setup/) — optional host-side setup (reverse
   proxy, local DNS, ICE candidates).
-- [docs/epics/](docs/epics/) — historical epic specs.
 
 ## Tech stack
 

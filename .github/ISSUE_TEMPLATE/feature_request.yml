@@ -20,7 +20,7 @@ body:
   - type: dropdown
     id: scope-check
     attributes:
-      label: Have you read CLAUDE.md §1 and §2 (project scope and access model)?
+      label: Have you read the README's overview and scope ("what Skua is / isn't")?
       options:
         - "Yes"
         - "Not yet"

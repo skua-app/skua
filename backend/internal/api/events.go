@@ -23,7 +23,7 @@ const (
 )
 
 // handleEvents proxies GET /api/events to Frigate with normalised filters
-// and cursor pagination. See docs/epics/E3 §D2.
+// and cursor pagination.
 func (h *Handler) handleEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 

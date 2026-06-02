@@ -23,7 +23,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	rc := http.NewResponseController(w)
 	// Disable write deadlines so the long-lived stream can outlive the
-	// server's WriteTimeout (per CLAUDE.md §12).
+	// server's WriteTimeout.
 	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
 		h.logger.Debug("sse: SetWriteDeadline unsupported", "error", err)
 	}

@@ -75,7 +75,7 @@ func KindFor(label string) Kind {
 	return KindOther
 }
 
-// Item is the BFF's stable EventItem shape. See docs/epics/E3 §D2.
+// Item is the BFF's stable EventItem shape; see docs/api-contract.md.
 type Item struct {
 	ID              string   `json:"id"`
 	CamID           string   `json:"cam_id"`

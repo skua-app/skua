@@ -25,9 +25,9 @@ import (
 //     where <event> matches events.FrigateEvent.
 //   - "<cam_id>/status/detect" — payload is the literal string "online" / "offline"
 //
-// We translate those upstream frames into the four SSE event names defined
-// in docs/epics/E3 §D4 (event.new, event.end, camera.online, camera.offline)
-// plus a synthetic "reconnected" event on every successful reconnect.
+// We translate those upstream frames into four SSE event names
+// (event.new, event.end, camera.online, camera.offline) plus a
+// synthetic "reconnected" event on every successful reconnect.
 
 // upstreamFrame is the outer envelope sent on Frigate /ws.
 // Payload is left as RawMessage because it is sometimes a quoted JSON
