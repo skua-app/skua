@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -78,7 +79,45 @@ func New(path string) (*Store, error) {
 	if err := json.Unmarshal(data, &s.cur); err != nil {
 		return nil, fmt.Errorf("prefs: parse %s: %w", path, err)
 	}
+	cleaned, reset := sanitize(s.cur)
+	s.cur = cleaned
+	if len(reset) > 0 {
+		slog.Warn("prefs: reset invalid persisted fields to defaults", "path", path, "fields", reset)
+	}
 	return s, nil
+}
+
+// sanitize resets any field whose persisted value is not valid back to its
+// default, returning the cleaned prefs and the names of reset fields. Bool
+// fields and grid_filter (free-form *string) are never reset — only the
+// constrained string/int fields with documented valid sets.
+func sanitize(p Prefs) (Prefs, []string) {
+	var reset []string
+	if !validGridModes[p.GridMode] {
+		p.GridMode = defaults.GridMode
+		reset = append(reset, "grid_mode")
+	}
+	if p.StreamQuality != "main" && p.StreamQuality != "sub" {
+		p.StreamQuality = defaults.StreamQuality
+		reset = append(reset, "stream_quality")
+	}
+	if !validAccents[p.Accent] {
+		p.Accent = defaults.Accent
+		reset = append(reset, "accent")
+	}
+	if !validNameStyles[p.NameStyle] {
+		p.NameStyle = defaults.NameStyle
+		reset = append(reset, "name_style")
+	}
+	if !validDesktopColumns[p.DesktopColumns] {
+		p.DesktopColumns = defaults.DesktopColumns
+		reset = append(reset, "desktop_columns")
+	}
+	if !validMobileColumns[p.MobileColumns] {
+		p.MobileColumns = defaults.MobileColumns
+		reset = append(reset, "mobile_columns")
+	}
+	return p, reset
 }
 
 // Get returns the current preferences under a read lock.
@@ -222,6 +261,9 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 
 func (s *Store) atomicWrite(p Prefs) error {
 	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("prefs: mkdir %s: %w", dir, err)
+	}
 	tmp, err := os.CreateTemp(dir, "prefs-*.tmp")
 	if err != nil {
 		return fmt.Errorf("prefs: create temp: %w", err)

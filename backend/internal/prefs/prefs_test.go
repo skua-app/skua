@@ -227,6 +227,91 @@ func TestUpdate_NonIntegerDesktopColumns_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefs.json")
+
+	// Mix invalid fields with valid non-default fields. Sanitize must reset
+	// the invalid ones to defaults while preserving the valid ones — a
+	// field-scoped reset, not a wholesale defaults restore.
+	raw := []byte(`{
+		"grid_mode": "foo",
+		"muted_by_default": false,
+		"stream_quality": "ultra",
+		"show_timestamp": true,
+		"accent": "neon",
+		"name_style": "sideways",
+		"desktop_columns": 99,
+		"mobile_columns": 7
+	}`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := prefs.New(path)
+	if err != nil {
+		t.Fatalf("New must not error on invalid field values, got: %v", err)
+	}
+	p := store.Get()
+
+	if p.GridMode != "eco" {
+		t.Errorf("GridMode: got %q, want default %q", p.GridMode, "eco")
+	}
+	if p.StreamQuality != "main" {
+		t.Errorf("StreamQuality: got %q, want default %q", p.StreamQuality, "main")
+	}
+	if p.Accent != "cyan" {
+		t.Errorf("Accent: got %q, want default %q", p.Accent, "cyan")
+	}
+	if p.NameStyle != "below" {
+		t.Errorf("NameStyle: got %q, want default %q", p.NameStyle, "below")
+	}
+	if p.DesktopColumns != 4 {
+		t.Errorf("DesktopColumns: got %d, want default 4", p.DesktopColumns)
+	}
+	if p.MobileColumns != 1 {
+		t.Errorf("MobileColumns: got %d, want default 1", p.MobileColumns)
+	}
+
+	// Valid non-default bool fields must be preserved across sanitize.
+	if p.MutedByDefault {
+		t.Errorf("MutedByDefault: got true, want preserved false")
+	}
+	if !p.ShowTimestamp {
+		t.Errorf("ShowTimestamp: got false, want preserved true")
+	}
+}
+
+func TestNew_MalformedJSON_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefs.json")
+	if err := os.WriteFile(path, []byte(`{not json`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prefs.New(path); err == nil {
+		t.Fatal("expected error for malformed JSON, got nil")
+	}
+}
+
+func TestUpdate_CreatesMissingDataDir(t *testing.T) {
+	dir := t.TempDir()
+	// Point the store at a path whose parent directory does not yet exist.
+	// atomicWrite must create it via MkdirAll on first write.
+	nested := filepath.Join(dir, "nested", "subdir")
+	path := filepath.Join(nested, "prefs.json")
+
+	store, err := prefs.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Update(map[string]any{"grid_mode": "hd"}); err != nil {
+		t.Fatalf("Update on missing parent dir failed: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected prefs.json at %s after Update, got: %v", path, err)
+	}
+}
+
 func TestUpdate_ConcurrentCalls_DoNotCorruptFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prefs.json")
