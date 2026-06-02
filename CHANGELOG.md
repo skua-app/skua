@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-06-02
+
+### Added
+
+- CI now runs the full quality gate (Go `vet`, `golangci-lint`, race
+  tests; frontend type-check, lint, format check) on pull requests and
+  pushes, not just on release-tag builds.
+
 ### Changed
 
 - **Breaking:** the `SNAPSHOT_CACHE_TTL` environment variable is renamed
@@ -22,6 +30,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interval (how often the BFF hits Frigate `/api/stats`), never a
   snapshot cache. There is no backward-compatibility alias — operators
   who set `SNAPSHOT_CACHE_TTL` in their environment must rename it.
+- All BFF error responses now use a single envelope shape,
+  `{error: <code>, message: <text>}`, where `error` is always a stable
+  snake_case machine code and `message` is always human-readable text.
+  Previously several endpoints returned a bare `{error: <message>}` with
+  the human string in the code slot. Relevant to anyone integrating
+  with the API directly; the front-end already used the new shape.
+- Internal cleanup with no user-facing behaviour change: HTTP timeout
+  handling unified on per-call contexts (no long-lived `Client.Timeout`
+  outside the ephemeral upstream-probe client), the camera
+  online-status poller gained a construct-then-`Start(ctx)` lifecycle,
+  and the SSE upstream picked up test coverage for its frame-handling
+  paths.
+
+### Fixed
+
+- Event clip playback on iOS is more robust. A clip fetch is no longer
+  capped by the shared 5-second HTTP timeout that was making large or
+  slow clips fail; the per-call 30-second context deadline is now the
+  real bound. The many parallel Range requests iOS issues for a single
+  clip also collapse into one shared upstream fetch on a cold miss, so
+  opening a fresh clip no longer stampedes Frigate.
+- A corrupt or hand-edited `prefs.json` no longer prevents startup.
+  Invalid individual fields are reset to their defaults and the rest of
+  the file is preserved.
+- The event-detail modal traps keyboard focus while open
+  (accessibility).
+- Desktop no longer briefly flashes the mobile layout on first paint.
+
+### Security
+
+- The BFF rejects cross-site requests to mutating endpoints
+  (`POST` / `PUT` / `PATCH` / `DELETE`) using the browser's
+  `Sec-Fetch-Site` signal, returning `403 cross_site_blocked`. This
+  closes an in-browser drive-by vector where a page open in another tab
+  on the same network could trigger state changes (notably the
+  Connection editor's Apply restart) without the operator acting. Safe
+  methods and requests without the header pass through. This is origin
+  hygiene, not authentication — the LAN-only, no-app-login model is
+  unchanged.
 
 ## [0.10.0] — 2026-05-31
 
@@ -469,7 +516,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/skua-app/skua/releases/tag/v0.11.0
 [0.10.0]: https://github.com/skua-app/skua/releases/tag/v0.10.0
 [0.9.0]: https://github.com/skua-app/skua/releases/tag/v0.9.0
 [0.8.4]: https://github.com/skua-app/skua/releases/tag/v0.8.4
