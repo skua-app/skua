@@ -240,7 +240,7 @@ skua/
     │       ├── icons.ts             ← ICONS: Record<IconName, IconDef> (23 icons)
     │       ├── lifecycle.svelte.ts  ← onBackground/onForeground hub (iOS PWA snapshot teardown)
     │       ├── streams/whep.ts      ← WHEP client (runtime audio detection)
-    │       ├── util/time.ts         ← relativeTimeRu, formatDurationRu
+    │       ├── util/time.ts         ← relativeTime, formatDuration
     │       ├── screens/
     │       │   ├── MobileGrid.svelte
     │       │   ├── DesktopGrid.svelte
@@ -361,7 +361,14 @@ continues uninterrupted during window resize.
 - No secrets in repo. `.env.example` lists all vars.
 
 **Backend:**
-- Every handler uses `writeError(w, status, msg, err)` helper.
+- Every handler uses `writeError(w, logger, status, code, message, cause)`
+  helper, which emits the unified `{error: <snake_code>, message: <human>}`
+  envelope and logs `cause` server-side without leaking it to the client.
+- Mutating routes (POST/PUT/PATCH/DELETE under `/api`) pass through a
+  Sec-Fetch-Site guard (`internal/api/csrf.go`) that rejects cross-site
+  requests with 403 `cross_site_blocked`; safe methods and requests without
+  the header pass through. Origin hygiene, not authentication — layered on
+  the no-app-auth LAN-only model.
 - Every external call has explicit `context` timeout.
 - Never `context.Background()` in handlers.
 - `Body.Close()` deferred with debug log on error.
@@ -521,7 +528,7 @@ emitted by the BFF: `event.new`, `event.end`, `camera.online`,
   poster instantly on pause / HQ↔LQ reconnect with no HTTP roundtrip,
   because the `<img>` stays mounted at `opacity: 0` rather than being
   unmounted. The two-stage spinner overlay (24 px SVG +
-  "Подключение..." / "Буферизация...") sits above the poster and
+  "Connecting…" / "Buffering…") sits above the poster and
   unmounts on `playing`. See `frontend/src/routes/cam/[id]/+page.svelte`
   for the snippet and styles; no edits to MobileFocus / DesktopFocus are
   required because both render the snippet inside their already-relative
@@ -679,6 +686,32 @@ endpoint inventory, ONVIF probe output, and replacement options.
   for any proxy that streams data.
 - **WebSocket reconnect on Frigate restart.** BFF must reconnect with
   exponential backoff, capped at 30s.
+- **Cross-site guard (`internal/api/csrf.go`)** rejects mutating routes
+  whose `Sec-Fetch-Site` is `cross-site` with 403 `cross_site_blocked`;
+  safe methods and header-absent requests fail open. It's origin hygiene
+  layered on the LAN-only/no-auth model — closes the in-browser drive-by
+  vector (e.g. someone tricking a logged-in tab into POSTing
+  `/api/runtime-config/restart`) without pretending to be authentication.
+- **Clip cache single-flight.** Concurrent cold-miss Range requests for the
+  same event id collapse into one upstream fetch via an in-flight map keyed
+  by id (`events.Client.inflight`). The shared fetch runs on
+  `context.WithoutCancel(ctx)` (preserving the deadline only), so a probe
+  Range that iOS Safari cancels mid-fetch can't poison the sibling waiters.
+  Errors are shared across waiters but not cached — a subsequent cold miss
+  retries. See `events.fetchClipShared`.
+- **HTTP timeout strategy: per-call context, never `Client.Timeout`.** No
+  long-lived `http.Client` carries a blanket `Timeout`; every Frigate /
+  events / go2rtc call sets its own context deadline. The only exception
+  is the ephemeral `internal/probe` client (one-shot connection test from
+  the setup wizard / runtime-config Test). A malformed duration env now
+  fails `config.Load` loudly — there is no silent fallback to `0`
+  (= no timeout).
+- **`OnlineChecker` is constructed dormant and started explicitly.**
+  `NewOnlineChecker` only allocates; `Start(ctx)` runs the poll loop and
+  returns when `ctx` is cancelled — mirrors `sse.Upstream.Run`. Inside,
+  `refreshAll` builds the next status map off-lock (HTTP probes happen
+  with no mutex held) and swaps it in under a brief write lock, so
+  `IsOnline` readers in request handlers never block on a probe drain.
 
 ### Fonts
 

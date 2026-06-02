@@ -124,11 +124,9 @@ type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
 // GET  /api/events/:id/clip.mp4?download=1   (Content-Disposition: attachment)
 //
 // Pipeline on a cache miss:
-//   1. Fetch upstream clip from Frigate (30 s context timeout — note:
-//      the shared events http.Client.Timeout (HTTP_TIMEOUT, default 5 s)
-//      is the smaller bound and wins in practice today, so 5 s is the
-//      effective ceiling. 30 s is the intended bound; tightening the
-//      contract to match is tracked as follow-up).
+//   1. Fetch upstream clip from Frigate, bounded by a 30 s per-call
+//      context deadline (the events http.Client no longer sets
+//      Client.Timeout, so the per-call context is the real ceiling).
 //   2. Buffer into memory with a per-clip cap of 64 MiB (default 30 s @
 //      3500 kbps ≈ 13 MiB; >64 MiB → 502 with "exceeds limit" in the log).
 //   3. Rewrite every `hev1` HEVC sample-entry tag to `hvc1` in place — 4
