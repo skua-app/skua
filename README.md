@@ -87,6 +87,10 @@ Mobile PWA, installed to the iOS home screen.
   required pattern (see
   [docs/setup/frigate-config.md](docs/setup/frigate-config.md) for the
   stream-source and ICE-candidates setup).
+- WebRTC live view requires iOS 17.4+ / Safari 17.4 or newer on Apple
+  devices (the WHEP signalling uses `AbortSignal.any`, available from
+  that version). Older iOS can load the app and use snapshot tiles but
+  cannot establish the live focus stream.
 - Optional: a reverse proxy with HTTPS if you want iPhone
   home-screen install (PWA install requires TLS).
 
@@ -182,7 +186,6 @@ environment variables always win over the on-disk overlay at next boot.
 | `HTTP_TIMEOUT` | `5s` | No | Default timeout for outbound HTTP calls. |
 | `SHUTDOWN_TIMEOUT` | `10s` | No | Graceful-shutdown grace period. |
 | `WHEP_TIMEOUT` | `10s` | No | Upstream timeout for go2rtc WHEP signalling. |
-| `STREAM_PROXY_TIMEOUT` | `0` | No | `0` disables timeout, allowing indefinite streaming. |
 | `PREFS_PATH` | `/data/prefs.json` | No | File-backed user prefs store. |
 | `GROUPS_CONFIG_PATH` | `/data/groups.yaml` | No | Camera-group YAML; auto-created on first `POST /api/groups`. |
 | `CAMERA_NAMES_CONFIG_PATH` | `/data/camera_names.yaml` | No | Per-camera display name overrides; auto-created on first `PUT /api/camera-names/{cam_id}`. Cameras without an entry fall back to the Frigate-sourced name from `cameras.yaml`. |

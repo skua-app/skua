@@ -87,6 +87,15 @@ type AppConfig = {
 //   before:        ISO 8601; BFF translates to unix-seconds for Frigate
 //   limit:         default 50, max 200
 // has_snapshot=1 is always set upstream — events without snapshots are never surfaced.
+//
+// Pagination granularity (accepted limitation): the `before` cursor and the
+// `next_before` response field are second-precision. Frigate's events API
+// accepts only integer unix-seconds, so the BFF rounds the ISO 8601 cursor to
+// whole seconds before forwarding. As a result, if two events share the exact
+// same started_at second across a page boundary, one of them could be skipped
+// or duplicated between pages. The API can't do better given Frigate's
+// granularity, and at typical household event rates this collision is
+// negligible.
 type EventsResponse = {
   items: EventItem[]
   next_before: string | null  // started_at of last item, or null at end-of-history
