@@ -15,7 +15,6 @@ services:
       LOG_LEVEL: "info"
       LOG_FORMAT: "json"
       WHEP_TIMEOUT: "10s"
-      STREAM_PROXY_TIMEOUT: "0"
       PREFS_PATH: "/data/prefs.json"
       GROUPS_CONFIG_PATH: "/data/groups.yaml"
     volumes:
