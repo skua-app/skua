@@ -48,8 +48,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.LogFormat != "json" {
 		t.Errorf("LogFormat: want json, got %s", cfg.LogFormat)
 	}
-	if cfg.SnapshotCacheTTL != 15*time.Second {
-		t.Errorf("SnapshotCacheTTL: want 15s, got %v", cfg.SnapshotCacheTTL)
+	if cfg.OnlineCheckInterval != 15*time.Second {
+		t.Errorf("OnlineCheckInterval: want 15s, got %v", cfg.OnlineCheckInterval)
 	}
 	if cfg.NeedsSetup {
 		t.Errorf("NeedsSetup: want false, got true")
@@ -94,15 +94,15 @@ func TestLoad_InvalidLogFormat(t *testing.T) {
 func TestLoad_CustomDurations(t *testing.T) {
 	withIsolatedRuntimeConfig(t)
 	t.Setenv("FRIGATE_URL", "http://frigate:5000")
-	t.Setenv("SNAPSHOT_CACHE_TTL", "30s")
+	t.Setenv("ONLINE_CHECK_INTERVAL", "30s")
 	t.Setenv("HTTP_TIMEOUT", "10s")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.SnapshotCacheTTL != 30*time.Second {
-		t.Errorf("SnapshotCacheTTL: want 30s, got %v", cfg.SnapshotCacheTTL)
+	if cfg.OnlineCheckInterval != 30*time.Second {
+		t.Errorf("OnlineCheckInterval: want 30s, got %v", cfg.OnlineCheckInterval)
 	}
 	if cfg.HTTPTimeout != 10*time.Second {
 		t.Errorf("HTTPTimeout: want 10s, got %v", cfg.HTTPTimeout)

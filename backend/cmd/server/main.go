@@ -210,7 +210,7 @@ func main() {
 		restartOnce.Do(func() { close(restart) })
 	}
 
-	checker := api.NewOnlineChecker(frigateClient, camerasStore, cfg.SnapshotCacheTTL, logger)
+	checker := api.NewOnlineChecker(frigateClient, camerasStore, cfg.OnlineCheckInterval, logger)
 	go2rtcClient := go2rtc.New(cfg.Go2RTCURL, httpClient)
 	// No Client.Timeout here: clip fetches must honour handleEventClip's 30s
 	// per-call context, not a 5s blanket cap (which would bound every Range

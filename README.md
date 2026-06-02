@@ -178,7 +178,7 @@ environment variables always win over the on-disk overlay at next boot.
 | `PORT` | `3200` | No | Port the BFF listens on. |
 | `LOG_LEVEL` | `info` | No | `debug` / `info` / `warn` / `error`. |
 | `LOG_FORMAT` | `json` | No | `json` / `text`. |
-| `SNAPSHOT_CACHE_TTL` | `15s` | No | Cache TTL for upstream Frigate snapshot fetches. |
+| `ONLINE_CHECK_INTERVAL` | `15s` | No | How often the BFF polls Frigate `/api/stats` to refresh camera online status. |
 | `HTTP_TIMEOUT` | `5s` | No | Default timeout for outbound HTTP calls. |
 | `SHUTDOWN_TIMEOUT` | `10s` | No | Graceful-shutdown grace period. |
 | `WHEP_TIMEOUT` | `10s` | No | Upstream timeout for go2rtc WHEP signalling. |

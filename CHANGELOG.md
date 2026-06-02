@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** the `SNAPSHOT_CACHE_TTL` environment variable is renamed
+  to `ONLINE_CHECK_INTERVAL`. The default (`15s`) and behaviour are
+  unchanged: the value has always been the camera online-status poll
+  interval (how often the BFF hits Frigate `/api/stats`), never a
+  snapshot cache. There is no backward-compatibility alias — operators
+  who set `SNAPSHOT_CACHE_TTL` in their environment must rename it.
+
 ## [0.10.0] — 2026-05-31
 
 ### Added

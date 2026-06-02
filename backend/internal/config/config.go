@@ -17,7 +17,7 @@ type Config struct {
 	FrigateURL          string
 	FrigateUIURL        string
 	Go2RTCURL           string
-	SnapshotCacheTTL    time.Duration
+	OnlineCheckInterval time.Duration
 	HTTPTimeout         time.Duration
 	ShutdownTimeout     time.Duration
 	WHEPTimeout         time.Duration
@@ -50,7 +50,7 @@ func Load() (*Config, error) {
 		Port:                env("PORT", "3200"),
 		LogLevel:            env("LOG_LEVEL", "info"),
 		LogFormat:           env("LOG_FORMAT", "json"),
-		SnapshotCacheTTL:    parseDuration("SNAPSHOT_CACHE_TTL", env("SNAPSHOT_CACHE_TTL", "15s"), &errs),
+		OnlineCheckInterval: parseDuration("ONLINE_CHECK_INTERVAL", env("ONLINE_CHECK_INTERVAL", "15s"), &errs),
 		HTTPTimeout:         parseDuration("HTTP_TIMEOUT", env("HTTP_TIMEOUT", "5s"), &errs),
 		ShutdownTimeout:     parseDuration("SHUTDOWN_TIMEOUT", env("SHUTDOWN_TIMEOUT", "10s"), &errs),
 		WHEPTimeout:         parseDuration("WHEP_TIMEOUT", env("WHEP_TIMEOUT", "10s"), &errs),

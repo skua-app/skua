@@ -125,7 +125,7 @@ LOG_LEVEL=info                                  (debug|info|warn|error)
 LOG_FORMAT=json                                 (json|text, default json)
 FRIGATE_URL=http://<frigate-host>:5000            (required; use :5000 internal API, not :8971 UI)
 GO2RTC_URL=http://<frigate-host>:1984             (required for E2, optional E1)
-SNAPSHOT_CACHE_TTL=15s
+ONLINE_CHECK_INTERVAL=15s
 HTTP_TIMEOUT=5s
 SHUTDOWN_TIMEOUT=10s
 ```
@@ -318,7 +318,7 @@ GO2RTC_URL=http://<frigate-host>:1984
 PORT=3200
 LOG_LEVEL=info
 LOG_FORMAT=json
-SNAPSHOT_CACHE_TTL=15s
+ONLINE_CHECK_INTERVAL=15s
 HTTP_TIMEOUT=5s
 SHUTDOWN_TIMEOUT=10s
 ```
