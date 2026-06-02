@@ -15,7 +15,7 @@
 
   let { children } = $props()
 
-  let width = $state(0)
+  let width = $state(typeof window !== 'undefined' ? window.innerWidth : 0)
   const isDesktop = $derived(width >= 900)
   const isFocus = $derived(page.route.id === '/cam/[id]')
 

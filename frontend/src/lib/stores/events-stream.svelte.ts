@@ -1,4 +1,3 @@
-import { fetchCameraNames } from '$lib/api'
 import type { EventItem } from '$lib/api'
 import { camerasStore } from '$lib/stores/cameras.svelte'
 import { groupsStore } from '$lib/stores/groups.svelte'
@@ -101,7 +100,6 @@ class EventsStreamStore {
   #refetchCameraSet() {
     camerasStore.refresh().catch(() => {})
     groupsStore.refresh().catch(() => {})
-    fetchCameraNames().catch(() => {})
   }
 
   #scheduleReopen() {

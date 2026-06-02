@@ -43,9 +43,40 @@
   )
 
   let closeBtn = $state<HTMLButtonElement | null>(null)
+  let cardEl = $state<HTMLDivElement | null>(null)
+
+  function focusableIn(root: HTMLElement): HTMLElement[] {
+    const sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    return Array.from(root.querySelectorAll<HTMLElement>(sel)).filter(
+      (el) => !el.hasAttribute('disabled') && el.offsetParent !== null
+    )
+  }
 
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') onClose()
+    if (e.key === 'Escape') {
+      onClose()
+      return
+    }
+    if (e.key !== 'Tab' || !cardEl) return
+    const items = focusableIn(cardEl)
+    if (items.length === 0) {
+      e.preventDefault()
+      return
+    }
+    const first = items[0]!
+    const last = items[items.length - 1]!
+    const active = document.activeElement as HTMLElement | null
+    if (e.shiftKey) {
+      if (active === first || !cardEl.contains(active)) {
+        e.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (active === last || !cardEl.contains(active)) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
   }
 
   $effect(() => {
@@ -70,7 +101,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="em-backdrop" onclick={onBackdropClick}>
-  <div class="em-card" role="dialog" aria-modal="true" aria-label={kindLabel}>
+  <div class="em-card" role="dialog" aria-modal="true" aria-label={kindLabel} bind:this={cardEl}>
     <div class="em-snap">
       {#if event.has_clip}
         <!-- iOS Safari: `playsinline` keeps playback inside the modal instead

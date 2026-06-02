@@ -28,8 +28,8 @@ class PrefsStore {
       this.mobileColumns = prefs.mobile_columns
       this.gridFilter = prefs.grid_filter
       this.applyAccent()
-    } catch {
-      // keep defaults on error
+    } catch (err) {
+      console.error('[prefs] load failed, using defaults:', err)
     } finally {
       this.loaded = true
     }
@@ -41,95 +41,66 @@ class PrefsStore {
     }
   }
 
+  // Optimistic-local pattern: every setter assigns local state first, then
+  // funnels the PUT through #persist so a failed write surfaces in the
+  // console instead of vanishing into a silent catch.
+  async #persist(partial: Partial<Prefs>, label: string) {
+    try {
+      await updatePrefs(partial)
+    } catch (err) {
+      console.error(`[prefs] persist ${label} failed:`, err)
+    }
+  }
+
   async setGridMode(mode: Prefs['grid_mode']) {
     this.gridMode = mode
-    try {
-      await updatePrefs({ grid_mode: mode })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ grid_mode: mode }, 'grid_mode')
   }
 
   async setStreamQuality(q: Prefs['stream_quality']) {
     this.streamQuality = q
-    try {
-      await updatePrefs({ stream_quality: q })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ stream_quality: q }, 'stream_quality')
   }
 
   async setMutedByDefault(v: boolean) {
     this.mutedByDefault = v
-    try {
-      await updatePrefs({ muted_by_default: v })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ muted_by_default: v }, 'muted_by_default')
   }
 
   async setShowTelemetry(v: boolean) {
     this.showTelemetry = v
-    try {
-      await updatePrefs({ show_telemetry: v })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ show_telemetry: v }, 'show_telemetry')
   }
 
   async setAccent(v: Accent) {
     this.accent = v
     this.applyAccent()
-    try {
-      await updatePrefs({ accent: v })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ accent: v }, 'accent')
   }
 
   async setNameStyle(v: NameStyle) {
     this.nameStyle = v
-    try {
-      await updatePrefs({ name_style: v })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ name_style: v }, 'name_style')
   }
 
   async setShowTimestamp(v: boolean) {
     this.showTimestamp = v
-    try {
-      await updatePrefs({ show_timestamp: v })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ show_timestamp: v }, 'show_timestamp')
   }
 
   async setDesktopColumns(v: DesktopColumns) {
     this.desktopColumns = v
-    try {
-      await updatePrefs({ desktop_columns: v })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ desktop_columns: v }, 'desktop_columns')
   }
 
   async setMobileColumns(v: MobileColumns) {
     this.mobileColumns = v
-    try {
-      await updatePrefs({ mobile_columns: v })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ mobile_columns: v }, 'mobile_columns')
   }
 
   async setGridFilter(id: string | null) {
     this.gridFilter = id
-    try {
-      await updatePrefs({ grid_filter: id })
-    } catch {
-      // best-effort persist
-    }
+    await this.#persist({ grid_filter: id }, 'grid_filter')
   }
 }
 

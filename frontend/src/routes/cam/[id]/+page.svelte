@@ -46,7 +46,7 @@
   let prefsSynced = $state(false)
   let abortController: AbortController | null = null
 
-  let width = $state(0)
+  let width = $state(typeof window !== 'undefined' ? window.innerWidth : 0)
   const isDesktop = $derived(width >= 900)
 
   async function connect(cam: NonNullable<typeof camera>) {
