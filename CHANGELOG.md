@@ -197,7 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `LICENSE` (MIT, Copyright (c) 2026 Skua contributors).
-- `CONTRIBUTING.md` with conventions distilled from `CLAUDE.md` §10.
+- `CONTRIBUTING.md` with conventions distilled from the contributor
+  conventions documentation.
 - `SECURITY.md` with the threat model and hardening recommendations
   referenced from the README.
 - `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1, enforcement contact
@@ -231,7 +232,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CONTRIBUTING.md` / `SECURITY.md` / `CODE_OF_CONDUCT.md`.
 - Access-model documentation reframed from "VPN-only by network" to
   "LAN-only by default with the user's reverse-proxy or VPN as an
-  optional remote-access layer". `CLAUDE.md` §2 / §3 / §5 / §7
+  optional remote-access layer". The architecture documentation
   rewritten; `docs/setup/frigate-config.md` rewritten with LAN-default
   ICE candidates and an optional remote-access block;
   `docs/setup/npm-proxy.md` and `docs/setup/pihole-dns.md` re-headed
@@ -258,8 +259,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Documentation-tree statements in `CLAUDE.md` §8 reconciled with the
-  actual filesystem.
+- Documentation-tree statements in the architecture documentation's
+  repo-layout section reconciled with the actual filesystem.
 - Per-camera card hint rhythm in `/settings` consolidated for visual
   consistency.
 
