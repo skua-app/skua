@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- App icons and favicon updated to the bracket mark. Covers the PWA
+  manifest icons (`icon-192.png`, `icon-512.png`, `icon-maskable-512.png`),
+  the iOS home-screen icon (`apple-touch-icon.png`), and the browser
+  favicon (`favicon.ico`). File names and paths are unchanged.
+
 ### Added
 
 - Event modal: graceful fallback when an event clip can't be decoded on
