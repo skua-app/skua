@@ -274,23 +274,23 @@ func main() {
 		}
 	})
 
-	h := api.NewHandler(
-		logger,
-		frigateClient,
-		eventsClient,
-		checker,
-		camerasStore,
-		cfg.Go2RTCURL,
-		go2rtcClient,
-		cfg.FrigateUIURL,
-		cfg.WHEPTimeout,
-		httpClient,
-		prefsStore,
-		groupsStore,
-		namesStore,
-		capabilitiesStore,
-		streamOverridesStore,
-		api.RuntimeConfigDeps{
+	h := api.NewHandler(api.HandlerDeps{
+		Logger:          logger,
+		Frigate:         frigateClient,
+		Events:          eventsClient,
+		Checker:         checker,
+		Cameras:         camerasStore,
+		Go2RTCURL:       cfg.Go2RTCURL,
+		Go2RTC:          go2rtcClient,
+		FrigateUIURL:    cfg.FrigateUIURL,
+		WHEPTimeout:     cfg.WHEPTimeout,
+		HTTPClient:      httpClient,
+		Prefs:           prefsStore,
+		Groups:          groupsStore,
+		Names:           namesStore,
+		Capabilities:    capabilitiesStore,
+		StreamOverrides: streamOverridesStore,
+		Runtime: api.RuntimeConfigDeps{
 			Store:               runtimeConfigStore,
 			FrigateURL:          cfg.FrigateURL,
 			FrigateUIURL:        cfg.FrigateUIURL,
@@ -300,7 +300,7 @@ func main() {
 			Go2RTCURLFromEnv:    cfg.Go2RTCURLFromEnv,
 			RequestRestart:      requestRestart,
 		},
-	)
+	})
 	router := api.NewRouter(h, hub, logger, staticFS)
 
 	srv := &http.Server{

@@ -65,7 +65,14 @@ func newRefreshRouter(
 		}
 	})
 
-	h := NewHandler(logger, client, nil, checker, camerasStore, "", nil, "", 0, &http.Client{}, nil, nil, nil, capsStore, nil, RuntimeConfigDeps{})
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Frigate:      client,
+		Checker:      checker,
+		Cameras:      camerasStore,
+		HTTPClient:   &http.Client{},
+		Capabilities: capsStore,
+	})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	return NewRouter(h, hub, logger, staticFS), camerasStore, hub
 }

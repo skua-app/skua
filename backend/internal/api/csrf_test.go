@@ -40,17 +40,14 @@ func newCSRFRouter(t *testing.T) http.Handler {
 		[]config.CameraSpec{{ID: "cam1", Name: "cam1", StreamMain: "cam1_main"}},
 	)
 
-	deps := RuntimeConfigDeps{RequestRestart: func() {}}
-	h := NewHandler(
-		logger,
-		frigateClient, nil, nil, camerasStore,
-		"", nil, "", 0,
-		&http.Client{},
-		nil, nil, nil,
-		capabilities.NewForTest(nil),
-		nil,
-		deps,
-	)
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Frigate:      frigateClient,
+		Cameras:      camerasStore,
+		HTTPClient:   &http.Client{},
+		Capabilities: capabilities.NewForTest(nil),
+		Runtime:      RuntimeConfigDeps{RequestRestart: func() {}},
+	})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	return NewRouter(h, sse.NewHub(logger), logger, staticFS)
 }

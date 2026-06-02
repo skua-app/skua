@@ -78,24 +78,17 @@ func newStreamingRouter(
 	go2rtcClient := go2rtc.New(upstream.server.URL, httpClient)
 	overridesStore := streamoverrides.NewForTest(initialOverrides)
 	checker := makeChecker(nil, camSpecs, map[string]bool{})
-	h := NewHandler(
-		logger,
-		nil,
-		nil,
-		checker,
-		cameras.NewForTest(camSpecs),
-		upstream.server.URL,
-		go2rtcClient,
-		"",
-		2*time.Second,
-		httpClient,
-		nil,
-		nil,
-		nil,
-		capabilities.NewForTest(nil),
-		overridesStore,
-		RuntimeConfigDeps{},
-	)
+	h := NewHandler(HandlerDeps{
+		Logger:          logger,
+		Checker:         checker,
+		Cameras:         cameras.NewForTest(camSpecs),
+		Go2RTCURL:       upstream.server.URL,
+		Go2RTC:          go2rtcClient,
+		WHEPTimeout:     2 * time.Second,
+		HTTPClient:      httpClient,
+		Capabilities:    capabilities.NewForTest(nil),
+		StreamOverrides: overridesStore,
+	})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	return NewRouter(h, sse.NewHub(logger), logger, staticFS), upstream, overridesStore
 }

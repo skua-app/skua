@@ -48,7 +48,14 @@ func TestHandleCameras(t *testing.T) {
 	capsStore := capabilities.NewForTest(map[string]capabilities.Capabilities{
 		"cam5": {TalkBack: true},
 	})
-	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capsStore, nil, RuntimeConfigDeps{})
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Frigate:      client,
+		Checker:      checker,
+		Cameras:      cameras.NewForTest(camSpecs),
+		HTTPClient:   &http.Client{},
+		Capabilities: capsStore,
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/cameras", nil)
 	w := httptest.NewRecorder()
@@ -110,7 +117,14 @@ func TestHandleSnapshot(t *testing.T) {
 	logger := applog.New("error", "text")
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": true})
-	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Frigate:      client,
+		Checker:      checker,
+		Cameras:      cameras.NewForTest(camSpecs),
+		HTTPClient:   &http.Client{},
+		Capabilities: capabilities.NewForTest(nil),
+	})
 
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html></html>")}}
 	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)
@@ -144,7 +158,14 @@ func TestHandleSnapshotMissing(t *testing.T) {
 	logger := applog.New("error", "text")
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": false})
-	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Frigate:      client,
+		Checker:      checker,
+		Cameras:      cameras.NewForTest(camSpecs),
+		HTTPClient:   &http.Client{},
+		Capabilities: capabilities.NewForTest(nil),
+	})
 
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("<html></html>")}}
 	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)
@@ -363,7 +384,14 @@ func TestHandleSnapshot_UnknownCameraReturns404(t *testing.T) {
 	logger := applog.New("error", "text")
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": true})
-	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Frigate:      client,
+		Checker:      checker,
+		Cameras:      cameras.NewForTest(camSpecs),
+		HTTPClient:   &http.Client{},
+		Capabilities: capabilities.NewForTest(nil),
+	})
 
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)
@@ -390,7 +418,14 @@ func TestHandleSnapshot_HostileIDReturns400(t *testing.T) {
 	logger := applog.New("error", "text")
 	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 5 * time.Second})
 	checker := makeChecker(client, camSpecs, map[string]bool{"cam1": true})
-	h := NewHandler(logger, client, nil, checker, cameras.NewForTest(camSpecs), "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Frigate:      client,
+		Checker:      checker,
+		Cameras:      cameras.NewForTest(camSpecs),
+		HTTPClient:   &http.Client{},
+		Capabilities: capabilities.NewForTest(nil),
+	})
 
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)

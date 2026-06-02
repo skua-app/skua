@@ -24,7 +24,13 @@ func eventsRouterWith(t *testing.T, upstream http.Handler) (http.Handler, *httpt
 
 	logger := applog.New("error", "text")
 	eventsClient := events.NewClient(frigateSrv.URL, &http.Client{})
-	h := NewHandler(logger, nil, eventsClient, nil, nil, "", nil, "http://frigate.example/ui", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, RuntimeConfigDeps{})
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		Events:       eventsClient,
+		FrigateUIURL: "http://frigate.example/ui",
+		HTTPClient:   &http.Client{},
+		Capabilities: capabilities.NewForTest(nil),
+	})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	return NewRouter(h, sse.NewHub(logger), logger, staticFS), frigateSrv
 }

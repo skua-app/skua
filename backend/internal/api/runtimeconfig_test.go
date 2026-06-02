@@ -32,7 +32,12 @@ func runtimeConfigTestRig(t *testing.T, deps RuntimeConfigDeps) (http.Handler, *
 		}
 		deps.Store = store
 	}
-	h := NewHandler(logger, nil, nil, nil, nil, "", nil, "", 0, &http.Client{}, nil, nil, nil, capabilities.NewForTest(nil), nil, deps)
+	h := NewHandler(HandlerDeps{
+		Logger:       logger,
+		HTTPClient:   &http.Client{},
+		Capabilities: capabilities.NewForTest(nil),
+		Runtime:      deps,
+	})
 	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
 	r := NewRouter(h, sse.NewHub(logger), logger, staticFS)
 	return r, deps.Store

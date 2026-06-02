@@ -211,41 +211,49 @@ type Handler struct {
 	runtime         RuntimeConfigDeps
 }
 
-func NewHandler(
-	logger *slog.Logger,
-	frigateClient *frigate.Client,
-	eventsClient *events.Client,
-	checker *OnlineChecker,
-	camerasStore *cameras.Store,
-	go2rtcURL string,
-	go2rtcClient *go2rtc.Client,
-	frigateUIURL string,
-	whepTimeout time.Duration,
-	httpClient *http.Client,
-	prefsStore *prefs.Store,
-	groupsStore *groups.Store,
-	namesStore *names.Store,
-	capabilitiesStore *capabilities.Store,
-	streamOverridesStore *streamoverrides.Store,
-	runtime RuntimeConfigDeps,
-) *Handler {
+// HandlerDeps bundles every dependency NewHandler needs into one struct so
+// callers pass them by name rather than position. Two adjacent same-typed
+// strings (Go2RTCURL, FrigateUIURL) could otherwise be transposed with no
+// compiler complaint; named-field initialisation makes that class of bug
+// unrepresentable. RuntimeConfigDeps stays nested as Runtime — it is its
+// own deliberate grouping (see the type comment above).
+type HandlerDeps struct {
+	Logger          *slog.Logger
+	Frigate         *frigate.Client
+	Events          *events.Client
+	Checker         *OnlineChecker
+	Cameras         *cameras.Store
+	Go2RTCURL       string
+	Go2RTC          *go2rtc.Client
+	FrigateUIURL    string
+	WHEPTimeout     time.Duration
+	HTTPClient      *http.Client
+	Prefs           *prefs.Store
+	Groups          *groups.Store
+	Names           *names.Store
+	Capabilities    *capabilities.Store
+	StreamOverrides *streamoverrides.Store
+	Runtime         RuntimeConfigDeps
+}
+
+func NewHandler(d HandlerDeps) *Handler {
 	return &Handler{
-		logger:          logger,
-		frigate:         frigateClient,
-		events:          eventsClient,
-		checker:         checker,
-		cameras:         camerasStore,
-		go2rtcURL:       go2rtcURL,
-		go2rtc:          go2rtcClient,
-		frigateUIURL:    frigateUIURL,
-		whepTimeout:     whepTimeout,
-		httpClient:      httpClient,
-		prefsStore:      prefsStore,
-		groups:          groupsStore,
-		names:           namesStore,
-		capabilities:    capabilitiesStore,
-		streamOverrides: streamOverridesStore,
-		runtime:         runtime,
+		logger:          d.Logger,
+		frigate:         d.Frigate,
+		events:          d.Events,
+		checker:         d.Checker,
+		cameras:         d.Cameras,
+		go2rtcURL:       d.Go2RTCURL,
+		go2rtc:          d.Go2RTC,
+		frigateUIURL:    d.FrigateUIURL,
+		whepTimeout:     d.WHEPTimeout,
+		httpClient:      d.HTTPClient,
+		prefsStore:      d.Prefs,
+		groups:          d.Groups,
+		names:           d.Names,
+		capabilities:    d.Capabilities,
+		streamOverrides: d.StreamOverrides,
+		runtime:         d.Runtime,
 	}
 }
 
