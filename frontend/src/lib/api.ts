@@ -77,7 +77,16 @@ export type EventsQuery = {
 async function apiFetch<T>(path: string): Promise<T> {
   const res = await fetch(path)
   if (!res.ok) {
-    throw new Error(`${path}: ${res.status} ${res.statusText}`)
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const body = (await res.json()) as { error?: string; message?: string }
+      if (body && typeof body.message === 'string' && body.message) {
+        message = body.message
+      }
+    } catch {
+      // non-JSON or empty body: keep the status-text fallback
+    }
+    throw new Error(`${path}: ${message}`)
   }
   return res.json() as Promise<T>
 }
@@ -97,7 +106,16 @@ export async function updatePrefs(partial: Partial<Prefs>): Promise<Prefs> {
     body: JSON.stringify(partial)
   })
   if (!res.ok) {
-    throw new Error(`/api/prefs: ${res.status} ${res.statusText}`)
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const body = (await res.json()) as { error?: string; message?: string }
+      if (body && typeof body.message === 'string' && body.message) {
+        message = body.message
+      }
+    } catch {
+      // non-JSON or empty body: keep the status-text fallback
+    }
+    throw new Error(`/api/prefs: ${message}`)
   }
   return res.json() as Promise<Prefs>
 }

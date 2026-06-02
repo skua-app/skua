@@ -5,22 +5,19 @@ release tag recorded in CLAUDE.md §13 (Epic roadmap). CLAUDE.md §11 lists
 the endpoint groups and their stable/planned status; this file holds the full
 TypeScript-style definitions.
 
-**Error envelope shapes (known inconsistency).** Two error envelopes coexist
-in the BFF today, and an integrator must parse by endpoint:
+**Error envelope.** All BFF error responses use a single shape:
 
-- **`{ error: string }`** — a single `error` field whose value is a
-  human-readable message. Emitted by the `writeError` helper in
-  `backend/internal/api/errors.go`. Used by the core E1/E2/E3 endpoints:
-  `cameras` (snapshot.jpg, tile.jpg), `webrtc`, `prefs`, `events` (list,
-  thumbnail.jpg, snapshot.jpg, clip.mp4).
-- **`{ error: string, message: string }`** — a snake_case stable code in
-  `error` plus a human-readable `message`. Emitted by the structured
-  handlers: `groups`, `camera-names`, `cameras/refresh`, `stream-overrides`,
-  `runtime-config`. Frontend stores wrap these into typed `*ApiError`
-  classes that switch on `.code`.
+```json
+{ "error": "<snake_case_code>", "message": "<human-readable>" }
+```
 
-Unifying both envelopes onto the structured shape is tracked as follow-up
-work; until then, the per-endpoint sections below name which shape applies.
+`error` is always a machine-readable snake_case code and `message` is always
+human text suitable for direct UI display. The generic `writeError` helper
+emits a small set of common codes — `bad_request`, `not_found`,
+`upstream_error`, `upstream_timeout`, `internal` — and individual feature
+endpoints add their own codes (documented in the per-endpoint sections
+below, e.g. `name_duplicate` for groups, `frigate_url_invalid` for runtime
+config).
 
 ```ts
 // === E1/E2 (stable) ===
