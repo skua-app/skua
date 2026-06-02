@@ -83,7 +83,9 @@ body {
   height: 100%;
   background-color: var(--bg);
   color: var(--text);
-  overscroll-behavior: none;
+  /* `contain` (not `none`) blocks Android Chrome pull-to-refresh and the
+     overscroll glow without disabling legitimate scrolling momentum. */
+  overscroll-behavior-y: contain;
   font-family:
     'Geist',
     ui-sans-serif,

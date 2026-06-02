@@ -36,6 +36,9 @@ export const ui = {
   noRecentEvents: 'Пока ничего',
   openInFrigate: 'Открыть в Frigate',
   downloadVideo: 'Скачать видео',
+  clipUnplayableHeading: 'Не удалось воспроизвести запись на этом устройстве',
+  clipUnplayableHint:
+    'Это устройство не может декодировать запись. Используйте «Скачать видео» или «Открыть в Frigate».',
   close: 'Закрыть',
   duration: 'Длительность',
   score: 'Уверенность',

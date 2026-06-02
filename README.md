@@ -248,6 +248,15 @@ The Dockerfile produces a distroless single-binary image around 9 MB.
 - WebRTC live view requires H.264-baseline aliases in go2rtc — iOS
   Safari rejects High profile streams advertised as Baseline (see
   [docs/setup/frigate-config.md](docs/setup/frigate-config.md)).
+- Event clips are served in the camera's native codec and resolution
+  (HEVC, frequently 1440p or higher); whether they play inline in the
+  browser depends on the client device's decoder. Apple devices decode
+  HEVC in hardware, including 1440p. Many Android devices, especially
+  budget SoCs, cap HEVC hardware decode at 1080p, so high-resolution
+  event clips may not play inline in the event modal there. The
+  snapshot, Download, and Open in Frigate still work. There is no
+  server-side transcoding by design — it keeps the distroless
+  single-binary image small.
 - Single static camera registry per Frigate instance — multi-Frigate
   aggregation is not supported.
 - Designed for small households (2-4 users typically). Not a
@@ -335,6 +344,18 @@ above.
 - Snapshots are served with `Cache-Control: no-store`. A stale frame
   indicates a Frigate or network issue rather than caching.
 - Tiles refresh once per second on the client.
+
+### Event clip won't play on Android
+
+Skua does not transcode clips — they are served from Frigate in the
+camera's native codec and resolution, typically HEVC at 1440p or
+higher. Apple devices decode this in hardware, but many Android SoCs
+cap HEVC hardware decode at 1080p and the clip then fails to start
+inside the event modal. When that happens the modal falls back to the
+event snapshot and points at the Download and Open in Frigate buttons,
+which both work regardless of decoder support. There is no server-side
+re-encode planned (it would defeat the small distroless single-binary
+image).
 
 ### Service worker not updating
 

@@ -14,8 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Event modal: graceful fallback when an event clip can't be decoded on
+  the current device (most often high-resolution HEVC on budget Android
+  SoCs). On any `<video>` `error` event the modal swaps the player for
+  the event snapshot and shows a short note pointing at the existing
+  Download and Open in Frigate buttons. iOS and desktop playback paths
+  are unchanged. The clip-codec limitation is documented in the README
+  Limitations and Troubleshooting sections.
+
 ### Fixed
 
+- Android Chrome no longer fires pull-to-refresh or the overscroll glow
+  when scrolling the grid and events list. The root scroll context
+  now uses `overscroll-behavior-y: contain` instead of `none`, which
+  blocks the browser default action without affecting legitimate
+  scrolling momentum.
 - Desktop focus view no longer stretches the video horizontally when the
   browser window is shortened vertically. The frame is now constrained to
   the largest 16:9 box that fits both the leftover width and height of the

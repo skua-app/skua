@@ -45,6 +45,21 @@
   let closeBtn = $state<HTMLButtonElement | null>(null)
   let cardEl = $state<HTMLDivElement | null>(null)
 
+  // Flips true if the <video> emits any `error` event — usually a decoder
+  // failure on devices that can't handle the clip's native codec/resolution
+  // (e.g. budget Android SoCs vs. 1440p HEVC). Don't inspect video.error.code:
+  // browsers vary, and we treat every failure the same way (show the snapshot
+  // poster + a pointer at Download / Open in Frigate, both already in the
+  // action row). Reset when switching to another event id.
+  let clipFailed = $state(false)
+  $effect(() => {
+    // Read event.id so this effect re-runs when the modal instance is reused
+    // for another event; the `if` keeps eslint's no-unused-expressions happy
+    // without changing behaviour (event.id is always a non-empty string).
+    const id = event.id
+    if (id) clipFailed = false
+  })
+
   function focusableIn(root: HTMLElement): HTMLElement[] {
     const sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     return Array.from(root.querySelectorAll<HTMLElement>(sel)).filter(
@@ -103,7 +118,7 @@
 <div class="em-backdrop" onclick={onBackdropClick}>
   <div class="em-card" role="dialog" aria-modal="true" aria-label={kindLabel} bind:this={cardEl}>
     <div class="em-snap">
-      {#if event.has_clip}
+      {#if event.has_clip && !clipFailed}
         <!-- iOS Safari: `playsinline` keeps playback inside the modal instead
              of triggering fullscreen. The BFF buffers the upstream clip and
              serves it via http.ServeContent, so HTTP Range works end-to-end
@@ -116,11 +131,19 @@
           controls
           playsinline
           preload="metadata"
+          onerror={() => (clipFailed = true)}
         ></video>
       {:else}
         <img src={eventSnapshotURL(event.id)} alt={`${camName} · ${kindLabel}`} loading="lazy" />
       {/if}
     </div>
+
+    {#if event.has_clip && clipFailed}
+      <div class="em-clip-fallback" role="status">
+        <div class="em-clip-fallback-heading">{ui.clipUnplayableHeading}</div>
+        <div class="em-clip-fallback-hint">{ui.clipUnplayableHint}</div>
+      </div>
+    {/if}
 
     <div class="em-meta">
       <div class="em-meta-row">
@@ -194,6 +217,23 @@
     object-fit: contain;
     display: block;
     background: #000;
+  }
+
+  .em-clip-fallback {
+    padding: 12px 18px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .em-clip-fallback-heading {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .em-clip-fallback-hint {
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.4;
   }
 
   .em-meta {
