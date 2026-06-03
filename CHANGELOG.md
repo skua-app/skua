@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-06-03
+
 ### Changed
 
 - App icons and favicon updated to the bracket mark. Covers the PWA
@@ -557,7 +559,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/skua-app/skua/releases/tag/v0.11.1
 [0.11.0]: https://github.com/skua-app/skua/releases/tag/v0.11.0
 [0.10.0]: https://github.com/skua-app/skua/releases/tag/v0.10.0
 [0.9.0]: https://github.com/skua-app/skua/releases/tag/v0.9.0
