@@ -1,6 +1,7 @@
 # Go
 backend/bin/
 backend/vendor/
+backend/coverage.*
 
 # Node
 frontend/node_modules/
