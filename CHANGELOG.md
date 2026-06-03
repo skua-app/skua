@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- "Cameras" back button on the focus view now reliably returns to the
+  grid when the app is opened directly on a camera (PWA cold start /
+  restored URL). The previous implementation called `history.back()`
+  when `window.history.length > 1`, which on a restored standalone PWA
+  session was a silent no-op because the history stack had no in-app
+  grid entry behind it. The button now always navigates to the grid.
 - Android Chrome no longer fires pull-to-refresh or the overscroll glow
   when scrolling the grid and events list. The root scroll context
   now uses `overscroll-behavior-y: contain` instead of `none`, which

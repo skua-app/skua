@@ -148,15 +148,13 @@
     }
   }
 
-  // Prefer history.back() so SvelteKit restores the grid's scroll position;
-  // fall back to /goto when the user opened /cam/<id> directly (no history
-  // entry to pop).
+  // "Cameras" is a deterministic navigation to the grid, not a history pop.
+  // window.history.length is unreliable in a restored standalone PWA session
+  // (it can be > 1 with no in-app grid entry behind it — e.g. the iOS PWA
+  // resumes the last-visited /cam/<id> directly), so history.back() would be
+  // a silent no-op.
   function handleBack() {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back()
-    } else {
-      goto('/')
-    }
+    goto('/')
   }
 
   function downloadSnapshot() {
