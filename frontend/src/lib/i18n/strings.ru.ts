@@ -83,6 +83,8 @@ export const ui = {
   connectionGo2rtcLabel: 'go2rtc',
   connectionSavedRestartHint: 'Сохранено. Перезапустите, чтобы применить.',
   connectionConfirmApply: 'Skua перезапустится, прямой эфир ненадолго прервётся. Продолжить?',
+  connectionRestartPolicyNote:
+    '«Применить» перезапускает Skua через контейнер, поэтому контейнер должен работать с политикой перезапуска (restart: unless-stopped или always), иначе Skua не вернётся автоматически.',
   connectionApplyConfirm: 'Перезапустить',
   connectionSaveErrorGeneric: 'Не удалось сохранить.',
   connectionTestErrorGeneric: 'Не удалось выполнить проверку.',

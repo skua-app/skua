@@ -112,6 +112,14 @@ Mobile PWA, installed to the iOS home screen.
          - ./data:/data
 ```
 
+   Keep the `restart: unless-stopped` line — `restart: always` works
+   too. Runtime reconfiguration (the first-run wizard Save and
+   **Settings → Connection → Apply**) restarts Skua by exiting the
+   process and relies on the container restart policy to bring it
+   back. Without one (`restart: no`, `on-failure`, or no restart key
+   at all), a Save or Apply leaves Skua stopped until you start the
+   container again.
+
 2. Start the container:
 
 ```bash
@@ -173,6 +181,9 @@ Test, Save, and Apply (restart now) actions; Save updates
 `/data/config.yaml` and Apply triggers a container restart so the new
 values take effect. Env-set fields render read-only with a hint —
 environment variables always win over the on-disk overlay at next boot.
+Apply restarts Skua by exiting the process, so the container needs a
+restart policy (`restart: unless-stopped` or `always`) to come back
+automatically — without one, Apply leaves Skua stopped.
 
 | Variable | Default | Required | Notes |
 |---|---|---|---|
@@ -233,6 +244,9 @@ docker run --rm -e FRIGATE_URL=http://<frigate-host>:5000 -p 3200:3200 skua:loca
 ```
 
 The Dockerfile produces a distroless single-binary image around 9 MB.
+(No `--restart` policy is set here, so a wizard Save or
+**Settings → Connection → Apply** will not auto-restart this container —
+expected for a throwaway smoke test.)
 
 ## Limitations
 

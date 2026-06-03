@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Container restart-policy requirement for runtime reconfiguration is
+  now stated up front. The first-run wizard Save and Settings →
+  Connection Apply both restart Skua by exiting the process and rely
+  on the container restart policy (`restart: unless-stopped` or
+  `always`) to bring the BFF back; with no restart policy a Save or
+  Apply leaves Skua stopped. README Quick start and Configuration
+  sections call out the dependency explicitly, the Connection editor
+  shows a persistent note above the actions, and the setup wizard
+  shows the same line under its Save and start button. No runtime
+  change.
+
 ## [0.11.1] — 2026-06-03
 
 ### Changed

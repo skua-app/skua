@@ -285,6 +285,8 @@
       <div class="save-hint">{ui.connectionSavedRestartHint}</div>
     {/if}
 
+    <div class="policy-note">{ui.connectionRestartPolicyNote}</div>
+
     {#if applying}
       <div class="restart-status" aria-live="polite">
         <span class="dot" aria-hidden="true"></span>
@@ -406,6 +408,11 @@
   .save-hint {
     font-size: 12px;
     color: var(--text-2);
+  }
+  .policy-note {
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.45;
   }
   .form-error {
     font-size: 12px;

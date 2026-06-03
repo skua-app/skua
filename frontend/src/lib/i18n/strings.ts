@@ -81,6 +81,8 @@ export const ui = {
   connectionGo2rtcLabel: 'go2rtc',
   connectionSavedRestartHint: 'Saved. Restart to apply.',
   connectionConfirmApply: 'This restarts Skua and briefly drops live streams. Continue?',
+  connectionRestartPolicyNote:
+    'Apply restarts Skua through the container, so Skua must be running with a restart policy (restart: unless-stopped or always) or it will not come back on its own.',
   connectionApplyConfirm: 'Restart now',
   connectionSaveErrorGeneric: 'Could not save.',
   connectionTestErrorGeneric: 'Could not run test.',

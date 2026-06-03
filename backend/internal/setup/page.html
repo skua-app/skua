@@ -387,6 +387,11 @@
           <button type="button" id="test_btn">Test connection</button>
           <button type="button" id="save_btn" class="primary">Save and start</button>
         </div>
+        <div class="hint">
+          Save restarts Skua through the container, so the container needs a
+          restart policy (<span class="mono-inline">restart: unless-stopped</span> or
+          <span class="mono-inline">always</span>) to come back automatically.
+        </div>
 
         <div id="result" class="result" hidden>
           <div class="result-row">
