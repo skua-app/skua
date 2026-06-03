@@ -197,71 +197,76 @@
 
   <div class="df-body">
     <div class="df-video-col">
-      <div class="df-video-stage">
-        <div class="df-video-frame">
-          {@render videoSnippet()}
+      <div class="df-player-center">
+        <div class="df-player">
+          <div class="df-video-frame">
+            {@render videoSnippet()}
 
-          {#if showTimestamp}
-            <div class="ts-chip">
-              <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}>{currentTime}</Mono>
-            </div>
-          {/if}
-
-          {#if showTelemetry}
-            <div class="telemetry-pill">
-              <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>LATENCY</Mono>
-              <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-                {latencyMs !== null ? `${latencyMs} ms` : '—'}
-              </Mono>
-              <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>BITRATE</Mono>
-              <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-                {bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}
-              </Mono>
-              <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>VIDEO</Mono>
-              <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-                {videoCodec ?? '—'}
-                {resolution ?? ''}
-              </Mono>
-              {#if audioAvailable}
-                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>AUDIO</Mono>
-                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>{audioCodec ?? '—'}</Mono
+            {#if showTimestamp}
+              <div class="ts-chip">
+                <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}
+                  >{currentTime}</Mono
                 >
-              {/if}
-            </div>
-          {/if}
-        </div>
-      </div>
+              </div>
+            {/if}
 
-      <div class="df-controls">
-        <div class="df-controls-left">
-          <IconBtn
-            icon={isPaused ? 'play' : 'pause'}
-            label="play"
-            onclick={togglePause}
-            size={34}
-          />
-          <div class="df-ctrl-divider"></div>
-          <IconBtn
-            icon={isMuted ? 'mute' : 'unmute'}
-            label="mute"
-            onclick={toggleMute}
-            size={34}
-            active={!isMuted}
-            disabled={!audioAvailable}
-          />
-          {#if camera?.capabilities.talk_back}
-            <IconBtn icon="mic" label="talkback" size={34} accent disabled />
-          {/if}
-          <div class="df-ctrl-divider"></div>
-          <IconBtn icon="snapshot" label="snap" onclick={downloadSnapshot} size={34} />
-        </div>
-        <div class="df-controls-right">
-          <Mono size={10} color="var(--text-3)" letterSpacing={0.4}>
-            {#if streamName}<span class="df-id-strong">{streamName}</span>{/if}{videoCodec
-              ? ` · ${videoCodec}`
-              : ''}{resolution ? ` · ${resolution}` : ''}
-          </Mono>
-          <IconBtn icon="fullscreen" label="full" onclick={toggleFullscreen} size={34} />
+            {#if showTelemetry}
+              <div class="telemetry-pill">
+                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>LATENCY</Mono>
+                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
+                  {latencyMs !== null ? `${latencyMs} ms` : '—'}
+                </Mono>
+                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>BITRATE</Mono>
+                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
+                  {bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}
+                </Mono>
+                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>VIDEO</Mono>
+                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
+                  {videoCodec ?? '—'}
+                  {resolution ?? ''}
+                </Mono>
+                {#if audioAvailable}
+                  <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>AUDIO</Mono>
+                  <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}
+                    >{audioCodec ?? '—'}</Mono
+                  >
+                {/if}
+              </div>
+            {/if}
+          </div>
+
+          <div class="df-controls">
+            <div class="df-controls-left">
+              <IconBtn
+                icon={isPaused ? 'play' : 'pause'}
+                label="play"
+                onclick={togglePause}
+                size={34}
+              />
+              <div class="df-ctrl-divider"></div>
+              <IconBtn
+                icon={isMuted ? 'mute' : 'unmute'}
+                label="mute"
+                onclick={toggleMute}
+                size={34}
+                active={!isMuted}
+                disabled={!audioAvailable}
+              />
+              {#if camera?.capabilities.talk_back}
+                <IconBtn icon="mic" label="talkback" size={34} accent disabled />
+              {/if}
+              <div class="df-ctrl-divider"></div>
+              <IconBtn icon="snapshot" label="snap" onclick={downloadSnapshot} size={34} />
+            </div>
+            <div class="df-controls-right">
+              <Mono size={10} color="var(--text-3)" letterSpacing={0.4}>
+                {#if streamName}<span class="df-id-strong">{streamName}</span>{/if}{videoCodec
+                  ? ` · ${videoCodec}`
+                  : ''}{resolution ? ` · ${resolution}` : ''}
+              </Mono>
+              <IconBtn icon="fullscreen" label="full" onclick={toggleFullscreen} size={34} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -408,31 +413,48 @@
     padding: 22px 22px 22px 28px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
     min-height: 0;
   }
 
-  /* Stage takes the leftover vertical space inside .df-video-col and centers
-     the frame. min-height:0 lets it shrink so the controls row below the
-     frame is never pushed off when the window is shortened. */
-  .df-video-stage {
+  /* Sizing container for the player block. container-type:size lets the
+     player width below resolve against this box's width AND height via
+     cqw/cqh, so the 16:9 frame is computed deterministically instead of
+     relying on the browser's aspect-ratio-vs-max-height tiebreaker (which
+     was the prior bug — width:100% + max-height:100% violated the ratio
+     and stretched the picture horizontally on short windows). */
+  .df-player-center {
     flex: 1;
     min-height: 0;
+    min-width: 0;
+    container-type: size;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  /* Largest 16:9 box that fits both the stage's width and remaining height.
-     width:100% + max-height:100% + aspect-ratio together let the box shrink
-     in either dimension while keeping the ratio, so a short window no longer
-     stretches the picture horizontally (the prior bug). object-fit on
-     .poster / .video-el stays `fill` deliberately — the LQ sub stream is
-     anamorphic and needs the unsquashed stretch to 16:9. */
+  /* The frame + controls move together as one block, so the controls
+     always sit directly under the video with no detached floating gap
+     at any window height. Width = min(available width, height-derived
+     16:9 width after reserving the controls bar + inter-element gap).
+     --controls-reserved covers the controls bar (12px+12px padding +
+     34px IconBtn + 2px border = 60px) plus the 12px gap below the frame;
+     bumped to 76px so the controls are never clipped at the minimum
+     usable window height. */
+  .df-player {
+    --controls-reserved: 76px;
+    width: min(100cqw, calc((100cqh - var(--controls-reserved)) * 16 / 9));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Strict 16:9 box driven by .df-player's width — no width:100%, no
+     max-height. object-fit on .poster / .video-el stays `fill`
+     deliberately: the LQ sub stream is anamorphic on some cameras and
+     needs the unsquashed stretch into 16:9. */
   .df-video-frame {
     position: relative;
     width: 100%;
-    max-height: 100%;
     aspect-ratio: 16 / 9;
     border-radius: 12px;
     overflow: hidden;

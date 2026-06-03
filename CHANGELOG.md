@@ -39,13 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   blocks the browser default action without affecting legitimate
   scrolling momentum.
 - Desktop focus view no longer stretches the video horizontally when the
-  browser window is shortened vertically. The frame is now constrained to
-  the largest 16:9 box that fits both the leftover width and height of the
-  video column and is centered when it becomes height-limited, so HQ
-  (main, 16:9) stays correctly proportioned at any window height while the
-  anamorphic LQ (sub, 3:4) stream continues to be stretched to 16:9 via
-  `object-fit: fill` as before. The controls row below the frame stays
-  visible.
+  browser window is shortened vertically, and the controls row no longer
+  detaches from the frame leaving a floating gap between them on tall
+  narrow windows. The video frame and controls are now grouped into one
+  centered player block sized to the largest 16:9 box that fits both the
+  available width and the available height (after reserving room for the
+  controls bar). HQ (main, 16:9) stays correctly proportioned at any
+  window size while the anamorphic LQ (sub, 3:4) stream continues to be
+  stretched to 16:9 via `object-fit: fill` as before.
 
 ## [0.11.0] — 2026-06-02
 
