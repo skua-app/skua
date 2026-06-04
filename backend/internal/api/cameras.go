@@ -15,6 +15,7 @@ import (
 	"github.com/skua-app/skua/internal/capabilities"
 	"github.com/skua-app/skua/internal/events"
 	"github.com/skua-app/skua/internal/frigate"
+	"github.com/skua-app/skua/internal/glance"
 	"github.com/skua-app/skua/internal/go2rtc"
 	"github.com/skua-app/skua/internal/groups"
 	"github.com/skua-app/skua/internal/names"
@@ -208,6 +209,7 @@ type Handler struct {
 	names           *names.Store
 	capabilities    *capabilities.Store
 	streamOverrides *streamoverrides.Store
+	glance          *glance.Store
 	runtime         RuntimeConfigDeps
 }
 
@@ -233,6 +235,7 @@ type HandlerDeps struct {
 	Names           *names.Store
 	Capabilities    *capabilities.Store
 	StreamOverrides *streamoverrides.Store
+	Glance          *glance.Store
 	Runtime         RuntimeConfigDeps
 }
 
@@ -253,6 +256,7 @@ func NewHandler(d HandlerDeps) *Handler {
 		names:           d.Names,
 		capabilities:    d.Capabilities,
 		streamOverrides: d.StreamOverrides,
+		glance:          d.Glance,
 		runtime:         d.Runtime,
 	}
 }
