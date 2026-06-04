@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Server-side moments grouping endpoint `GET /api/moments` that collapses
+  recent Frigate events into per-camera "moments" (time-clusters with a
+  5-minute gap). Read-only and stateless: no persistence, no seen-state,
+  not yet surfaced in the UI. Phase 1 of the glance feature.
+
 ### Changed
 
 - Container restart-policy requirement for runtime reconfiguration is
