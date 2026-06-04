@@ -458,4 +458,54 @@ type Moment = {
   representative_event_id: string
   representative_has_clip: boolean
 }
+
+// === Glance — Phase 2 (internal) ===
+//
+// Household seen-state for the glance feature. Phase 2 adds a single
+// household `last_seen` timestamp persisted to a dedicated state file
+// (env GLANCE_STATE_PATH, default /data/glance.json) and two endpoints
+// that compose the Phase 1 moment grouping with that timestamp. Still
+// not surfaced in the UI; UI wiring is Phase 3.
+//
+// The seen-state is household-wide (one timestamp shared across all
+// users on the LAN-only deployment), monotonic (an older or equal Ack
+// is a no-op), and decoupled from prefs — it lives in its own store
+// alongside groups / camera_names / capabilities.
+
+// GET /api/glance
+//   No query params. Always pulls a fixed lookback window of recent
+//   events (capped at the events endpoint's max limit) and runs the
+//   Phase 1 grouping with `since` = stored last_seen. There is no
+//   pagination cursor; clients re-fetch from the top.
+//
+// Response: Cache-Control: no-store.
+
+type GlanceResponse = {
+  last_seen: string | null   // ISO 8601 UTC, null when never-acked
+  unseen_count: number       // == moments.length, surfaced for badge UI
+  moments: Moment[]          // same shape as /api/moments items
+}
+
+// POST /api/glance/ack
+//   body: { seen_through: string }   // ISO 8601 UTC
+//   Advances the stored last_seen monotonically: a seen_through
+//   strictly after the current last_seen overwrites it and is
+//   persisted atomically; otherwise the call is a no-op and the
+//   existing value is returned. Malformed / missing seen_through →
+//   400 bad_request.
+//
+// Response: Cache-Control: no-store.
+
+type GlanceAckRequest = {
+  seen_through: string   // ISO 8601 UTC
+}
+type GlanceAckResponse = {
+  last_seen: string | null   // resulting last_seen after the monotonic merge
+}
+
+// Storage: JSON at $GLANCE_STATE_PATH (default /data/glance.json; the
+// file is auto-created on first Ack). Shape: { "last_seen": "<ISO>" }
+// or { "last_seen": null }. A missing file means "never-seen"; a
+// corrupt file is logged and treated the same way (does not block
+// startup) — this is best-effort recency state, not an audit log.
 ```

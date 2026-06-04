@@ -204,6 +204,7 @@ automatically — without one, Apply leaves Skua stopped.
 | `CAPABILITIES_CONFIG_PATH` | `/data/capabilities.yaml` | No | Per-camera `talk_back` / `ptz` overrides — not exposed by Frigate's config, hand-edited on the host until a future editor lands. |
 | `STREAM_OVERRIDES_CONFIG_PATH` | `/data/stream_overrides.yaml` | No | Per-camera go2rtc stream-name overrides; applied only inside the WHEP handler. `GET /api/cameras` still surfaces Frigate-truth stream names. |
 | `RUNTIME_CONFIG_PATH` | `/data/config.yaml` | No | Runtime config overlay written by the first-run wizard. Stores `frigate_url`, `frigate_ui_url`, `go2rtc_url`. Env vars above always win over this file. |
+| `GLANCE_STATE_PATH` | `/data/glance.json` | No | Household seen-state for the glance feature; JSON file holding a single `last_seen` timestamp shared across the household. Auto-created on the first `POST /api/glance/ack`; missing or corrupt file means never-seen. |
 
 All `_PATH` variables are container-side paths. The default
 `./data:/data` volume mount in the Quick Start compose maps them all

@@ -22,6 +22,7 @@ import (
 	"github.com/skua-app/skua/internal/emergency"
 	"github.com/skua-app/skua/internal/events"
 	"github.com/skua-app/skua/internal/frigate"
+	"github.com/skua-app/skua/internal/glance"
 	"github.com/skua-app/skua/internal/go2rtc"
 	"github.com/skua-app/skua/internal/groups"
 	applog "github.com/skua-app/skua/internal/log"
@@ -92,6 +93,12 @@ func main() {
 	prefsStore, err := prefs.New(cfg.PrefsPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "prefs: %v\n", err)
+		os.Exit(1)
+	}
+
+	glanceStore, err := glance.New(cfg.GlanceStatePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "glance: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -290,6 +297,7 @@ func main() {
 		Names:           namesStore,
 		Capabilities:    capabilitiesStore,
 		StreamOverrides: streamOverridesStore,
+		Glance:          glanceStore,
 		Runtime: api.RuntimeConfigDeps{
 			Store:               runtimeConfigStore,
 			FrigateURL:          cfg.FrigateURL,

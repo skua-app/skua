@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recent Frigate events into per-camera "moments" (time-clusters with a
   5-minute gap). Read-only and stateless: no persistence, no seen-state,
   not yet surfaced in the UI. Phase 1 of the glance feature.
+- Server-side household seen-state for the glance feature. `GET /api/glance`
+  returns the unseen "while you were away" moments plus an unseen count
+  composed from the Phase 1 grouping, and `POST /api/glance/ack` advances
+  the stored `last_seen` monotonically. Backed by a new dedicated state
+  file at `GLANCE_STATE_PATH` (default `/data/glance.json`); single
+  household timestamp, no per-user state. Internal, not yet surfaced in
+  the UI. Phase 2 of the glance feature.
 
 ### Changed
 
