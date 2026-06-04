@@ -36,6 +36,7 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Get("/prefs", h.handleGetPrefs)
 		r.Put("/prefs", h.handlePutPrefs)
 		r.Get("/events", h.handleEvents)
+		r.Get("/moments", h.handleMoments)
 		r.Get("/events/{id}/thumbnail.jpg", h.handleEventThumbnail)
 		r.Get("/events/{id}/snapshot.jpg", h.handleEventSnapshot)
 		r.Method(http.MethodGet, "/events/{id}/clip.mp4", http.HandlerFunc(h.handleEventClip))

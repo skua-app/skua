@@ -404,4 +404,58 @@ type RuntimeConfigErrorBody = {
 // BFF has no effective Frigate URL (env+overlay both empty); a successful
 // save triggers the same clean exit + container-restart as
 // /api/runtime-config/restart. Not part of the steady-state SPA surface.
+
+// === Glance — Phase 1 (internal) ===
+//
+// Server-side grouping of recent Frigate events into per-camera "moments"
+// for the planned glance surface. Phase 1 is read-only and stateless: no
+// persistence, no last_seen / ack / seen-state, no SSE additions, and not
+// yet surfaced in the UI. Phases 2 (persistence + seen-state) and 3 (UI
+// wiring) are planned separately.
+
+// GET /api/moments?since=&limit=
+//   since: optional ISO 8601 timestamp; events with started_at not
+//          strictly after `since` are dropped before grouping. Bad
+//          value → 400 bad_request "since must be ISO 8601".
+//   limit: optional positive integer (default 50, max 200). This is the
+//          lookback window — the number of source events fetched from
+//          Frigate, NOT the number of moments returned. There is no
+//          pagination cursor in Phase 1; the window is bounded by
+//          `limit` and clients re-fetch from the top.
+//
+// Grouping rules:
+//   - Strictly per camera; events from different cameras never merge.
+//   - Within a camera, events are sorted by started_at ascending; a new
+//     moment starts when the gap between consecutive started_at values
+//     exceeds the 5-minute MomentGap constant.
+//   - kinds and labels are not used to split a cluster — only the time
+//     gap is.
+//
+// Per moment:
+//   - started_at = earliest started_at in the cluster.
+//   - ended_at   = latest ended_at among cluster events, or null when
+//                  any event in the cluster is still in progress.
+//   - kinds      = distinct normalised kinds in stable encounter order.
+//   - labels     = distinct raw labels, sorted ascending.
+//   - representative_event_id = id of the highest-score event in the
+//                  cluster; nil scores rank below any real score; ties
+//                  break by most recent started_at.
+//   - representative_has_clip = has_clip of the representative event.
+//
+// Moments are returned sorted by their latest event started_at
+// descending (most recent moment first). Cache-Control: no-store.
+
+type MomentsResponse = {
+  items: Moment[]
+}
+type Moment = {
+  cam_id: string
+  started_at: string                // ISO 8601 UTC, earliest event start
+  ended_at: string | null           // null while any clustered event is in progress
+  kinds: EventKind[]                // distinct, stable encounter order
+  labels: string[]                  // distinct raw labels, sorted ascending
+  event_count: number
+  representative_event_id: string
+  representative_has_clip: boolean
+}
 ```
