@@ -691,6 +691,56 @@ func TestServeClip_SingleFlightSurvivesFirstCallerCancel(t *testing.T) {
 	}
 }
 
+// TestClipCache_ConcurrentPutGetRace fires many concurrent writers and
+// readers at a clipCache configured with small caps so evictLocked runs
+// continuously under contention. The race detector then sees the map +
+// container/list mutations under c.mu interleaved with Get's MoveToFront
+// (also under c.mu). The test passes if -race finds nothing, no goroutine
+// panics on a corrupted list element, and the entry count stays at or
+// below the configured cap after quiesce.
+func TestClipCache_ConcurrentPutGetRace(t *testing.T) {
+	const (
+		maxEntries = 4
+		maxBytes   = 4096
+		writers    = 6
+		readers    = 6
+	)
+	c := newClipCache(maxEntries, maxBytes)
+
+	deadline := time.Now().Add(200 * time.Millisecond)
+	ids := []string{"a", "b", "c", "d", "e", "f", "g", "h"}
+	payload := bytes.Repeat([]byte("x"), 512)
+
+	var wg sync.WaitGroup
+
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(seed int) {
+			defer wg.Done()
+			for i := 0; time.Now().Before(deadline); i++ {
+				id := ids[(seed+i)%len(ids)]
+				c.Put(id, payload, time.Time{})
+			}
+		}(w)
+	}
+
+	for r := 0; r < readers; r++ {
+		wg.Add(1)
+		go func(seed int) {
+			defer wg.Done()
+			for i := 0; time.Now().Before(deadline); i++ {
+				_, _, _ = c.Get(ids[(seed+i)%len(ids)])
+			}
+		}(r)
+	}
+
+	wg.Wait()
+
+	if got := c.len(); got > maxEntries {
+		t.Errorf("len() = %d, want <= %d after concurrent churn", got, maxEntries)
+	}
+}
+
 func TestList_NoCursorOnShortPage(t *testing.T) {
 	page := []FrigateEvent{{ID: "1", Camera: "cam7", Label: "person", StartTime: 1779310000}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

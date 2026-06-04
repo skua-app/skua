@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -370,6 +372,71 @@ func TestOnlineChecker_RefreshPrunesRemovedCameras(t *testing.T) {
 	if checker.IsOnline("cam2") {
 		t.Error("cam2 should have been pruned after refreshAll (no longer in store)")
 	}
+}
+
+// TestOnlineChecker_ConcurrentRefreshAndIsOnlineRace runs refreshAll in a
+// tight loop in one goroutine while several reader goroutines call IsOnline
+// in parallel, so the race detector sees the oc.status full-map swap under
+// oc.mu.Lock() overlap with RLock readers. The fake Frigate flips the
+// reported camera_fps on each /api/stats hit so every refresh actually
+// rebuilds a different map. The test passes if -race finds nothing and no
+// goroutine panics — reader return values aren't asserted on because the
+// status flips legitimately between calls.
+func TestOnlineChecker_ConcurrentRefreshAndIsOnlineRace(t *testing.T) {
+	var flip int32
+	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/stats" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		// Alternate between cam1 online / cam1 offline to force a different
+		// map on each refresh.
+		if atomic.AddInt32(&flip, 1)%2 == 0 {
+			if _, err := fmt.Fprint(w, `{"cameras":{"cam1":{"camera_fps":5,"detection_enabled":true},"cam2":{"camera_fps":0,"detection_enabled":true}}}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+			return
+		}
+		if _, err := fmt.Fprint(w, `{"cameras":{"cam1":{"camera_fps":0,"detection_enabled":true},"cam2":{"camera_fps":7,"detection_enabled":true}}}`); err != nil {
+			t.Errorf("fprint: %v", err)
+		}
+	}))
+	defer fakeFrigate.Close()
+
+	client := frigate.NewClient(fakeFrigate.URL, &http.Client{Timeout: 2 * time.Second})
+	checker := makeChecker(client, []config.CameraSpec{{ID: "cam1"}, {ID: "cam2"}}, make(map[string]bool))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+
+	var wg sync.WaitGroup
+
+	// Refresher: rebuilds oc.status repeatedly under oc.mu.Lock().
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for ctx.Err() == nil {
+			checker.refreshAll(ctx)
+		}
+	}()
+
+	// Readers: call IsOnline under oc.mu.RLock() against the same instance.
+	// We only assert the value is a valid bool by typing — no value check
+	// because flip + concurrent swaps make either result valid.
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ctx.Err() == nil {
+				_ = checker.IsOnline("cam1")
+				_ = checker.IsOnline("cam2")
+				_ = checker.IsOnline("missing")
+			}
+		}()
+	}
+
+	wg.Wait()
 }
 
 // TestHandleSnapshot_UnknownCameraReturns404 verifies the boundary check
