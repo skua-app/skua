@@ -54,7 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The shared bottom sheet now keeps its drag handle and title pinned
   while the content scrolls, instead of scrolling them off the top
-  with the list. Also improves the camera-group filter sheet, which
+  with the list, and can be dismissed by an explicit close button or
+  by swiping the pinned header down (in addition to the backdrop tap
+  and Escape). Also improves the camera-group filter sheet, which
   reuses the same component.
 
 ### Changed
