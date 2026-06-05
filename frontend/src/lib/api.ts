@@ -161,41 +161,47 @@ export type Moment = {
   representative_has_clip: boolean
 }
 
-// GlanceResponse is the envelope of GET /api/glance: the household
-// last_seen (null when never-acked), the unseen-moment count surfaced
-// to the badge, and the moment list itself (newest moment first).
+// GlanceMoment is a Moment plus a per-moment seen flag, keyed against
+// the household seen-set on the BFF. A moment flips to seen as soon as
+// its representative event id is in the set.
+export type GlanceMoment = Moment & { seen: boolean }
+
+// GlanceResponse is the envelope of GET /api/glance: the count of
+// unseen moments (surfaced to the badge) and the moment list itself
+// (newest moment first), each carrying its own seen flag.
 export type GlanceResponse = {
-  last_seen: string | null
   unseen_count: number
-  moments: Moment[]
+  moments: GlanceMoment[]
 }
 
 export async function fetchGlance(): Promise<GlanceResponse> {
   return apiFetch<GlanceResponse>('/api/glance')
 }
 
-// ackGlance advances the household last_seen monotonically. The server
-// is the authority: an older or equal seen_through is a no-op and the
-// returned last_seen reflects the existing (newer) value.
-export async function ackGlance(seenThrough: string): Promise<{ last_seen: string }> {
-  const res = await fetch('/api/glance/ack', {
+// markGlanceSeen records that the listed event ids have been viewed.
+// scope is optional and defaults to "household" on the server; v1 has
+// no per-user identity so the frontend omits it. The endpoint returns
+// 204 with no body — callers should not parse a payload.
+export async function markGlanceSeen(eventIds: string[], scope?: string): Promise<void> {
+  const body: { event_ids: string[]; scope?: string } = { event_ids: eventIds }
+  if (scope !== undefined) body.scope = scope
+  const res = await fetch('/api/glance/seen', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ seen_through: seenThrough })
+    body: JSON.stringify(body)
   })
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
     try {
-      const body = (await res.json()) as { error?: string; message?: string }
-      if (body && typeof body.message === 'string' && body.message) {
-        message = body.message
+      const errBody = (await res.json()) as { error?: string; message?: string }
+      if (errBody && typeof errBody.message === 'string' && errBody.message) {
+        message = errBody.message
       }
     } catch {
       // non-JSON or empty body: keep the status-text fallback
     }
-    throw new Error(`/api/glance/ack: ${message}`)
+    throw new Error(`/api/glance/seen: ${message}`)
   }
-  return res.json() as Promise<{ last_seen: string }>
 }
 
 // Camera groups (E3.3). Server-side single-membership: when a camera is added

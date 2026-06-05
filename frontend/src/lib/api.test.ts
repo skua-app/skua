@@ -5,12 +5,12 @@ import {
   RefreshApiError,
   RuntimeConfigApiError,
   StreamOverrideApiError,
-  ackGlance,
   createGroup,
   fetchCameras,
   fetchGlance,
   fetchPrefs,
   fetchStreamOverrides,
+  markGlanceSeen,
   refreshCameras,
   restartRuntimeConfig,
   saveRuntimeConfig,
@@ -206,7 +206,6 @@ describe('RuntimeConfigApiError', () => {
 describe('glance', () => {
   it('fetchGlance parses the envelope', async () => {
     const body: GlanceResponse = {
-      last_seen: '2026-06-04T22:00:00Z',
       unseen_count: 1,
       moments: [
         {
@@ -217,7 +216,8 @@ describe('glance', () => {
           labels: ['person'],
           event_count: 1,
           representative_event_id: 'evt-1',
-          representative_has_clip: true
+          representative_has_clip: true,
+          seen: false
         }
       ]
     }
@@ -225,36 +225,42 @@ describe('glance', () => {
     await expect(fetchGlance()).resolves.toEqual(body)
   })
 
-  it('ackGlance posts seen_through and parses the response', async () => {
+  it('markGlanceSeen posts the event id list and resolves on 204', async () => {
     const fn = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(jsonResponse({ last_seen: '2026-06-04T22:00:00Z' }))
+      .mockResolvedValueOnce(new Response(null, { status: 204, statusText: 'No Content' }))
     vi.stubGlobal('fetch', fn)
-    await expect(ackGlance('2026-06-04T22:00:00Z')).resolves.toEqual({
-      last_seen: '2026-06-04T22:00:00Z'
-    })
+    await expect(markGlanceSeen(['evt-1', 'evt-2'])).resolves.toBeUndefined()
     expect(fn).toHaveBeenCalledTimes(1)
     const [url, init] = fn.mock.calls[0]!
-    expect(url).toBe('/api/glance/ack')
+    expect(url).toBe('/api/glance/seen')
     expect(init?.method).toBe('POST')
-    expect(JSON.parse(String(init?.body))).toEqual({ seen_through: '2026-06-04T22:00:00Z' })
+    expect(JSON.parse(String(init?.body))).toEqual({ event_ids: ['evt-1', 'evt-2'] })
   })
 
-  it('ackGlance surfaces the JSON error message on a non-ok response', async () => {
+  it('markGlanceSeen includes scope only when provided', async () => {
+    const fn = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fn)
+    await markGlanceSeen(['evt-1'], 'household')
+    const [, init] = fn.mock.calls[0]!
+    expect(JSON.parse(String(init?.body))).toEqual({ event_ids: ['evt-1'], scope: 'household' })
+  })
+
+  it('markGlanceSeen surfaces the JSON error message on a non-ok response', async () => {
     mockFetchOnce(
       jsonResponse(
-        { error: 'bad_request', message: 'seen_through must be ISO 8601' },
+        { error: 'bad_request', message: 'event_ids must be non-empty' },
         { status: 400, statusText: 'Bad Request' }
       )
     )
-    const thrown = await ackGlance('nope').catch((e: unknown) => e)
+    const thrown = await markGlanceSeen([]).catch((e: unknown) => e)
     expect(thrown).toBeInstanceOf(Error)
-    expect((thrown as Error).message).toContain('seen_through must be ISO 8601')
+    expect((thrown as Error).message).toContain('event_ids must be non-empty')
   })
 
-  it('ackGlance falls back to the status text when the error body is not JSON', async () => {
+  it('markGlanceSeen falls back to the status text when the error body is not JSON', async () => {
     mockFetchOnce(new Response('not json', { status: 502, statusText: 'Bad Gateway' }))
-    const thrown = await ackGlance('2026-06-04T22:00:00Z').catch((e: unknown) => e)
+    const thrown = await markGlanceSeen(['evt-1']).catch((e: unknown) => e)
     expect(thrown).toBeInstanceOf(Error)
     expect((thrown as Error).message).toContain('502 Bad Gateway')
   })

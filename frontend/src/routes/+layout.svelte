@@ -64,13 +64,14 @@
     } catch (err) {
       console.error('[layout] groupsStore.init failed:', err)
     }
-    // Cold-open trigger: if the user lands on the grid with unseen
-    // moments, slide the peek up once. No visibilitychange / lifecycle
-    // re-fire — the "while you were away" UX is by design tied to a
-    // fresh session, not to every tab focus.
+    // Cold-open trigger: if the user lands on the grid with genuinely
+    // new unseen moments (none of which the session has already
+    // surfaced), slide the peek up. The same condition runs again on
+    // every iOS resume below — that's the path that re-opens the peek
+    // for moments that arrived while the app was backgrounded.
     try {
       void glanceStore.load().then(() => {
-        if (page.route.id === '/' && glanceStore.unseenCount > 0) {
+        if (page.route.id === '/' && glanceStore.hasNewUnseen()) {
           glanceStore.openPeek()
         }
       })
@@ -81,6 +82,11 @@
     lifecycle.init()
 
     // Cameras polling and SSE re-open on resume; pause/close on background.
+    // Glance is also refreshed on resume and the peek re-opens for any
+    // genuinely new moments — moments already surfaced in this session
+    // stay suppressed via presentedIds. Long absences (>30 min) hit the
+    // lifecycle full-reload path instead and go through the cold-open
+    // branch above.
     const offBg = lifecycle.onBackground(() => {
       camerasStore.stopPolling()
       eventsStreamStore.close()
@@ -88,6 +94,11 @@
     const offFg = lifecycle.onForeground(() => {
       camerasStore.startPolling()
       eventsStreamStore.reopen()
+      void glanceStore.load().then(() => {
+        if (page.route.id === '/' && glanceStore.hasNewUnseen()) {
+          glanceStore.openPeek()
+        }
+      })
     })
 
     return () => {

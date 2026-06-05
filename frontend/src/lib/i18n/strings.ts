@@ -158,7 +158,8 @@ export const ui = {
   // glance peek (KF1 phase 3)
   glancePeekTitle: 'While you were away',
   glancePeekEmpty: 'Nothing new',
-  glanceBellLabel: 'While you were away'
+  glanceBellLabel: 'While you were away',
+  glanceMarkAllSeen: 'Mark all as seen'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.

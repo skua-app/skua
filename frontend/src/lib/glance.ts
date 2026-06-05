@@ -1,11 +1,10 @@
-import type { EventItem, Moment } from '$lib/api'
+import type { EventItem, GlanceMoment, Moment } from '$lib/api'
 
-// pickSeenThrough returns the timestamp to ack against on dismiss. The
-// server returns moments newest-first, so the first moment's started_at
-// covers everything in the unseen list. Returns null when the list is
-// empty (nothing to ack).
-export function pickSeenThrough(moments: Moment[]): string | null {
-  return moments[0]?.started_at ?? null
+// unseenRepresentativeIds returns the representative event id of every
+// moment whose seen flag is false. Used by mark-all-seen to compute the
+// set of ids to send to POST /api/glance/seen in one batch.
+export function unseenRepresentativeIds(moments: GlanceMoment[]): string[] {
+  return moments.filter((m) => !m.seen).map((m) => m.representative_event_id)
 }
 
 // momentRouteTarget decides how a moment row should open: 'focus' for
