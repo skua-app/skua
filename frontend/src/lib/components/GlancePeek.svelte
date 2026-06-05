@@ -36,15 +36,30 @@
   }
 
   function onRowClick(moment: Moment) {
-    // Marking everything seen happens once, on dismiss. We trigger dismiss
-    // here so the badge clears the moment the user acts on any row, then
-    // navigate or pop the modal. dismiss also closes the sheet.
-    glanceStore.dismiss()
+    // Mark the row as viewed in this session so it dims after the user
+    // navigates back to the peek. Household seen-state is only advanced
+    // when the user explicitly dismisses the peek (BottomSheet onClose),
+    // never on a row tap — that lets the user open several clips in a
+    // row from the same sheet without losing the "unseen" badge.
+    glanceStore.markViewed(moment.representative_event_id)
     if (momentRouteTarget(moment) === 'focus') {
+      glanceStore.closePeek()
       goto(`/cam/${encodeURIComponent(moment.cam_id)}`)
     } else {
       modalEvent = momentToEventItem(moment)
     }
+  }
+
+  // A row is dimmed when it has been opened in this session OR when the
+  // household last_seen has already advanced past its started_at (the
+  // peek was reopened from the bell after a previous dismissal). Dimmed
+  // rows remain clickable so users can re-watch what they've already
+  // looked at.
+  function isDimmed(moment: Moment): boolean {
+    if (glanceStore.viewed.has(moment.representative_event_id)) return true
+    const seen = glanceStore.lastSeen
+    if (seen !== null && moment.started_at <= seen) return true
+    return false
   }
 </script>
 
@@ -59,7 +74,12 @@
     <ul class="gp-list" role="list">
       {#each glanceStore.moments as m (m.cam_id + m.started_at)}
         <li>
-          <button type="button" class="gp-row" onclick={() => onRowClick(m)}>
+          <button
+            type="button"
+            class="gp-row"
+            class:dimmed={isDimmed(m)}
+            onclick={() => onRowClick(m)}
+          >
             <div class="gp-thumb">
               <img
                 src={eventThumbnailURL(m.representative_event_id)}
@@ -119,6 +139,12 @@
   }
   .gp-row:hover {
     background: rgba(255, 255, 255, 0.03);
+  }
+  .gp-row.dimmed {
+    opacity: 0.45;
+  }
+  .gp-row.dimmed:hover {
+    opacity: 0.7;
   }
   .gp-thumb {
     aspect-ratio: 16 / 9;
