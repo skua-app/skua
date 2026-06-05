@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file at `GLANCE_STATE_PATH` (default `/data/glance.json`); single
   household timestamp, no per-user state. Internal, not yet surfaced in
   the UI. Phase 2 of the glance feature.
+- "While you were away" glance peek: on a cold start that lands on the
+  grid, a bottom sheet slides up listing unseen moments grouped per
+  camera; a header bell shows the unseen count and reopens the sheet
+  from any route. Dismissing the sheet marks everything seen for the
+  whole household via the seen-state endpoints. Cold-open only — no
+  re-fire on tab focus, no live SSE increment. Completes the glance
+  feature (phases 1–3).
 
 ### Changed
 

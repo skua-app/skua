@@ -147,6 +147,57 @@ export function eventClipURL(id: string, download = false): string {
   return download ? `${base}?download=1` : base
 }
 
+// Moment mirrors backend/internal/events.Moment exactly: a per-camera
+// time-cluster summarising one or more events. started_at is RFC3339
+// UTC; ended_at is null while any clustered event is still in progress.
+export type Moment = {
+  cam_id: string
+  started_at: string
+  ended_at: string | null
+  kinds: EventKind[]
+  labels: string[]
+  event_count: number
+  representative_event_id: string
+  representative_has_clip: boolean
+}
+
+// GlanceResponse is the envelope of GET /api/glance: the household
+// last_seen (null when never-acked), the unseen-moment count surfaced
+// to the badge, and the moment list itself (newest moment first).
+export type GlanceResponse = {
+  last_seen: string | null
+  unseen_count: number
+  moments: Moment[]
+}
+
+export async function fetchGlance(): Promise<GlanceResponse> {
+  return apiFetch<GlanceResponse>('/api/glance')
+}
+
+// ackGlance advances the household last_seen monotonically. The server
+// is the authority: an older or equal seen_through is a no-op and the
+// returned last_seen reflects the existing (newer) value.
+export async function ackGlance(seenThrough: string): Promise<{ last_seen: string }> {
+  const res = await fetch('/api/glance/ack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ seen_through: seenThrough })
+  })
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const body = (await res.json()) as { error?: string; message?: string }
+      if (body && typeof body.message === 'string' && body.message) {
+        message = body.message
+      }
+    } catch {
+      // non-JSON or empty body: keep the status-text fallback
+    }
+    throw new Error(`/api/glance/ack: ${message}`)
+  }
+  return res.json() as Promise<{ last_seen: string }>
+}
+
 // Camera groups (E3.3). Server-side single-membership: when a camera is added
 // to a group, it is removed from any other group atomically.
 export type Group = {

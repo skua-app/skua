@@ -154,7 +154,11 @@ export const ui = {
   accentCyan: 'Cyan',
   accentSage: 'Sage',
   accentAmber: 'Amber',
-  accentViolet: 'Violet'
+  accentViolet: 'Violet',
+  // glance peek (KF1 phase 3)
+  glancePeekTitle: 'While you were away',
+  glancePeekEmpty: 'Nothing new',
+  glanceBellLabel: 'While you were away'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.

@@ -156,7 +156,11 @@ export const ui = {
   accentCyan: 'Синий',
   accentSage: 'Зелёный',
   accentAmber: 'Жёлтый',
-  accentViolet: 'Фиолетовый'
+  accentViolet: 'Фиолетовый',
+  // glance peek (KF1 phase 3)
+  glancePeekTitle: 'Пока вас не было',
+  glancePeekEmpty: 'Ничего нового',
+  glanceBellLabel: 'Пока вас не было'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.
