@@ -1,6 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
-  import type { EventItem, Moment } from '$lib/api'
+  import type { EventItem, GlanceMoment } from '$lib/api'
   import { eventThumbnailURL } from '$lib/api'
   import BottomSheet from '$lib/components/BottomSheet.svelte'
   import EventModal from '$lib/components/EventModal.svelte'
@@ -29,19 +29,17 @@
     return camerasStore.cameras.find((c) => c.id === camId)?.name ?? camId
   }
 
-  function kindsLine(moment: Moment): string {
+  function kindsLine(moment: GlanceMoment): string {
     const parts = moment.kinds.map((k) => eventKindLabels[k] ?? k)
     const base = parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
     return moment.event_count > 1 ? `${base} (${moment.event_count})` : base
   }
 
-  function onRowClick(moment: Moment) {
-    // Mark the row as viewed in this session so it dims after the user
-    // navigates back to the peek. Household seen-state is only advanced
-    // when the user explicitly dismisses the peek (BottomSheet onClose),
-    // never on a row tap — that lets the user open several clips in a
-    // row from the same sheet without losing the "unseen" badge.
-    glanceStore.markViewed(moment.representative_event_id)
+  function onRowClick(moment: GlanceMoment) {
+    // Opening a moment marks just that one seen on the server. The peek
+    // itself stays open so the user can work through the list — only an
+    // explicit mark-all-seen or close button changes that.
+    void glanceStore.markOneSeen(moment.representative_event_id)
     if (momentRouteTarget(moment) === 'focus') {
       glanceStore.closePeek()
       goto(`/cam/${encodeURIComponent(moment.cam_id)}`)
@@ -50,27 +48,29 @@
     }
   }
 
-  // A row is dimmed when it has been opened in this session OR when the
-  // household last_seen has already advanced past its started_at (the
-  // peek was reopened from the bell after a previous dismissal). Dimmed
-  // rows remain clickable so users can re-watch what they've already
-  // looked at.
-  function isDimmed(moment: Moment): boolean {
-    if (glanceStore.viewed.has(moment.representative_event_id)) return true
-    const seen = glanceStore.lastSeen
-    if (seen !== null && moment.started_at <= seen) return true
-    return false
+  // A row is dimmed when the household has already marked its
+  // representative event seen. Dimmed rows remain clickable so users can
+  // re-watch what they've already looked at.
+  function isDimmed(moment: GlanceMoment): boolean {
+    return moment.seen
   }
 </script>
 
 <BottomSheet
   open={glanceStore.peekOpen}
-  onClose={() => glanceStore.dismiss()}
+  onClose={() => glanceStore.closePeek()}
   title={ui.glancePeekTitle}
 >
   {#if glanceStore.moments.length === 0}
     <div class="gp-empty">{ui.glancePeekEmpty}</div>
   {:else}
+    {#if glanceStore.unseenCount > 0}
+      <div class="gp-actions">
+        <button type="button" class="gp-mark-all" onclick={() => void glanceStore.markAllSeen()}>
+          {ui.glanceMarkAllSeen}
+        </button>
+      </div>
+    {/if}
     <ul class="gp-list" role="list">
       {#each glanceStore.moments as m (m.cam_id + m.started_at)}
         <li>
@@ -113,6 +113,28 @@
     text-align: center;
     color: var(--text-3);
     font-size: 13px;
+  }
+  .gp-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 4px 16px 8px;
+  }
+  .gp-mark-all {
+    background: transparent;
+    border: none;
+    padding: 4px 6px;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 4px;
+    transition:
+      color 120ms,
+      background 120ms;
+  }
+  .gp-mark-all:hover {
+    background: color-mix(in oklab, var(--accent) 12%, transparent);
   }
   .gp-list {
     list-style: none;

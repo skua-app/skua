@@ -38,16 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the grid, a bottom sheet slides up listing unseen moments grouped
   per camera. The peek stays open while you view individual clips —
   the clip modal opens on top of the sheet, and closing it returns
-  to the sheet so you can keep working through the list. A moment
-  is marked seen as soon as you open it, and a separate
-  mark-all-as-seen action clears the rest in one tap, so the unseen
-  badge tracks what you've actually reviewed. A header bell with
-  the unseen count reopens the peek from any route; the bell
-  persists in a muted grey state when nothing is unseen so you can
-  reopen the peek and re-watch what you already looked at. Moments
-  whose representative event is already in the household seen-set
-  are dimmed but stay clickable. Cold-open only — no re-fire on tab
-  focus, no live SSE increment. Completes the glance feature
+  to the sheet so you can keep working through the list. Opening a
+  moment marks just that one as seen on the server; a separate
+  mark-all-as-seen action clears the rest in one tap. Closing the
+  peek (close button, swipe-down, backdrop tap, or Escape) never
+  marks anything seen, so a glance and a dismiss don't quietly burn
+  the badge. A header bell with the unseen count reopens the peek
+  from any route; the bell persists in a muted grey state when
+  nothing is unseen so you can reopen the peek and re-watch what
+  you already looked at. Moments already in the household seen-set
+  are dimmed but stay clickable. On iOS resume the peek
+  resurfaces for genuinely new moments that arrived while the app
+  was backgrounded; moments the session has already surfaced stay
+  suppressed until you mark them seen. Completes the glance feature
   (phases 1–3).
 
 ### Fixed

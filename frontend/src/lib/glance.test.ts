@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Moment } from './api'
-import { momentRouteTarget, momentToEventItem, pickSeenThrough } from './glance'
+import type { GlanceMoment, Moment } from './api'
+import { momentRouteTarget, momentToEventItem, unseenRepresentativeIds } from './glance'
 
 function makeMoment(overrides: Partial<Moment> = {}): Moment {
   return {
@@ -16,17 +16,30 @@ function makeMoment(overrides: Partial<Moment> = {}): Moment {
   }
 }
 
-describe('pickSeenThrough', () => {
-  it('returns null on an empty list', () => {
-    expect(pickSeenThrough([])).toBeNull()
+function makeGlanceMoment(overrides: Partial<GlanceMoment> = {}): GlanceMoment {
+  return { ...makeMoment(), seen: false, ...overrides }
+}
+
+describe('unseenRepresentativeIds', () => {
+  it('returns an empty array when the input list is empty', () => {
+    expect(unseenRepresentativeIds([])).toEqual([])
   })
 
-  it("returns the first moment's started_at (newest-first ordering)", () => {
-    const moments: Moment[] = [
-      makeMoment({ started_at: '2026-06-04T22:30:00Z' }),
-      makeMoment({ started_at: '2026-06-04T22:00:00Z' })
+  it('returns only ids of moments where seen is false, preserving order', () => {
+    const moments: GlanceMoment[] = [
+      makeGlanceMoment({ representative_event_id: 'evt-a', seen: false }),
+      makeGlanceMoment({ representative_event_id: 'evt-b', seen: true }),
+      makeGlanceMoment({ representative_event_id: 'evt-c', seen: false })
     ]
-    expect(pickSeenThrough(moments)).toBe('2026-06-04T22:30:00Z')
+    expect(unseenRepresentativeIds(moments)).toEqual(['evt-a', 'evt-c'])
+  })
+
+  it('returns an empty array when every moment is already seen', () => {
+    const moments: GlanceMoment[] = [
+      makeGlanceMoment({ representative_event_id: 'evt-a', seen: true }),
+      makeGlanceMoment({ representative_event_id: 'evt-b', seen: true })
+    ]
+    expect(unseenRepresentativeIds(moments)).toEqual([])
   })
 })
 

@@ -160,7 +160,8 @@ export const ui = {
   // glance peek (KF1 phase 3)
   glancePeekTitle: 'Пока вас не было',
   glancePeekEmpty: 'Ничего нового',
-  glanceBellLabel: 'Пока вас не было'
+  glanceBellLabel: 'Пока вас не было',
+  glanceMarkAllSeen: 'Отметить всё как просмотренное'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.
