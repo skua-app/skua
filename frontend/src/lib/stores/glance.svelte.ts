@@ -8,6 +8,12 @@ class GlanceStore {
   moments = $state<Moment[]>([])
   loaded = $state(false)
   peekOpen = $state(false)
+  // Session-local set of representative event ids the user has already
+  // tapped in the current peek. Used to dim rows after they've been
+  // opened, so the user can tell which ones they've already watched in
+  // this sitting. Not persisted and never sent to the server — server
+  // seen-state is household-wide and only advances on dismiss().
+  viewed = $state<Set<string>>(new Set<string>())
 
   async load() {
     try {
@@ -24,6 +30,22 @@ class GlanceStore {
 
   openPeek() {
     this.peekOpen = true
+  }
+
+  // closePeek closes the sheet without acking the seen-state. Used when
+  // the user navigates to a live focus view from a moment row — the
+  // route change closes the sheet, but the household last_seen only
+  // advances when the user explicitly dismisses the peek itself.
+  closePeek() {
+    this.peekOpen = false
+  }
+
+  // markViewed records that the user has tapped a row in this session.
+  // A fresh Set is assigned so Svelte's $state proxy fires reactivity;
+  // mutating the existing Set in place would not trigger updates.
+  markViewed(eventId: string) {
+    if (this.viewed.has(eventId)) return
+    this.viewed = new Set([...this.viewed, eventId])
   }
 
   // dismiss is the single path that marks everything seen. The sheet

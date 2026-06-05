@@ -117,15 +117,18 @@
     </div>
 
     <div class="ah-d-right">
-      {#if glanceStore.unseenCount > 0}
+      {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
           type="button"
           class="ah-bell"
+          class:muted={glanceStore.unseenCount === 0}
           aria-label={ui.glanceBellLabel}
           onclick={() => glanceStore.openPeek()}
         >
           <Icon name="bell" size={16} />
-          <span class="ah-bell-count">{glanceStore.unseenCount}</span>
+          {#if glanceStore.unseenCount > 0}
+            <span class="ah-bell-count">{glanceStore.unseenCount}</span>
+          {/if}
         </button>
       {/if}
       <span class="status-item">
@@ -159,15 +162,18 @@
         <span class="ah-m-title">{mobileTitle}</span>
       </div>
       <div class="ah-m-title-right">
-        {#if glanceStore.unseenCount > 0}
+        {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
           <button
             type="button"
             class="ah-bell"
+            class:muted={glanceStore.unseenCount === 0}
             aria-label={ui.glanceBellLabel}
             onclick={() => glanceStore.openPeek()}
           >
             <Icon name="bell" size={16} />
-            <span class="ah-bell-count">{glanceStore.unseenCount}</span>
+            {#if glanceStore.unseenCount > 0}
+              <span class="ah-bell-count">{glanceStore.unseenCount}</span>
+            {/if}
           </button>
         {/if}
         {#if showGridMode}
@@ -502,6 +508,14 @@
     color: var(--text);
     border-color: var(--border-strong);
     background: rgba(255, 255, 255, 0.04);
+  }
+  .ah-bell.muted {
+    color: var(--text-3);
+    border-color: color-mix(in oklab, var(--border) 60%, transparent);
+  }
+  .ah-bell.muted:hover {
+    color: var(--text-2);
+    border-color: var(--border);
   }
   .ah-bell-count {
     position: absolute;

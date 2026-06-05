@@ -29,11 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the UI. Phase 2 of the glance feature.
 - "While you were away" glance peek: on a cold start that lands on the
   grid, a bottom sheet slides up listing unseen moments grouped per
-  camera; a header bell shows the unseen count and reopens the sheet
-  from any route. Dismissing the sheet marks everything seen for the
-  whole household via the seen-state endpoints. Cold-open only — no
-  re-fire on tab focus, no live SSE increment. Completes the glance
-  feature (phases 1–3).
+  camera. The peek stays open while you view individual clips — the
+  clip modal opens on top of the sheet, and closing it returns to the
+  sheet so you can keep working through the list. Household seen-state
+  is marked once when you close the peek, not on each row tap, so the
+  unseen badge reflects what you actually finished reviewing. A header
+  bell with the unseen count reopens the peek from any route; the bell
+  persists in a muted grey state when nothing is unseen so you can
+  reopen the peek and re-watch what you already looked at. Moments
+  that have already been acked, or that you opened earlier in this
+  session, are dimmed but stay clickable. Cold-open only — no re-fire
+  on tab focus, no live SSE increment. Completes the glance feature
+  (phases 1–3).
 
 ### Fixed
 
