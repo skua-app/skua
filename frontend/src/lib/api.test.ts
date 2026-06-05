@@ -5,8 +5,10 @@ import {
   RefreshApiError,
   RuntimeConfigApiError,
   StreamOverrideApiError,
+  ackGlance,
   createGroup,
   fetchCameras,
+  fetchGlance,
   fetchPrefs,
   fetchStreamOverrides,
   refreshCameras,
@@ -17,6 +19,7 @@ import {
   updateGroup,
   updatePrefs,
   type Camera,
+  type GlanceResponse,
   type Prefs
 } from './api'
 
@@ -197,6 +200,63 @@ describe('RuntimeConfigApiError', () => {
     expect(err.code).toBe('internal')
     expect(err.status).toBe(500)
     expect(err.message).toBe('500 Internal Server Error')
+  })
+})
+
+describe('glance', () => {
+  it('fetchGlance parses the envelope', async () => {
+    const body: GlanceResponse = {
+      last_seen: '2026-06-04T22:00:00Z',
+      unseen_count: 1,
+      moments: [
+        {
+          cam_id: 'camA',
+          started_at: '2026-06-04T22:05:00Z',
+          ended_at: '2026-06-04T22:05:30Z',
+          kinds: ['person'],
+          labels: ['person'],
+          event_count: 1,
+          representative_event_id: 'evt-1',
+          representative_has_clip: true
+        }
+      ]
+    }
+    mockFetchOnce(jsonResponse(body))
+    await expect(fetchGlance()).resolves.toEqual(body)
+  })
+
+  it('ackGlance posts seen_through and parses the response', async () => {
+    const fn = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ last_seen: '2026-06-04T22:00:00Z' }))
+    vi.stubGlobal('fetch', fn)
+    await expect(ackGlance('2026-06-04T22:00:00Z')).resolves.toEqual({
+      last_seen: '2026-06-04T22:00:00Z'
+    })
+    expect(fn).toHaveBeenCalledTimes(1)
+    const [url, init] = fn.mock.calls[0]!
+    expect(url).toBe('/api/glance/ack')
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({ seen_through: '2026-06-04T22:00:00Z' })
+  })
+
+  it('ackGlance surfaces the JSON error message on a non-ok response', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'bad_request', message: 'seen_through must be ISO 8601' },
+        { status: 400, statusText: 'Bad Request' }
+      )
+    )
+    const thrown = await ackGlance('nope').catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toContain('seen_through must be ISO 8601')
+  })
+
+  it('ackGlance falls back to the status text when the error body is not JSON', async () => {
+    mockFetchOnce(new Response('not json', { status: 502, statusText: 'Bad Gateway' }))
+    const thrown = await ackGlance('2026-06-04T22:00:00Z').catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toContain('502 Bad Gateway')
   })
 })
 

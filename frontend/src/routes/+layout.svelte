@@ -3,6 +3,7 @@
   import { onMount } from 'svelte'
   import { page } from '$app/state'
   import AppHeader from '$lib/components/AppHeader.svelte'
+  import GlancePeek from '$lib/components/GlancePeek.svelte'
   import MobileTabBar from '$lib/components/MobileTabBar.svelte'
   import InstallPrompt from '$lib/components/InstallPrompt.svelte'
   import { registerSW } from 'virtual:pwa-register'
@@ -10,6 +11,7 @@
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { configStore } from '$lib/stores/config.svelte'
   import { eventsStreamStore } from '$lib/stores/events-stream.svelte'
+  import { glanceStore } from '$lib/stores/glance.svelte'
   import { groupsStore } from '$lib/stores/groups.svelte'
   import { lifecycle } from '$lib/lifecycle.svelte'
 
@@ -62,6 +64,19 @@
     } catch (err) {
       console.error('[layout] groupsStore.init failed:', err)
     }
+    // Cold-open trigger: if the user lands on the grid with unseen
+    // moments, slide the peek up once. No visibilitychange / lifecycle
+    // re-fire — the "while you were away" UX is by design tied to a
+    // fresh session, not to every tab focus.
+    try {
+      void glanceStore.load().then(() => {
+        if (page.route.id === '/' && glanceStore.unseenCount > 0) {
+          glanceStore.openPeek()
+        }
+      })
+    } catch (err) {
+      console.error('[layout] glanceStore.load failed:', err)
+    }
 
     lifecycle.init()
 
@@ -95,6 +110,8 @@
   {#if !isDesktop}
     <MobileTabBar />
   {/if}
+
+  <GlancePeek />
 </div>
 
 <InstallPrompt />

@@ -6,6 +6,7 @@
   import OnlineDot from '$lib/components/OnlineDot.svelte'
   import Segmented from '$lib/components/Segmented.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
+  import { glanceStore } from '$lib/stores/glance.svelte'
   import { groupsStore } from '$lib/stores/groups.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { ui } from '$lib/i18n/strings'
@@ -116,6 +117,17 @@
     </div>
 
     <div class="ah-d-right">
+      {#if glanceStore.unseenCount > 0}
+        <button
+          type="button"
+          class="ah-bell"
+          aria-label={ui.glanceBellLabel}
+          onclick={() => glanceStore.openPeek()}
+        >
+          <Icon name="bell" size={16} />
+          <span class="ah-bell-count">{glanceStore.unseenCount}</span>
+        </button>
+      {/if}
       <span class="status-item">
         <OnlineDot online={true} size={5} />
         <Mono size={10} color="var(--text-2)" letterSpacing={0.5} uppercase>
@@ -146,13 +158,26 @@
         {/if}
         <span class="ah-m-title">{mobileTitle}</span>
       </div>
-      {#if showGridMode}
-        <Segmented
-          value={prefsStore.gridMode}
-          options={gridModeOptions}
-          onChange={(v) => prefsStore.setGridMode(v)}
-        />
-      {/if}
+      <div class="ah-m-title-right">
+        {#if glanceStore.unseenCount > 0}
+          <button
+            type="button"
+            class="ah-bell"
+            aria-label={ui.glanceBellLabel}
+            onclick={() => glanceStore.openPeek()}
+          >
+            <Icon name="bell" size={16} />
+            <span class="ah-bell-count">{glanceStore.unseenCount}</span>
+          </button>
+        {/if}
+        {#if showGridMode}
+          <Segmented
+            value={prefsStore.gridMode}
+            options={gridModeOptions}
+            onChange={(v) => prefsStore.setGridMode(v)}
+          />
+        {/if}
+      </div>
     </div>
     <div class="ah-m-status-row">
       <div class="ah-m-status-left">
@@ -447,5 +472,50 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
+  }
+
+  .ah-m-title-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ah-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: var(--text-2);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+      color 120ms,
+      border-color 120ms,
+      background 120ms;
+  }
+  .ah-bell:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .ah-bell-count {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #08121c;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
   }
 </style>
