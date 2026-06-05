@@ -20,26 +20,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recent Frigate events into per-camera "moments" (time-clusters with a
   5-minute gap). Read-only and stateless: no persistence, no seen-state,
   not yet surfaced in the UI. Phase 1 of the glance feature.
-- Server-side household seen-state for the glance feature. `GET /api/glance`
-  returns the unseen "while you were away" moments plus an unseen count
-  composed from the Phase 1 grouping, and `POST /api/glance/ack` advances
-  the stored `last_seen` monotonically. Backed by a new dedicated state
-  file at `GLANCE_STATE_PATH` (default `/data/glance.json`); single
-  household timestamp, no per-user state. Internal, not yet surfaced in
-  the UI. Phase 2 of the glance feature.
-- "While you were away" glance peek: on a cold start that lands on the
-  grid, a bottom sheet slides up listing unseen moments grouped per
-  camera. The peek stays open while you view individual clips — the
-  clip modal opens on top of the sheet, and closing it returns to the
-  sheet so you can keep working through the list. Household seen-state
-  is marked once when you close the peek, not on each row tap, so the
-  unseen badge reflects what you actually finished reviewing. A header
-  bell with the unseen count reopens the peek from any route; the bell
+- Server-side household seen-state for the glance feature, modelled
+  as a SET of viewed event ids rather than a single `last_seen`
+  timestamp. `GET /api/glance` returns every recent "while you were
+  away" moment with a per-moment `seen` flag plus an `unseen_count`,
+  and `POST /api/glance/seen` (body `{event_ids, scope?}`) marks one
+  or more events as seen. The seen-set is keyed on each moment's
+  representative event id, so a moment flips to seen as soon as its
+  representative is marked. Backed by a dedicated state file at
+  `GLANCE_STATE_PATH` (default `/data/glance.json`) pruned to a
+  30-day retention window. The set is scope-keyed under a single
+  v1 scope ("household") shared by every client on the LAN-only
+  deployment; the `scope` field is reserved for a future per-user
+  split. Internal, not yet surfaced in the UI. Phase 2 of the
+  glance feature.
+- "While you were away" glance peek: on a cold start that lands on
+  the grid, a bottom sheet slides up listing unseen moments grouped
+  per camera. The peek stays open while you view individual clips —
+  the clip modal opens on top of the sheet, and closing it returns
+  to the sheet so you can keep working through the list. A moment
+  is marked seen as soon as you open it, and a separate
+  mark-all-as-seen action clears the rest in one tap, so the unseen
+  badge tracks what you've actually reviewed. A header bell with
+  the unseen count reopens the peek from any route; the bell
   persists in a muted grey state when nothing is unseen so you can
   reopen the peek and re-watch what you already looked at. Moments
-  that have already been acked, or that you opened earlier in this
-  session, are dimmed but stay clickable. Cold-open only — no re-fire
-  on tab focus, no live SSE increment. Completes the glance feature
+  whose representative event is already in the household seen-set
+  are dimmed but stay clickable. Cold-open only — no re-fire on tab
+  focus, no live SSE increment. Completes the glance feature
   (phases 1–3).
 
 ### Fixed
