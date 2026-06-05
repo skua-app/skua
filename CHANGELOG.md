@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-fire on tab focus, no live SSE increment. Completes the glance
   feature (phases 1–3).
 
+### Fixed
+
+- The shared bottom sheet now keeps its drag handle and title pinned
+  while the content scrolls, instead of scrolling them off the top
+  with the list. Also improves the camera-group filter sheet, which
+  reuses the same component.
+
 ### Changed
 
 - Container restart-policy requirement for runtime reconfiguration is

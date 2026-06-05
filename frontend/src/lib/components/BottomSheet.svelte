@@ -84,7 +84,9 @@
     border-top: 1px solid var(--border);
     padding: 6px 0 calc(env(safe-area-inset-bottom, 0px) + 12px);
     max-height: 60vh;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     animation: bs-slide 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .bs-handle {
@@ -93,6 +95,7 @@
     border-radius: 2px;
     background: var(--border-strong);
     margin: 6px auto 10px;
+    flex: 0 0 auto;
   }
   .bs-title {
     padding: 0 20px 10px;
@@ -100,9 +103,15 @@
     font-weight: 600;
     color: var(--text);
     border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
   }
   .bs-content {
     padding: 8px 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    /* min-height: 0 unlocks the flex item so its scrollable child can
+       actually overflow rather than expanding the parent past max-height. */
+    min-height: 0;
   }
 
   @keyframes bs-slide {
