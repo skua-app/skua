@@ -461,51 +461,68 @@ type Moment = {
 
 // === Glance — Phase 2 (internal) ===
 //
-// Household seen-state for the glance feature. Phase 2 adds a single
-// household `last_seen` timestamp persisted to a dedicated state file
-// (env GLANCE_STATE_PATH, default /data/glance.json) and two endpoints
-// that compose the Phase 1 moment grouping with that timestamp. Still
-// not surfaced in the UI; UI wiring is Phase 3.
+// Household seen-state for the glance feature. Phase 2 persists a
+// scope-keyed SET of viewed event ids to a dedicated state file
+// (env GLANCE_STATE_PATH, default /data/glance.json) and exposes
+// two endpoints that compose the Phase 1 moment grouping with that
+// set. Still internal; UI wiring is Phase 3.
 //
-// The seen-state is household-wide (one timestamp shared across all
-// users on the LAN-only deployment), monotonic (an older or equal Ack
-// is a no-op), and decoupled from prefs — it lives in its own store
-// alongside groups / camera_names / capabilities.
+// The seen-state is keyed on each moment's representative_event_id:
+// a moment is "seen" iff its representative event id appears in the
+// household scope's set. The set is scope-keyed under a single v1
+// scope ("household") shared by every client on the LAN-only
+// deployment; the `scope` field is reserved for a future per-user
+// split and clients must omit it (or send "household") in v1. Set
+// entries are pruned to a 30-day retention window on load and after
+// every write so the file stays bounded.
 
 // GET /api/glance
 //   No query params. Always pulls a fixed lookback window of recent
-//   events (capped at the events endpoint's max limit) and runs the
-//   Phase 1 grouping with `since` = stored last_seen. There is no
-//   pagination cursor; clients re-fetch from the top.
+//   events (capped at the events endpoint's max limit) and groups
+//   them into moments with no time filter — every recent moment is
+//   surfaced. Each moment carries a `seen` boolean derived from the
+//   household seen-set keyed on its representative_event_id;
+//   `unseen_count` is the count of moments whose `seen` is false.
+//   There is no pagination cursor; clients re-fetch from the top.
 //
 // Response: Cache-Control: no-store.
 
 type GlanceResponse = {
-  last_seen: string | null   // ISO 8601 UTC, null when never-acked
-  unseen_count: number       // == moments.length, surfaced for badge UI
-  moments: Moment[]          // same shape as /api/moments items
+  unseen_count: number     // moments where seen === false, surfaced for badge UI
+  moments: GlanceMoment[]  // all surviving moments, both seen and unseen
+}
+type GlanceMoment = Moment & { seen: boolean }
+
+// POST /api/glance/seen
+//   body: { event_ids: string[], scope?: string }
+//   Marks each id as seen in the requested scope, refreshing the
+//   timestamp on idempotent re-marks. `scope` defaults to
+//   "household" when absent or empty; the field is accepted on the
+//   wire for forward-compat with a future per-user split but v1
+//   has no per-user identity and always operates on the household
+//   set. Malformed body / missing event_ids / non-array event_ids
+//   → 400 bad_request. Empty event_ids array → 204 with no write.
+//   Returns 204 No Content on success; 500 internal on persistence
+//   failure.
+
+type GlanceSeenRequest = {
+  event_ids: string[]
+  scope?: string   // defaults to "household"; reserved for a future per-user split
 }
 
-// POST /api/glance/ack
-//   body: { seen_through: string }   // ISO 8601 UTC
-//   Advances the stored last_seen monotonically: a seen_through
-//   strictly after the current last_seen overwrites it and is
-//   persisted atomically; otherwise the call is a no-op and the
-//   existing value is returned. Malformed / missing seen_through →
-//   400 bad_request.
+// Storage: JSON at $GLANCE_STATE_PATH (default /data/glance.json;
+// the file is auto-created on the first non-empty MarkSeen). Shape:
+// { "<scope>": { "<event_id>": <seen_at_unix_seconds>, ... }, ... }.
+// A missing file means an empty seen-set; a corrupt file or an old
+// pre-Model-B { "last_seen": ... } file is logged and treated the
+// same way (does not block startup, no automatic migration of the
+// last_seen value) — this is best-effort recency state, not an
+// audit log.
 //
-// Response: Cache-Control: no-store.
-
-type GlanceAckRequest = {
-  seen_through: string   // ISO 8601 UTC
-}
-type GlanceAckResponse = {
-  last_seen: string | null   // resulting last_seen after the monotonic merge
-}
-
-// Storage: JSON at $GLANCE_STATE_PATH (default /data/glance.json; the
-// file is auto-created on first Ack). Shape: { "last_seen": "<ISO>" }
-// or { "last_seen": null }. A missing file means "never-seen"; a
-// corrupt file is logged and treated the same way (does not block
-// startup) — this is best-effort recency state, not an audit log.
+// Known edge: `seen` is keyed on representative_event_id, which is
+// derived per request from the current Frigate result set. If the
+// window of recent events shifts so that a moment regroups against
+// a different representative event id, that moment can re-surface
+// as unseen until the new representative id is also marked seen.
+// Acceptable for a small-household glance UI.
 ```

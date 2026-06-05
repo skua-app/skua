@@ -1,12 +1,14 @@
 // Package glance persists the household "seen-state" for the glance
-// feature: a single last_seen timestamp shared across the household.
-// The on-disk shape is an object with one field, last_seen, holding
-// either an RFC3339 string or null when nothing has been seen yet.
+// feature: a scope-keyed set of viewed event ids. A moment is "seen"
+// when its representative event id appears in the household scope's
+// set. The on-disk shape is an object mapping a scope name to an object
+// mapping an event id to a seen-at unix-seconds integer.
 //
 // The store is intentionally minimal: it knows nothing about events,
-// HTTP, or grouping. It only holds and persists the timestamp. The
-// API handler composes it with the Phase 1 moment grouping to build
-// the GET /api/glance "while you were away" payload.
+// HTTP, or moment grouping. It only holds and persists the set,
+// pruning entries older than the retention window so the file stays
+// bounded. The API handler composes it with the moment grouping to
+// build the GET /api/glance "while you were away" payload.
 package glance
 
 import (
@@ -20,26 +22,36 @@ import (
 	"time"
 )
 
-// state is the JSON shape persisted at the store's path. last_seen is
-// a pointer so the absent / "never-seen" case round-trips as JSON null
-// rather than the zero RFC3339 string.
-type state struct {
-	LastSeen *string `json:"last_seen"`
-}
+// ScopeHousehold is the v1 seen-state scope: a single set shared by
+// every client on the LAN-only deployment. The scope field is
+// reserved for a future per-user split; today every read and write
+// uses this constant.
+const ScopeHousehold = "household"
 
-// Store is a thread-safe, file-backed last_seen store.
+// glanceRetention bounds how long a seen entry survives. Anything
+// older than now minus this window is pruned on load and after every
+// write so the file stays bounded for a long-running household
+// install.
+const glanceRetention = 30 * 24 * time.Hour
+
+// state is the JSON shape persisted at the store's path: a map of
+// scope name → map of event id → seen-at unix seconds.
+type state map[string]map[string]int64
+
+// Store is a thread-safe, file-backed seen-id store keyed by scope.
 type Store struct {
 	path string
 	mu   sync.RWMutex
-	cur  time.Time // zero ⇒ never-seen
+	cur  state
 }
 
-// New loads the last_seen timestamp from path. A missing file means
-// "never-seen" (zero time). A parse error or an unparseable last_seen
-// string is logged and the store starts from zero — a corrupt
-// best-effort state file must not block startup.
+// New loads the seen-state from path. A missing file means an empty
+// store. A parse error, or an old last_seen-shaped file from before
+// the Model B migration, is logged and the store starts empty —
+// best-effort recency state must not block startup. Entries older
+// than the retention window are pruned on load.
 func New(path string) (*Store, error) {
-	s := &Store{path: path}
+	s := &Store{path: path, cur: state{}}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -47,49 +59,84 @@ func New(path string) (*Store, error) {
 		}
 		return nil, fmt.Errorf("glance: read %s: %w", path, err)
 	}
-	var st state
-	if err := json.Unmarshal(data, &st); err != nil {
-		slog.Warn("glance: parse failed, starting from never-seen", "path", path, "error", err)
+	var loaded state
+	if err := json.Unmarshal(data, &loaded); err != nil {
+		slog.Warn("glance: parse failed, starting from empty seen-set", "path", path, "error", err)
 		return s, nil
 	}
-	if st.LastSeen != nil && *st.LastSeen != "" {
-		t, perr := time.Parse(time.RFC3339, *st.LastSeen)
-		if perr != nil {
-			slog.Warn("glance: last_seen unparseable, starting from never-seen", "path", path, "value", *st.LastSeen, "error", perr)
-			return s, nil
+	// Reject the old { "last_seen": ... } shape: it unmarshals into a
+	// map whose values are not map[string]int64. json.Unmarshal silently
+	// produces an empty loaded in that case (top-level last_seen is a
+	// string, not an object), but be defensive against any non-set
+	// scope value as well.
+	cleaned := state{}
+	for scope, ids := range loaded {
+		if ids == nil {
+			continue
 		}
-		s.cur = t
+		cleaned[scope] = ids
 	}
+	s.cur = cleaned
+	s.pruneLocked(time.Now())
 	return s, nil
 }
 
-// LastSeen returns the current last_seen timestamp under a read lock.
-// The zero time.Time means "never-seen".
-func (s *Store) LastSeen() time.Time {
+// SeenSet returns a copy of the given scope's id set under a read
+// lock. An absent scope yields an empty set. The returned map is
+// safe for the caller to mutate.
+func (s *Store) SeenSet(scope string) map[string]struct{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.cur
+	out := make(map[string]struct{}, len(s.cur[scope]))
+	for id := range s.cur[scope] {
+		out[id] = struct{}{}
+	}
+	return out
 }
 
-// Ack advances last_seen to seenThrough when it is strictly after the
-// current value, persists the change atomically, and returns the
-// resulting current value. When seenThrough is equal to or older than
-// the current value, Ack is a no-op (no disk write) and returns the
-// existing value — the household last_seen is monotonic.
-func (s *Store) Ack(seenThrough time.Time) (time.Time, error) {
+// MarkSeen adds each id to the scope's set with at's unix seconds,
+// prunes entries older than the retention window, and atomically
+// persists the result. Re-marking an id is idempotent and refreshes
+// its timestamp. An empty ids slice is a no-op with no write.
+func (s *Store) MarkSeen(scope string, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !seenThrough.After(s.cur) {
-		return s.cur, nil
+	if s.cur[scope] == nil {
+		s.cur[scope] = map[string]int64{}
 	}
-	if err := s.atomicWrite(seenThrough); err != nil {
-		return s.cur, err
+	ts := at.Unix()
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		s.cur[scope][id] = ts
 	}
-	s.cur = seenThrough
-	return s.cur, nil
+	s.pruneLocked(at)
+	return s.atomicWrite()
 }
 
-func (s *Store) atomicWrite(t time.Time) error {
+// pruneLocked drops entries whose seen-at is older than now minus
+// glanceRetention. Caller must hold s.mu (write or read+write upgrade).
+// Empty scopes after pruning are removed so the persisted file does
+// not accumulate dead keys.
+func (s *Store) pruneLocked(now time.Time) {
+	cutoff := now.Add(-glanceRetention).Unix()
+	for scope, ids := range s.cur {
+		for id, ts := range ids {
+			if ts < cutoff {
+				delete(ids, id)
+			}
+		}
+		if len(ids) == 0 {
+			delete(s.cur, scope)
+		}
+	}
+}
+
+func (s *Store) atomicWrite() error {
 	dir := filepath.Dir(s.path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("glance: mkdir %s: %w", dir, err)
@@ -100,9 +147,7 @@ func (s *Store) atomicWrite(t time.Time) error {
 	}
 	tmpPath := tmp.Name()
 
-	formatted := t.UTC().Format(time.RFC3339)
-	payload := state{LastSeen: &formatted}
-	if err := json.NewEncoder(tmp).Encode(payload); err != nil {
+	if err := json.NewEncoder(tmp).Encode(s.cur); err != nil {
 		if cerr := tmp.Close(); cerr != nil {
 			return fmt.Errorf("glance: encode: %w; close temp: %v", err, cerr)
 		}

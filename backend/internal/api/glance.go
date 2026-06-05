@@ -8,36 +8,43 @@ import (
 	"time"
 
 	"github.com/skua-app/skua/internal/events"
+	"github.com/skua-app/skua/internal/glance"
 )
 
 const glanceListTimeout = 5 * time.Second
 
-// glanceResponse is the JSON envelope for GET /api/glance: the household
-// last_seen (RFC3339 string, or null when never-seen), the count of
-// unseen moments, and the moment slice itself.
+// glanceMoment embeds events.Moment and adds a per-moment seen flag
+// computed from the household scope's seen-set keyed on the moment's
+// representative event id.
+type glanceMoment struct {
+	events.Moment
+	Seen bool `json:"seen"`
+}
+
+// glanceResponse is the JSON envelope for GET /api/glance: the count
+// of moments whose representative event has not yet been marked seen,
+// and the surviving moments themselves (all of them, each carrying
+// its seen flag).
 type glanceResponse struct {
-	LastSeen    *string         `json:"last_seen"`
-	UnseenCount int             `json:"unseen_count"`
-	Moments     []events.Moment `json:"moments"`
+	UnseenCount int            `json:"unseen_count"`
+	Moments     []glanceMoment `json:"moments"`
 }
 
-// glanceAckRequest is the JSON body for POST /api/glance/ack.
-type glanceAckRequest struct {
-	SeenThrough string `json:"seen_through"`
-}
-
-// glanceAckResponse is the JSON envelope for POST /api/glance/ack: the
-// resulting household last_seen after the monotonic merge.
-type glanceAckResponse struct {
-	LastSeen *string `json:"last_seen"`
+// glanceSeenRequest is the JSON body for POST /api/glance/seen.
+// EventIDs is required; Scope is reserved for a future per-user split
+// and defaults to ScopeHousehold when absent.
+type glanceSeenRequest struct {
+	EventIDs *[]string `json:"event_ids"`
+	Scope    string    `json:"scope"`
 }
 
 // handleGlance serves GET /api/glance: the "while you were away"
 // payload. Pulls a fixed lookback window of recent events (capped at
-// eventsMaxLimit), runs the Phase 1 moment grouping with since set to
-// the stored last_seen, and returns the surviving moments plus their
-// count. There is no client-supplied since or limit on this endpoint;
-// the window is fixed.
+// eventsMaxLimit), groups them into moments with no time filter, and
+// annotates each moment with seen = its representative_event_id is
+// in the household seen-set. unseen_count is the count of moments
+// whose seen flag is false. There is no client-supplied since or
+// limit; the window is fixed.
 func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), glanceListTimeout)
 	defer cancel()
@@ -54,13 +61,16 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lastSeen := h.glance.LastSeen()
-	moments := events.GroupMoments(resp.Items, lastSeen)
+	moments := events.GroupMoments(resp.Items, time.Time{})
+	seenSet := h.glance.SeenSet(glance.ScopeHousehold)
 
-	out := glanceResponse{
-		LastSeen:    formatLastSeen(lastSeen),
-		UnseenCount: len(moments),
-		Moments:     moments,
+	out := glanceResponse{Moments: make([]glanceMoment, len(moments))}
+	for i, m := range moments {
+		_, seen := seenSet[m.RepresentativeEventID]
+		out.Moments[i] = glanceMoment{Moment: m, Seen: seen}
+		if !seen {
+			out.UnseenCount++
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -70,48 +80,34 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleGlanceAck serves POST /api/glance/ack: parses an RFC3339
-// seen_through, advances the stored last_seen monotonically via the
-// glance store, and returns the resulting value. The /api group's
-// cross-site guard already enforces Sec-Fetch-Site on this mutating
-// route; no extra check here.
-func (h *Handler) handleGlanceAck(w http.ResponseWriter, r *http.Request) {
-	var body glanceAckRequest
+// handleGlanceSeen serves POST /api/glance/seen: marks the supplied
+// event ids as seen in the requested scope (default household). The
+// /api group's cross-site guard already enforces Sec-Fetch-Site on
+// this mutating route; no extra check here. There is no per-user
+// identity in v1 — scope is accepted on the wire for forward-compat
+// only.
+func (h *Handler) handleGlanceSeen(w http.ResponseWriter, r *http.Request) {
+	var body glanceSeenRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, h.logger, http.StatusBadRequest, "bad_request", "request body must be valid JSON", err)
 		return
 	}
-	if body.SeenThrough == "" {
-		writeError(w, h.logger, http.StatusBadRequest, "bad_request", "seen_through is required", nil)
+	if body.EventIDs == nil {
+		writeError(w, h.logger, http.StatusBadRequest, "bad_request", "event_ids is required", nil)
 		return
 	}
-	t, err := time.Parse(time.RFC3339, body.SeenThrough)
-	if err != nil {
-		writeError(w, h.logger, http.StatusBadRequest, "bad_request", "seen_through must be ISO 8601", err)
+	scope := body.Scope
+	if scope == "" {
+		scope = glance.ScopeHousehold
+	}
+	ids := *body.EventIDs
+	if len(ids) == 0 {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-
-	current, err := h.glance.Ack(t)
-	if err != nil {
-		writeError(w, h.logger, http.StatusInternalServerError, "internal", "could not persist glance ack", err)
+	if err := h.glance.MarkSeen(scope, ids, time.Now()); err != nil {
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "could not persist glance seen", err)
 		return
 	}
-
-	out := glanceAckResponse{LastSeen: formatLastSeen(current)}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	if err := json.NewEncoder(w).Encode(out); err != nil {
-		h.logger.Error("encode glance ack response", "error", err)
-	}
-}
-
-// formatLastSeen converts a possibly-zero time.Time into the *string
-// shape used in the glance API: nil when never-seen, otherwise an
-// RFC3339 UTC string.
-func formatLastSeen(t time.Time) *string {
-	if t.IsZero() {
-		return nil
-	}
-	s := t.UTC().Format(time.RFC3339)
-	return &s
+	w.WriteHeader(http.StatusNoContent)
 }
