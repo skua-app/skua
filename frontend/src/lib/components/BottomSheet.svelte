@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
+  import { fade } from 'svelte/transition'
+  import { cubicOut } from 'svelte/easing'
   import { ui } from '$lib/i18n/strings'
 
   type Props = {
@@ -35,6 +37,18 @@
     if (e.target === e.currentTarget) onClose()
   }
 
+  // Symmetric intro/outro: percentage-based slide of the full sheet
+  // height. Svelte's built-in fly takes pixels only; this custom
+  // transition lets us slide from translateY(100%) regardless of how
+  // tall the sheet ends up.
+  function slideUp(_node: Element, { duration = 200 }: { duration?: number } = {}) {
+    return {
+      duration,
+      easing: cubicOut,
+      css: (t: number) => `transform: translateY(${(1 - t) * 100}%)`
+    }
+  }
+
   // Hand-rolled swipe-to-dismiss. Bound to the pinned header (handle +
   // title + close button), never to the scrolling content, so it can't
   // fight the list's vertical scroll. Pointer events handle touch + mouse
@@ -42,11 +56,20 @@
   // the gesture for native scroll / pull-to-refresh.
   let dragOffset = $state(0)
   let dragging = $state(false)
+  let snapping = $state(false)
   let dragStartY = 0
   let dragStartTime = 0
   const CLOSE_DISTANCE_PX = 80
   const FLICK_DISTANCE_PX = 24
   const FLICK_VELOCITY_PX_PER_MS = 0.6
+
+  // Asymptotic damping on upward drag: the sheet "gives" a little and
+  // never crosses the rubber-band ceiling, so a flick up always
+  // springs back to 0 on release.
+  const RUBBER_BAND_MAX_PX = 50
+  function rubberBand(absDelta: number): number {
+    return RUBBER_BAND_MAX_PX * (1 - 1 / (1 + absDelta / RUBBER_BAND_MAX_PX))
+  }
 
   // Reset the drag state whenever the sheet is closed so the next open
   // starts from translateY(0).
@@ -54,6 +77,7 @@
     if (!open) {
       dragOffset = 0
       dragging = false
+      snapping = false
     }
   })
 
@@ -65,6 +89,7 @@
     const target = e.currentTarget as HTMLElement
     target.setPointerCapture(e.pointerId)
     dragging = true
+    snapping = false
     dragStartY = e.clientY
     dragStartTime = performance.now()
     dragOffset = 0
@@ -73,7 +98,7 @@
   function onHeaderPointerMove(e: PointerEvent) {
     if (!dragging) return
     const delta = e.clientY - dragStartY
-    dragOffset = delta > 0 ? delta : 0
+    dragOffset = delta > 0 ? delta : -rubberBand(-delta)
   }
 
   function onHeaderPointerUp(e: PointerEvent) {
@@ -89,9 +114,17 @@
       (dragOffset >= FLICK_DISTANCE_PX && velocity >= FLICK_VELOCITY_PX_PER_MS)
     dragging = false
     if (shouldClose) {
+      // Hand the transform back to the out-transition. Clearing the
+      // inline drag transform first stops it fighting slideUp during
+      // unmount.
+      dragOffset = 0
       onClose()
     } else {
+      snapping = true
       dragOffset = 0
+      setTimeout(() => {
+        snapping = false
+      }, 220)
     }
   }
 
@@ -111,17 +144,19 @@
     onclick={onBackdrop}
     onkeydown={() => {}}
     aria-hidden="true"
+    transition:fade={{ duration: 160 }}
   >
     <div
       class="bs-sheet"
-      class:dragging
-      style:transform={dragOffset > 0 ? `translateY(${dragOffset}px)` : null}
+      class:snapping
+      style:transform={dragOffset !== 0 ? `translateY(${dragOffset}px)` : null}
       role="dialog"
       aria-modal="true"
       aria-label={title ?? ui.menuLabel}
       tabindex={-1}
       onclick={(e) => e.stopPropagation()}
       onkeydown={() => {}}
+      transition:slideUp={{ duration: 200 }}
     >
       <div
         class="bs-header"
@@ -157,7 +192,6 @@
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    animation: bs-fade 160ms ease;
   }
   .bs-sheet {
     background: #15171a;
@@ -169,12 +203,13 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: bs-slide 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
-    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .bs-sheet.dragging {
-    animation: none;
-    transition: none;
+  /* Snap-back transition is applied only when releasing the drag and
+     letting it spring to 0 — never during the drag itself, and never
+     during the slideUp intro/outro (which writes transform via the
+     transition system and would stutter against a CSS transition). */
+  .bs-sheet.snapping {
+    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .bs-header {
     flex: 0 0 auto;
@@ -241,22 +276,5 @@
     /* min-height: 0 unlocks the flex item so its scrollable child can
        actually overflow rather than expanding the parent past max-height. */
     min-height: 0;
-  }
-
-  @keyframes bs-slide {
-    from {
-      transform: translateY(100%);
-    }
-    to {
-      transform: translateY(0);
-    }
-  }
-  @keyframes bs-fade {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
   }
 </style>
