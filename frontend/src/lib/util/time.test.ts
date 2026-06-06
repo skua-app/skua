@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDuration, relativeTime } from './time'
+import { eventTimestamp, formatDuration, relativeTime } from './time'
 
 const NOW = new Date('2026-06-03T12:00:00Z')
 const rtf = new Intl.RelativeTimeFormat([], { numeric: 'auto' })
@@ -42,6 +42,47 @@ describe('relativeTime', () => {
     const farPastMs = NOW.getTime() - 60 * 86400 * 1000
     const iso = new Date(farPastMs).toISOString()
     expect(relativeTime(iso, NOW)).toBe(dtf.format(farPastMs))
+  })
+})
+
+describe('eventTimestamp', () => {
+  const sameDayFmt = new Intl.DateTimeFormat([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+  const datedFmt = new Intl.DateTimeFormat([], {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+
+  it('returns 24h time only when the event is on the same calendar day', () => {
+    const iso = '2026-06-03T14:32:00Z'
+    const then = new Date(iso)
+    expect(eventTimestamp(iso, NOW)).toBe(sameDayFmt.format(then))
+  })
+
+  it('returns date + 24h time on a prior calendar day', () => {
+    // 2 calendar days before NOW so the result is unambiguous across
+    // local timezones (CI runs in UTC; dev machines may not).
+    const iso = '2026-06-01T12:00:00Z'
+    const then = new Date(iso)
+    expect(eventTimestamp(iso, NOW)).toBe(datedFmt.format(then))
+  })
+
+  it('returns date + 24h time on a prior month', () => {
+    const iso = '2026-05-20T10:05:00Z'
+    const then = new Date(iso)
+    expect(eventTimestamp(iso, NOW)).toBe(datedFmt.format(then))
+  })
+
+  it('returns date + 24h time on a prior year', () => {
+    const iso = '2025-12-31T23:59:00Z'
+    const then = new Date(iso)
+    expect(eventTimestamp(iso, NOW)).toBe(datedFmt.format(then))
   })
 })
 
