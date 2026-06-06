@@ -159,7 +159,12 @@ export const ui = {
   glancePeekTitle: 'While you were away',
   glancePeekEmpty: 'Nothing new',
   glanceBellLabel: 'While you were away',
-  glanceMarkAllSeen: 'Mark all as seen'
+  glanceClear: 'Clear',
+  glanceViewAll: 'View all events',
+  glanceWindowLabel: 'While-you-were-away window',
+  glanceWindowChip: 'Last {hours}h',
+  // event modal
+  openLive: 'Open live'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.

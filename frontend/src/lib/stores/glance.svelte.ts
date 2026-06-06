@@ -1,5 +1,6 @@
-import { fetchGlance, markGlanceSeen } from '$lib/api'
+import { fetchGlance, markGlanceSeen, clearGlance } from '$lib/api'
 import type { GlanceMoment } from '$lib/api'
+import { prefsStore } from '$lib/stores/prefs.svelte'
 
 class GlanceStore {
   unseenCount = $state(0)
@@ -15,7 +16,7 @@ class GlanceStore {
 
   async load(): Promise<void> {
     try {
-      const resp = await fetchGlance()
+      const resp = await fetchGlance(prefsStore.glanceWindowHours)
       this.unseenCount = resp.unseen_count
       this.moments = resp.moments
     } catch (err) {
@@ -72,15 +73,20 @@ class GlanceStore {
     return this.markSeen([id])
   }
 
-  // markAllSeen marks every currently-unseen moment as seen in one batch
-  // then closes the peek. Computed from the moment list so callers don't
-  // need to enumerate ids themselves.
-  async markAllSeen(): Promise<void> {
-    const ids = this.moments.filter((m) => !m.seen).map((m) => m.representative_event_id)
-    if (ids.length > 0) {
-      await this.markSeen(ids)
-    }
+  // clearGlance wipes the household "while you were away" list by
+  // POSTing the server-side cleared_at watermark and emptying the
+  // local moment cache so the peek collapses immediately. The peek
+  // closes after the request is dispatched; errors surface in the
+  // console only.
+  async clearGlance(): Promise<void> {
+    this.moments = []
+    this.unseenCount = 0
     this.closePeek()
+    try {
+      await clearGlance()
+    } catch (err) {
+      console.error('[glance] clearGlance failed:', err)
+    }
   }
 }
 

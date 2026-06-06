@@ -2,7 +2,13 @@
   import Segmented from '$lib/components/Segmented.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { ui } from '$lib/i18n/strings'
-  import type { Accent, NameStyle, DesktopColumns, MobileColumns } from '$lib/api'
+  import type {
+    Accent,
+    NameStyle,
+    DesktopColumns,
+    MobileColumns,
+    GlanceWindowHours
+  } from '$lib/api'
 
   const gridModeOptions = [
     { value: 'hd' as const, label: 'HD' },
@@ -31,6 +37,13 @@
     { value: 'sage' as const, label: ui.accentSage },
     { value: 'amber' as const, label: ui.accentAmber },
     { value: 'violet' as const, label: ui.accentViolet }
+  ]
+  const glanceWindowOptions = [
+    { value: '6' as const, label: '6h' },
+    { value: '12' as const, label: '12h' },
+    { value: '24' as const, label: '24h' },
+    { value: '48' as const, label: '48h' },
+    { value: '72' as const, label: '72h' }
   ]
 </script>
 
@@ -90,6 +103,15 @@
       value={prefsStore.accent}
       options={accentOptions}
       onChange={(v) => prefsStore.setAccent(v as Accent)}
+    />
+  </div>
+
+  <div class="setting-row">
+    <span class="setting-label">{ui.glanceWindowLabel}</span>
+    <Segmented
+      value={String(prefsStore.glanceWindowHours) as '6' | '12' | '24' | '48' | '72'}
+      options={glanceWindowOptions}
+      onChange={(v) => prefsStore.setGlanceWindowHours(Number(v) as GlanceWindowHours)}
     />
   </div>
 </section>

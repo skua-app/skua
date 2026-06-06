@@ -18,6 +18,7 @@ export type Accent = 'cyan' | 'sage' | 'amber' | 'violet'
 export type NameStyle = 'below' | 'overlay'
 export type DesktopColumns = 2 | 3 | 4 | 5
 export type MobileColumns = 1 | 2
+export type GlanceWindowHours = 6 | 12 | 24 | 48 | 72
 
 export type Prefs = {
   grid_mode: 'hd' | 'eco'
@@ -30,6 +31,7 @@ export type Prefs = {
   desktop_columns: DesktopColumns
   mobile_columns: MobileColumns
   grid_filter: string | null
+  glance_window_hours: GlanceWindowHours
 }
 
 export const ACCENT_VALUES: Record<Accent, string> = {
@@ -174,8 +176,35 @@ export type GlanceResponse = {
   moments: GlanceMoment[]
 }
 
-export async function fetchGlance(): Promise<GlanceResponse> {
-  return apiFetch<GlanceResponse>('/api/glance')
+export async function fetchGlance(hours?: number): Promise<GlanceResponse> {
+  const qs = hours !== undefined ? `?hours=${hours}` : ''
+  return apiFetch<GlanceResponse>(`/api/glance${qs}`)
+}
+
+// clearGlance sets the household cleared_at watermark so subsequent
+// GET /api/glance responses drop moments at or before now. scope is
+// optional and defaults to "household" on the server. Returns 204 with
+// no body — callers should not parse a payload.
+export async function clearGlance(scope?: string): Promise<void> {
+  const body: { scope?: string } = {}
+  if (scope !== undefined) body.scope = scope
+  const res = await fetch('/api/glance/clear', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const errBody = (await res.json()) as { error?: string; message?: string }
+      if (errBody && typeof errBody.message === 'string' && errBody.message) {
+        message = errBody.message
+      }
+    } catch {
+      // non-JSON or empty body: keep the status-text fallback
+    }
+    throw new Error(`/api/glance/clear: ${message}`)
+  }
 }
 
 // markGlanceSeen records that the listed event ids have been viewed.
