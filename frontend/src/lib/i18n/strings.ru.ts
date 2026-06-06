@@ -161,7 +161,12 @@ export const ui = {
   glancePeekTitle: 'Пока вас не было',
   glancePeekEmpty: 'Ничего нового',
   glanceBellLabel: 'Пока вас не было',
-  glanceMarkAllSeen: 'Отметить всё как просмотренное'
+  glanceClear: 'Очистить',
+  glanceViewAll: 'Посмотреть все события',
+  glanceWindowLabel: 'Окно «пока вас не было»',
+  glanceWindowChip: 'За {hours} ч',
+  // event modal
+  openLive: 'Открыть эфир'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.

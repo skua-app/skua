@@ -7,6 +7,7 @@
   import Mono from '$lib/components/Mono.svelte'
   import { glanceStore } from '$lib/stores/glance.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
+  import { prefsStore } from '$lib/stores/prefs.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
   import { momentRouteTarget, momentToEventItem } from '$lib/glance'
   import { relativeTime } from '$lib/util/time'
@@ -54,6 +55,11 @@
   function isDimmed(moment: GlanceMoment): boolean {
     return moment.seen
   }
+
+  function onViewAll() {
+    glanceStore.closePeek()
+    goto('/events')
+  }
 </script>
 
 <BottomSheet
@@ -61,13 +67,22 @@
   onClose={() => glanceStore.closePeek()}
   title={ui.glancePeekTitle}
 >
+  <div class="gp-window-chip">
+    <Mono size={10} color="var(--text-3)" letterSpacing={0.3} uppercase>
+      {ui.glanceWindowChip.replace('{hours}', String(prefsStore.glanceWindowHours))}
+    </Mono>
+  </div>
+
   {#if glanceStore.moments.length === 0}
     <div class="gp-empty">{ui.glancePeekEmpty}</div>
+    <div class="gp-footer">
+      <button type="button" class="gp-view-all" onclick={onViewAll}>{ui.glanceViewAll}</button>
+    </div>
   {:else}
-    {#if glanceStore.unseenCount > 0}
+    {#if glanceStore.moments.length > 0}
       <div class="gp-actions">
-        <button type="button" class="gp-mark-all" onclick={() => void glanceStore.markAllSeen()}>
-          {ui.glanceMarkAllSeen}
+        <button type="button" class="gp-clear" onclick={() => void glanceStore.clearGlance()}>
+          {ui.glanceClear}
         </button>
       </div>
     {/if}
@@ -100,6 +115,9 @@
         </li>
       {/each}
     </ul>
+    <div class="gp-footer">
+      <button type="button" class="gp-view-all" onclick={onViewAll}>{ui.glanceViewAll}</button>
+    </div>
   {/if}
 </BottomSheet>
 
@@ -114,12 +132,15 @@
     color: var(--text-3);
     font-size: 13px;
   }
+  .gp-window-chip {
+    padding: 6px 20px 2px;
+  }
   .gp-actions {
     display: flex;
     justify-content: flex-end;
     padding: 4px 16px 8px;
   }
-  .gp-mark-all {
+  .gp-clear {
     background: transparent;
     border: none;
     padding: 4px 6px;
@@ -133,7 +154,29 @@
       color 120ms,
       background 120ms;
   }
-  .gp-mark-all:hover {
+  .gp-clear:hover {
+    background: color-mix(in oklab, var(--accent) 12%, transparent);
+  }
+  .gp-footer {
+    display: flex;
+    justify-content: center;
+    padding: 12px 20px 4px;
+  }
+  .gp-view-all {
+    background: transparent;
+    border: none;
+    padding: 6px 10px;
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 6px;
+    transition:
+      color 120ms,
+      background 120ms;
+  }
+  .gp-view-all:hover {
     background: color-mix(in oklab, var(--accent) 12%, transparent);
   }
   .gp-list {

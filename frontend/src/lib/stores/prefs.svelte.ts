@@ -1,5 +1,12 @@
 import { fetchPrefs, updatePrefs, ACCENT_VALUES } from '$lib/api'
-import type { Prefs, Accent, NameStyle, DesktopColumns, MobileColumns } from '$lib/api'
+import type {
+  Prefs,
+  Accent,
+  NameStyle,
+  DesktopColumns,
+  MobileColumns,
+  GlanceWindowHours
+} from '$lib/api'
 
 class PrefsStore {
   gridMode = $state<'hd' | 'eco'>('eco')
@@ -12,6 +19,7 @@ class PrefsStore {
   desktopColumns = $state<DesktopColumns>(4)
   mobileColumns = $state<MobileColumns>(1)
   gridFilter = $state<string | null>(null)
+  glanceWindowHours = $state<GlanceWindowHours>(24)
   loaded = $state(false)
 
   async load() {
@@ -27,6 +35,7 @@ class PrefsStore {
       this.desktopColumns = prefs.desktop_columns
       this.mobileColumns = prefs.mobile_columns
       this.gridFilter = prefs.grid_filter
+      this.glanceWindowHours = prefs.glance_window_hours
       this.applyAccent()
     } catch (err) {
       console.error('[prefs] load failed, using defaults:', err)
@@ -101,6 +110,11 @@ class PrefsStore {
   async setGridFilter(id: string | null) {
     this.gridFilter = id
     await this.#persist({ grid_filter: id }, 'grid_filter')
+  }
+
+  async setGlanceWindowHours(v: GlanceWindowHours) {
+    this.glanceWindowHours = v
+    await this.#persist({ glance_window_hours: v }, 'glance_window_hours')
   }
 }
 
