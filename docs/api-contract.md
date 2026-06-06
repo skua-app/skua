@@ -68,9 +68,10 @@ type Prefs = {
   desktop_columns: 2 | 3 | 4 | 5
   mobile_columns: 1 | 2
   grid_filter: string | null  // last-selected group id, null = "Все" (E3.3)
+  glance_window_hours: 6 | 12 | 24 | 48 | 72  // "while you were away" lookback
 }
 // Stored at /data/prefs.json. Atomic write (tmp + rename).
-// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null
+// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null / 24
 
 // === E3 (stable) ===
 
@@ -476,14 +477,18 @@ type Moment = {
 // entries are pruned to a 30-day retention window on load and after
 // every write so the file stays bounded.
 
-// GET /api/glance
-//   No query params. Always pulls a fixed lookback window of recent
-//   events (capped at the events endpoint's max limit) and groups
-//   them into moments with no time filter — every recent moment is
-//   surfaced. Each moment carries a `seen` boolean derived from the
-//   household seen-set keyed on its representative_event_id;
-//   `unseen_count` is the count of moments whose `seen` is false.
-//   There is no pagination cursor; clients re-fetch from the top.
+// GET /api/glance?hours=
+//   hours: optional positive integer (default 24, clamped to 1..168 =
+//          1 hour through 7 days). Controls how far back the "while you
+//          were away" window extends.
+//   Source fetch is fixed at glanceLookbackLimit = 20 recent events
+//   from Frigate (full history lives in GET /api/events); the BFF then
+//   filters that page by since = max(now - hours, cleared_at) and
+//   groups the survivors into moments. Each moment carries a `seen`
+//   boolean derived from the household seen-set keyed on its
+//   representative_event_id; `unseen_count` is the count of moments
+//   whose `seen` is false. There is no pagination cursor; clients
+//   re-fetch from the top.
 //
 // Response: Cache-Control: no-store.
 
@@ -510,14 +515,38 @@ type GlanceSeenRequest = {
   scope?: string   // defaults to "household"; reserved for a future per-user split
 }
 
+// POST /api/glance/clear
+//   body: { scope?: string } (or empty body — both accepted)
+//   Sets the scope's `cleared_at` watermark to the server's current
+//   time. Subsequent GET /api/glance responses drop every moment at
+//   or before that instant for as long as the watermark stays above
+//   `now - hours` (older watermarks age out naturally as the window
+//   slides forward). `scope` defaults to "household" when absent or
+//   empty. Returns 204 No Content on success; 500 internal on
+//   persistence failure. The /api cross-site guard covers this
+//   mutating route.
+
+type GlanceClearRequest = {
+  scope?: string   // defaults to "household"; reserved for a future per-user split
+}
+
 // Storage: JSON at $GLANCE_STATE_PATH (default /data/glance.json;
-// the file is auto-created on the first non-empty MarkSeen). Shape:
-// { "<scope>": { "<event_id>": <seen_at_unix_seconds>, ... }, ... }.
-// A missing file means an empty seen-set; a corrupt file or an old
-// pre-Model-B { "last_seen": ... } file is logged and treated the
-// same way (does not block startup, no automatic migration of the
-// last_seen value) — this is best-effort recency state, not an
-// audit log.
+// the file is auto-created on the first non-empty MarkSeen or Clear).
+// Shape:
+//   {
+//     "<scope>": {
+//       "seen": { "<event_id>": <seen_at_unix_seconds>, ... },
+//       "cleared_at": <unix_seconds>   // omitted when zero
+//     }, ...
+//   }
+// A missing file means an empty store; a corrupt file, the older
+// scope→{id:ts} shape, and the pre-Model-B { "last_seen": ... } shape
+// are all logged and start the store empty — best-effort recency
+// state must not block startup, and there is no automatic migration.
+// Pruning drops seen entries older than the 30-day retention window
+// and only removes a scope when both its seen set is empty AND its
+// cleared_at watermark is zero — a clear must survive an empty seen
+// set across restarts.
 //
 // Known edge: `seen` is keyed on representative_event_id, which is
 // derived per request from the current Frigate result set. If the

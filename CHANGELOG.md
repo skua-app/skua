@@ -52,6 +52,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was backgrounded; moments the session has already surfaced stay
   suppressed until you mark them seen. Completes the glance feature
   (phases 1–3).
+- Configurable "while you were away" lookback for the glance peek:
+  a new `glance_window_hours` preference (6 / 12 / 24 / 48 / 72,
+  default 24) controls how far back GET `/api/glance` looks. The
+  setting is persisted in `prefs.json` and exposed in Settings →
+  Appearance. The endpoint accepts an `?hours=N` query parameter
+  (server-clamped to 1..168) so device clocks never matter.
+- Clear action for the glance peek and a matching `POST /api/glance/clear`
+  endpoint that sets a household `cleared_at` watermark on the glance
+  store. The watermark filters all earlier moments out of subsequent
+  `GET /api/glance` responses for as long as it stays inside the
+  active window. Persisted alongside the seen-id set in `glance.json`
+  and survives restarts even when the seen set is empty.
 
 ### Fixed
 
@@ -64,6 +76,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `GET /api/glance` now fetches a fixed 20-event lookback (down from
+  the events endpoint's 200-event cap) and filters that page by
+  `since = max(now - hours, cleared_at)` before grouping. Full event
+  history continues to live behind `GET /api/events`; the glance
+  surface is a small "while you were away" rollup, not a feed.
 - Container restart-policy requirement for runtime reconfiguration is
   now stated up front. The first-run wizard Save and Settings →
   Connection Apply both restart Skua by exiting the process and rely

@@ -110,11 +110,14 @@ func TestMarkSeen_Idempotent_RefreshesTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	var decoded map[string]map[string]int64
+	var decoded map[string]struct {
+		Seen      map[string]int64 `json:"seen"`
+		ClearedAt int64            `json:"cleared_at"`
+	}
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got := decoded[glance.ScopeHousehold]["a"]; got != second.Unix() {
+	if got := decoded[glance.ScopeHousehold].Seen["a"]; got != second.Unix() {
 		t.Errorf("a ts = %d, want %d (refreshed)", got, second.Unix())
 	}
 }
@@ -188,10 +191,13 @@ func TestNew_PrunesOldEntriesOnLoad(t *testing.T) {
 	path := filepath.Join(dir, "glance.json")
 	// Hand-craft a file where the entry is far older than the
 	// retention window. New must drop it on load and leave the
-	// scope empty (then also drop the now-empty scope).
+	// scope empty (then also drop the now-empty scope when its
+	// cleared_at watermark is zero).
 	veryOld := time.Now().Add(-365 * 24 * time.Hour).Unix()
-	payload, err := json.Marshal(map[string]map[string]int64{
-		glance.ScopeHousehold: {"stale": veryOld},
+	payload, err := json.Marshal(map[string]map[string]any{
+		glance.ScopeHousehold: {
+			"seen": map[string]int64{"stale": veryOld},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -205,6 +211,73 @@ func TestNew_PrunesOldEntriesOnLoad(t *testing.T) {
 	}
 	if got := store.SeenSet(glance.ScopeHousehold); len(got) != 0 {
 		t.Errorf("SeenSet after load+prune = %v, want empty", got)
+	}
+}
+
+func TestClear_SetsWatermarkAndPersists(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "glance.json")
+	store, err := glance.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	if err := store.Clear(glance.ScopeHousehold, at); err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+	if got := store.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("ClearedAt = %v, want %v", got, at)
+	}
+
+	reloaded, err := glance.New(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := reloaded.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("reloaded ClearedAt = %v, want %v", got, at)
+	}
+}
+
+func TestClear_PreservesScopeAcrossPrune_WithEmptySeen(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "glance.json")
+	store, err := glance.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	if err := store.Clear(glance.ScopeHousehold, at); err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+
+	// A subsequent MarkSeen on a different scope must not drop the
+	// household scope just because its seen set is empty — the
+	// cleared_at watermark must survive pruning.
+	if err := store.MarkSeen("other-scope", []string{"x"}, at.Add(time.Hour)); err != nil {
+		t.Fatalf("MarkSeen other: %v", err)
+	}
+	if got := store.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("ClearedAt after prune = %v, want %v", got, at)
+	}
+
+	reloaded, err := glance.New(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := reloaded.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("reloaded ClearedAt = %v, want %v", got, at)
+	}
+}
+
+func TestClearedAt_AbsentScope_ReturnsZero(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "glance.json")
+	store, err := glance.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := store.ClearedAt(glance.ScopeHousehold); !got.IsZero() {
+		t.Errorf("ClearedAt for unset scope = %v, want zero", got)
 	}
 }
 

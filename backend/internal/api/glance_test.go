@@ -50,9 +50,10 @@ func glanceRouterWith(t *testing.T, upstream http.Handler) (http.Handler, *glanc
 func TestHandleGlance_HappyPath_NothingSeen(t *testing.T) {
 	// Two same-camera events within the gap → one moment. Both
 	// survive because the store has no seen ids.
+	t0 := float64(time.Now().Add(-30 * time.Minute).Unix())
 	page := []events.FrigateEvent{
-		{ID: "a1", Camera: "camA", Label: "person", StartTime: 1779310000, EndTime: ptrF(1779310010), HasSnapshot: true},
-		{ID: "a2", Camera: "camA", Label: "car", StartTime: 1779310060, EndTime: ptrF(1779310090), HasSnapshot: true, HasClip: true},
+		{ID: "a1", Camera: "camA", Label: "person", StartTime: t0, EndTime: ptrF(t0 + 10), HasSnapshot: true},
+		{ID: "a2", Camera: "camA", Label: "car", StartTime: t0 + 60, EndTime: ptrF(t0 + 90), HasSnapshot: true, HasClip: true},
 	}
 	router, _, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
 
@@ -88,14 +89,16 @@ func TestHandleGlance_AllMomentsReturned_WithSeenFlag(t *testing.T) {
 	// Two separate moments (different cameras). Pre-mark the
 	// representative event of one as seen. GET returns both moments,
 	// only one carries seen=true, unseen_count=1.
+	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
+	tNew := float64(time.Now().Add(-30 * time.Minute).Unix())
 	page := []events.FrigateEvent{
-		{ID: "old", Camera: "camA", Label: "person", StartTime: 1779310000, EndTime: ptrF(1779310010), HasSnapshot: true},
-		{ID: "new", Camera: "camB", Label: "person", StartTime: 1779320000, EndTime: ptrF(1779320010), HasSnapshot: true},
+		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
+		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
 	}
 	router, store, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
 
 	// camA has a single event so its rep id is "old".
-	if err := store.MarkSeen(glance.ScopeHousehold, []string{"old"}, mustParseUTC(t, "2026-05-20T22:00:00Z")); err != nil {
+	if err := store.MarkSeen(glance.ScopeHousehold, []string{"old"}, time.Now()); err != nil {
 		t.Fatalf("seed MarkSeen: %v", err)
 	}
 
@@ -193,9 +196,11 @@ func TestHandleGlanceSeen_EmptyArray_NoContentNoWrite(t *testing.T) {
 }
 
 func TestHandleGlanceSeen_ValidIDs_PersistsAndFollowupGlanceReflects(t *testing.T) {
+	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
+	tNew := float64(time.Now().Add(-30 * time.Minute).Unix())
 	page := []events.FrigateEvent{
-		{ID: "old", Camera: "camA", Label: "person", StartTime: 1779310000, EndTime: ptrF(1779310010), HasSnapshot: true},
-		{ID: "new", Camera: "camB", Label: "person", StartTime: 1779320000, EndTime: ptrF(1779320010), HasSnapshot: true},
+		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
+		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
 	}
 	router, _, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
 
@@ -252,11 +257,97 @@ func TestHandleGlance_UpstreamErrorMapped(t *testing.T) {
 	}
 }
 
-func mustParseUTC(t *testing.T, s string) time.Time {
-	t.Helper()
-	parsed, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		t.Fatalf("parse %q: %v", s, err)
+func TestHandleGlance_HoursParamFiltersOlderEvents(t *testing.T) {
+	// One event 2h ago, one 30m ago. With ?hours=1, only the recent
+	// one survives. With ?hours=24, both survive.
+	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
+	tNew := float64(time.Now().Add(-30 * time.Minute).Unix())
+	page := []events.FrigateEvent{
+		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
+		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
 	}
-	return parsed
+	router, _, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance?hours=1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var body glanceResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Moments) != 1 {
+		t.Fatalf("moments len = %d, want 1 (only recent within hours=1)", len(body.Moments))
+	}
+	if body.Moments[0].RepresentativeEventID != "new" {
+		t.Errorf("rep id = %q, want new", body.Moments[0].RepresentativeEventID)
+	}
+}
+
+func TestHandleGlance_ClearWatermarkHidesOlderMoments(t *testing.T) {
+	// Two events within window. Clear at a point between them; only
+	// the moment strictly after cleared_at survives.
+	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
+	tNew := float64(time.Now().Add(-10 * time.Minute).Unix())
+	page := []events.FrigateEvent{
+		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
+		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
+	}
+	router, store, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
+
+	// Clear at 1h ago — old event (2h ago) is below the watermark,
+	// new event (10m ago) is above it.
+	if err := store.Clear(glance.ScopeHousehold, time.Now().Add(-1*time.Hour)); err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var body glanceResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Moments) != 1 {
+		t.Fatalf("moments len = %d, want 1 (only above watermark)", len(body.Moments))
+	}
+	if body.Moments[0].RepresentativeEventID != "new" {
+		t.Errorf("rep id = %q, want new", body.Moments[0].RepresentativeEventID)
+	}
+}
+
+func TestHandleGlanceClear_EmptyBody_HouseholdScope(t *testing.T) {
+	router, store, _ := glanceRouterWith(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Fatal("upstream must not be called on clear")
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/glance/clear", strings.NewReader(""))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if got := store.ClearedAt(glance.ScopeHousehold); got.IsZero() {
+		t.Errorf("ClearedAt is zero after clear; want non-zero")
+	}
+}
+
+func TestHandleGlanceClear_WithScopeBody(t *testing.T) {
+	router, store, _ := glanceRouterWith(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Fatal("upstream must not be called on clear")
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/api/glance/clear",
+		strings.NewReader(`{"scope":"household"}`))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d", w.Code)
+	}
+	if got := store.ClearedAt(glance.ScopeHousehold); got.IsZero() {
+		t.Errorf("ClearedAt is zero after clear; want non-zero")
+	}
 }

@@ -13,29 +13,31 @@ import (
 // Prefs holds the shared household preferences persisted at PrefsPath.
 // GridFilter is a pointer so the JSON value `null` round-trips as "no filter".
 type Prefs struct {
-	GridMode       string  `json:"grid_mode"`
-	MutedByDefault bool    `json:"muted_by_default"`
-	StreamQuality  string  `json:"stream_quality"`
-	ShowTelemetry  bool    `json:"show_telemetry"`
-	Accent         string  `json:"accent"`
-	NameStyle      string  `json:"name_style"`
-	ShowTimestamp  bool    `json:"show_timestamp"`
-	DesktopColumns int     `json:"desktop_columns"`
-	MobileColumns  int     `json:"mobile_columns"`
-	GridFilter     *string `json:"grid_filter"`
+	GridMode          string  `json:"grid_mode"`
+	MutedByDefault    bool    `json:"muted_by_default"`
+	StreamQuality     string  `json:"stream_quality"`
+	ShowTelemetry     bool    `json:"show_telemetry"`
+	Accent            string  `json:"accent"`
+	NameStyle         string  `json:"name_style"`
+	ShowTimestamp     bool    `json:"show_timestamp"`
+	DesktopColumns    int     `json:"desktop_columns"`
+	MobileColumns     int     `json:"mobile_columns"`
+	GridFilter        *string `json:"grid_filter"`
+	GlanceWindowHours int     `json:"glance_window_hours"`
 }
 
 var defaults = Prefs{
-	GridMode:       "eco",
-	MutedByDefault: true,
-	StreamQuality:  "main",
-	ShowTelemetry:  false,
-	Accent:         "cyan",
-	NameStyle:      "below",
-	ShowTimestamp:  false,
-	DesktopColumns: 4,
-	MobileColumns:  1,
-	GridFilter:     nil,
+	GridMode:          "eco",
+	MutedByDefault:    true,
+	StreamQuality:     "main",
+	ShowTelemetry:     false,
+	Accent:            "cyan",
+	NameStyle:         "below",
+	ShowTimestamp:     false,
+	DesktopColumns:    4,
+	MobileColumns:     1,
+	GridFilter:        nil,
+	GlanceWindowHours: 24,
 }
 
 var validGridModes = map[string]bool{"hd": true, "eco": true}
@@ -43,18 +45,20 @@ var validAccents = map[string]bool{"cyan": true, "sage": true, "amber": true, "v
 var validNameStyles = map[string]bool{"below": true, "overlay": true}
 var validDesktopColumns = map[int]bool{2: true, 3: true, 4: true, 5: true}
 var validMobileColumns = map[int]bool{1: true, 2: true}
+var validGlanceWindowHours = map[int]bool{6: true, 12: true, 24: true, 48: true, 72: true}
 
 var knownFields = map[string]bool{
-	"grid_mode":        true,
-	"muted_by_default": true,
-	"stream_quality":   true,
-	"show_telemetry":   true,
-	"accent":           true,
-	"name_style":       true,
-	"show_timestamp":   true,
-	"desktop_columns":  true,
-	"mobile_columns":   true,
-	"grid_filter":      true,
+	"grid_mode":           true,
+	"muted_by_default":    true,
+	"stream_quality":      true,
+	"show_telemetry":      true,
+	"accent":              true,
+	"name_style":          true,
+	"show_timestamp":      true,
+	"desktop_columns":     true,
+	"mobile_columns":      true,
+	"grid_filter":         true,
+	"glance_window_hours": true,
 }
 
 // Store is a thread-safe, file-backed preferences store.
@@ -116,6 +120,10 @@ func sanitize(p Prefs) (Prefs, []string) {
 	if !validMobileColumns[p.MobileColumns] {
 		p.MobileColumns = defaults.MobileColumns
 		reset = append(reset, "mobile_columns")
+	}
+	if !validGlanceWindowHours[p.GlanceWindowHours] {
+		p.GlanceWindowHours = defaults.GlanceWindowHours
+		reset = append(reset, "glance_window_hours")
 	}
 	return p, reset
 }
@@ -250,6 +258,21 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("mobile_columns must be 1/2, got %d", n)
 		}
 		next.MobileColumns = n
+	}
+
+	if v, ok := partial["glance_window_hours"]; ok {
+		f, ok := v.(float64)
+		if !ok {
+			return Prefs{}, fmt.Errorf("glance_window_hours must be a number")
+		}
+		n := int(f)
+		if float64(n) != f {
+			return Prefs{}, fmt.Errorf("glance_window_hours must be an integer, got %v", f)
+		}
+		if !validGlanceWindowHours[n] {
+			return Prefs{}, fmt.Errorf("glance_window_hours must be 6/12/24/48/72, got %d", n)
+		}
+		next.GlanceWindowHours = n
 	}
 
 	if err := s.atomicWrite(next); err != nil {

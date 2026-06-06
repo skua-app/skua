@@ -1,14 +1,14 @@
-// Package glance persists the household "seen-state" for the glance
-// feature: a scope-keyed set of viewed event ids. A moment is "seen"
-// when its representative event id appears in the household scope's
-// set. The on-disk shape is an object mapping a scope name to an object
-// mapping an event id to a seen-at unix-seconds integer.
+// Package glance persists the household "while you were away" state for
+// the glance feature: a scope-keyed seen-id set plus a cleared_at
+// watermark. A moment is "seen" when its representative event id
+// appears in the household scope's seen set; a moment is "cleared" when
+// it is at or before the scope's cleared_at watermark.
 //
 // The store is intentionally minimal: it knows nothing about events,
-// HTTP, or moment grouping. It only holds and persists the set,
-// pruning entries older than the retention window so the file stays
-// bounded. The API handler composes it with the moment grouping to
-// build the GET /api/glance "while you were away" payload.
+// HTTP, or moment grouping. It only holds and persists the per-scope
+// state, pruning seen entries older than the retention window so the
+// file stays bounded. The API handler composes it with the moment
+// grouping to build the GET /api/glance payload.
 package glance
 
 import (
@@ -34,11 +34,20 @@ const ScopeHousehold = "household"
 // install.
 const glanceRetention = 30 * 24 * time.Hour
 
-// state is the JSON shape persisted at the store's path: a map of
-// scope name → map of event id → seen-at unix seconds.
-type state map[string]map[string]int64
+// scopeState carries one scope's persisted state: the seen-id set
+// (map of event id → seen-at unix seconds) and a cleared_at
+// watermark in unix seconds (zero when unset). Moments at or before
+// cleared_at are filtered out of GET /api/glance by the API handler.
+type scopeState struct {
+	Seen      map[string]int64 `json:"seen"`
+	ClearedAt int64            `json:"cleared_at,omitempty"`
+}
 
-// Store is a thread-safe, file-backed seen-id store keyed by scope.
+// state is the JSON shape persisted at the store's path: a map of
+// scope name → scopeState.
+type state map[string]*scopeState
+
+// Store is a thread-safe, file-backed seen-state store keyed by scope.
 type Store struct {
 	path string
 	mu   sync.RWMutex
@@ -46,10 +55,10 @@ type Store struct {
 }
 
 // New loads the seen-state from path. A missing file means an empty
-// store. A parse error, or an old last_seen-shaped file from before
-// the Model B migration, is logged and the store starts empty —
-// best-effort recency state must not block startup. Entries older
-// than the retention window are pruned on load.
+// store. A parse error, the round-2 scope→{id:ts} shape, or the
+// pre-Model-B last_seen shape are all logged and start the store
+// empty — best-effort recency state must not block startup. Entries
+// older than the retention window are pruned on load.
 func New(path string) (*Store, error) {
 	s := &Store{path: path, cur: state{}}
 	data, err := os.ReadFile(path)
@@ -64,17 +73,15 @@ func New(path string) (*Store, error) {
 		slog.Warn("glance: parse failed, starting from empty seen-set", "path", path, "error", err)
 		return s, nil
 	}
-	// Reject the old { "last_seen": ... } shape: it unmarshals into a
-	// map whose values are not map[string]int64. json.Unmarshal silently
-	// produces an empty loaded in that case (top-level last_seen is a
-	// string, not an object), but be defensive against any non-set
-	// scope value as well.
 	cleaned := state{}
-	for scope, ids := range loaded {
-		if ids == nil {
+	for scope, sc := range loaded {
+		if sc == nil {
 			continue
 		}
-		cleaned[scope] = ids
+		if sc.Seen == nil {
+			sc.Seen = map[string]int64{}
+		}
+		cleaned[scope] = sc
 	}
 	s.cur = cleaned
 	s.pruneLocked(time.Now())
@@ -87,14 +94,30 @@ func New(path string) (*Store, error) {
 func (s *Store) SeenSet(scope string) map[string]struct{} {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make(map[string]struct{}, len(s.cur[scope]))
-	for id := range s.cur[scope] {
+	sc := s.cur[scope]
+	if sc == nil {
+		return map[string]struct{}{}
+	}
+	out := make(map[string]struct{}, len(sc.Seen))
+	for id := range sc.Seen {
 		out[id] = struct{}{}
 	}
 	return out
 }
 
-// MarkSeen adds each id to the scope's set with at's unix seconds,
+// ClearedAt returns the scope's cleared_at watermark as a time.Time
+// (zero value when unset) under a read lock.
+func (s *Store) ClearedAt(scope string) time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sc := s.cur[scope]
+	if sc == nil || sc.ClearedAt == 0 {
+		return time.Time{}
+	}
+	return time.Unix(sc.ClearedAt, 0).UTC()
+}
+
+// MarkSeen adds each id to the scope's seen set with at's unix seconds,
 // prunes entries older than the retention window, and atomically
 // persists the result. Re-marking an id is idempotent and refreshes
 // its timestamp. An empty ids slice is a no-op with no write.
@@ -104,33 +127,62 @@ func (s *Store) MarkSeen(scope string, ids []string, at time.Time) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cur[scope] == nil {
-		s.cur[scope] = map[string]int64{}
+	sc := s.cur[scope]
+	if sc == nil {
+		sc = &scopeState{Seen: map[string]int64{}}
+		s.cur[scope] = sc
+	}
+	if sc.Seen == nil {
+		sc.Seen = map[string]int64{}
 	}
 	ts := at.Unix()
 	for _, id := range ids {
 		if id == "" {
 			continue
 		}
-		s.cur[scope][id] = ts
+		sc.Seen[id] = ts
 	}
 	s.pruneLocked(at)
 	return s.atomicWrite()
 }
 
-// pruneLocked drops entries whose seen-at is older than now minus
+// Clear sets the scope's cleared_at watermark to at.Unix(), prunes
+// seen ids older than the retention window, and atomically persists
+// the result.
+func (s *Store) Clear(scope string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sc := s.cur[scope]
+	if sc == nil {
+		sc = &scopeState{Seen: map[string]int64{}}
+		s.cur[scope] = sc
+	}
+	if sc.Seen == nil {
+		sc.Seen = map[string]int64{}
+	}
+	sc.ClearedAt = at.Unix()
+	s.pruneLocked(at)
+	return s.atomicWrite()
+}
+
+// pruneLocked drops seen entries whose seen-at is older than now minus
 // glanceRetention. Caller must hold s.mu (write or read+write upgrade).
-// Empty scopes after pruning are removed so the persisted file does
-// not accumulate dead keys.
+// A scope is only removed when both its seen set is empty AND its
+// cleared_at watermark is zero — the watermark must survive an empty
+// seen set so that a "clear" persists across pruning runs.
 func (s *Store) pruneLocked(now time.Time) {
 	cutoff := now.Add(-glanceRetention).Unix()
-	for scope, ids := range s.cur {
-		for id, ts := range ids {
+	for scope, sc := range s.cur {
+		if sc == nil {
+			delete(s.cur, scope)
+			continue
+		}
+		for id, ts := range sc.Seen {
 			if ts < cutoff {
-				delete(ids, id)
+				delete(sc.Seen, id)
 			}
 		}
-		if len(ids) == 0 {
+		if len(sc.Seen) == 0 && sc.ClearedAt == 0 {
 			delete(s.cur, scope)
 		}
 	}
