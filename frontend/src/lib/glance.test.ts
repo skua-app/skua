@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GlanceMoment, Moment } from './api'
-import { momentRouteTarget, momentToEventItem, unseenRepresentativeIds } from './glance'
+import { isMomentLive, momentToEventItem, unseenRepresentativeIds } from './glance'
 
 function makeMoment(overrides: Partial<Moment> = {}): Moment {
   return {
@@ -43,13 +43,13 @@ describe('unseenRepresentativeIds', () => {
   })
 })
 
-describe('momentRouteTarget', () => {
-  it("returns 'focus' when the moment is still live (null ended_at)", () => {
-    expect(momentRouteTarget(makeMoment({ ended_at: null }))).toBe('focus')
+describe('isMomentLive', () => {
+  it('returns true when the moment has no ended_at (still live)', () => {
+    expect(isMomentLive(makeMoment({ ended_at: null }))).toBe(true)
   })
 
-  it("returns 'clip' when the moment has ended", () => {
-    expect(momentRouteTarget(makeMoment({ ended_at: '2026-06-04T22:00:30Z' }))).toBe('clip')
+  it('returns false when the moment has ended', () => {
+    expect(isMomentLive(makeMoment({ ended_at: '2026-06-04T22:00:30Z' }))).toBe(false)
   })
 })
 
