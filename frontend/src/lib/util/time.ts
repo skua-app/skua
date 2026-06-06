@@ -16,6 +16,37 @@ export function relativeTime(iso: string, now: Date = new Date()): string {
   return new Intl.DateTimeFormat([], { dateStyle: 'medium' }).format(then)
 }
 
+const sameDayTimeFmt = new Intl.DateTimeFormat([], {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false
+})
+
+const datedTimeFmt = new Intl.DateTimeFormat([], {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false
+})
+
+// eventTimestamp returns the wall-clock time for a recent-events row.
+// Same calendar day as `now` → 24h time only (e.g. "14:32"). Any
+// other calendar day → short locale-formatted date plus 24h time
+// (e.g. "5 Jun, 14:32"). No seconds in either branch — recent-event
+// rows are scanning UI, not forensic precision.
+export function eventTimestamp(iso: string, now: Date = new Date()): string {
+  const then = new Date(iso)
+  if (
+    then.getFullYear() === now.getFullYear() &&
+    then.getMonth() === now.getMonth() &&
+    then.getDate() === now.getDate()
+  ) {
+    return sameDayTimeFmt.format(then)
+  }
+  return datedTimeFmt.format(then)
+}
+
 // formatDuration — "12s", "1min 30s", "1h 5min".
 export function formatDuration(seconds: number | null): string {
   if (seconds === null) return '—'

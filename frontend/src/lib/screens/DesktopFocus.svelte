@@ -13,6 +13,7 @@
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { eventsStreamStore } from '$lib/stores/events-stream.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
+  import { eventTimestamp } from '$lib/util/time'
 
   type Props = {
     camera: Camera | null
@@ -61,13 +62,6 @@
     onBack,
     videoSnippet
   }: Props = $props()
-
-  const eventTimeFmt = new Intl.DateTimeFormat([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false
-  })
 
   function pad(n: number): string {
     return String(n).padStart(2, '0')
@@ -293,7 +287,7 @@
             >
               <div class="df-event-left">
                 <Mono size={10} color="var(--text-3)">
-                  {eventTimeFmt.format(new Date(ev.started_at))}
+                  {eventTimestamp(ev.started_at)}
                 </Mono>
                 <span class="df-event-label" class:active-label={i === 0}>
                   {eventKindLabels[ev.kind] ?? ev.kind}

@@ -13,6 +13,7 @@
   import EventModal from '$lib/components/EventModal.svelte'
   import { eventsStreamStore } from '$lib/stores/events-stream.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
+  import { eventTimestamp } from '$lib/util/time'
 
   type Props = {
     camera: Camera | null
@@ -61,12 +62,6 @@
     onBack,
     videoSnippet
   }: Props = $props()
-
-  const eventTimeFmt = new Intl.DateTimeFormat([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
 
   function pad(n: number): string {
     return String(n).padStart(2, '0')
@@ -283,9 +278,7 @@
       {#each recentEvents as ev (ev.id)}
         <button type="button" class="mf-event-row" onclick={() => (modalEvent = ev)}>
           <div class="mf-event-left">
-            <Mono size={11} color="var(--text-2)"
-              >{eventTimeFmt.format(new Date(ev.started_at))}</Mono
-            >
+            <Mono size={11} color="var(--text-2)">{eventTimestamp(ev.started_at)}</Mono>
             <span class="mf-event-label">{eventKindLabels[ev.kind] ?? ev.kind}</span>
           </div>
           <Mono size={10} color="var(--text-3)"
