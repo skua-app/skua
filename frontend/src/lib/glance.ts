@@ -7,12 +7,12 @@ export function unseenRepresentativeIds(moments: GlanceMoment[]): string[] {
   return moments.filter((m) => !m.seen).map((m) => m.representative_event_id)
 }
 
-// momentRouteTarget decides how a moment row should open: 'focus' for
-// a still-live cluster (no ended_at on any clustered event), 'clip'
-// otherwise. The peek uses this to route taps either to the focus view
-// or into EventModal.
-export function momentRouteTarget(moment: Moment): 'focus' | 'clip' {
-  return moment.ended_at === null ? 'focus' : 'clip'
+// isMomentLive reports whether a moment cluster is still in progress
+// — every clustered event has an open-ended ended_at. Used by the
+// peek to decide whether the review modal should also offer an
+// "Open live" shortcut into the focus view.
+export function isMomentLive(moment: Moment): boolean {
+  return moment.ended_at === null
 }
 
 // momentToEventItem synthesises an EventItem from a moment so the

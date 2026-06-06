@@ -9,12 +9,16 @@
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
-  import { momentRouteTarget, momentToEventItem } from '$lib/glance'
+  import { isMomentLive, momentToEventItem } from '$lib/glance'
   import { relativeTime } from '$lib/util/time'
 
   // Local-only modal state so a row tap can open EventModal on top of
   // the sheet (mirrors routes/events/+page.svelte's modalEvent pattern).
+  // modalLiveMoment tracks the source moment alongside modalEvent so
+  // the modal's optional "Open live" wire-up can read the live/online
+  // gate against the same moment that opened the modal.
   let modalEvent = $state<EventItem | null>(null)
+  let modalLiveMoment = $state<GlanceMoment | null>(null)
 
   // One-minute tick so "5 min ago" doesn't drift while the sheet is open.
   let now = $state(new Date())
@@ -37,15 +41,31 @@
   }
 
   function onRowClick(moment: GlanceMoment) {
-    // Opening a moment marks just that one seen on the server. The peek
-    // itself stays open so the user can work through the list — only an
-    // explicit mark-all-seen or close button changes that.
+    // Opening a moment marks just that one seen on the server. A row
+    // tap is always a review tap: it opens the modal on top of the
+    // peek so the user can work through the list. The modal itself
+    // surfaces an optional "Open live" action when the moment is
+    // still in progress and the camera is online — see openLiveFor.
     void glanceStore.markOneSeen(moment.representative_event_id)
-    if (momentRouteTarget(moment) === 'focus') {
+    modalEvent = momentToEventItem(moment)
+    modalLiveMoment = moment
+  }
+
+  // openLiveFor produces the optional onOpenLive callback for the
+  // modal. A non-null return wires the action button up; null hides
+  // it entirely. Available only when the moment is still live AND
+  // the camera is currently online — an offline live moment has
+  // nothing playable behind the action.
+  function openLiveFor(moment: GlanceMoment | null): (() => void) | undefined {
+    if (!moment) return undefined
+    if (!isMomentLive(moment)) return undefined
+    const cam = camerasStore.cameras.find((c) => c.id === moment.cam_id)
+    if (!cam?.online) return undefined
+    return () => {
+      modalEvent = null
+      modalLiveMoment = null
       glanceStore.closePeek()
       goto(`/cam/${encodeURIComponent(moment.cam_id)}`)
-    } else {
-      modalEvent = momentToEventItem(moment)
     }
   }
 
@@ -122,7 +142,14 @@
 </BottomSheet>
 
 {#if modalEvent}
-  <EventModal event={modalEvent} onClose={() => (modalEvent = null)} />
+  <EventModal
+    event={modalEvent}
+    onClose={() => {
+      modalEvent = null
+      modalLiveMoment = null
+    }}
+    onOpenLive={openLiveFor(modalLiveMoment)}
+  />
 {/if}
 
 <style>
