@@ -143,9 +143,11 @@
                     </span>
                   {/if}
                 </div>
+              </div>
+              <div class="gp-row-line-2">
+                <span class="gp-kinds">{kindsLine(m)}</span>
                 <Mono size={11} color="var(--text-3)">{newestTime(m)}</Mono>
               </div>
-              <div class="gp-kinds">{kindsLine(m)}</div>
             </div>
           </button>
         </li>
@@ -276,6 +278,11 @@
   }
   .gp-row-line {
     display: flex;
+    align-items: baseline;
+    min-width: 0;
+  }
+  .gp-row-line-2 {
+    display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 10px;
@@ -307,5 +314,9 @@
   .gp-kinds {
     font-size: 12px;
     color: var(--text-2);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
