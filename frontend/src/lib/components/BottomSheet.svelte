@@ -277,4 +277,24 @@
        actually overflow rather than expanding the parent past max-height. */
     min-height: 0;
   }
+
+  /* Desktop: the full-bleed bottom sheet looks wrong on wide viewports,
+     so above the grid breakpoint (matches +layout.svelte's isDesktop ≥
+     900px) we centre the sheet horizontally and cap its width, turning
+     it into a floating card docked just above the bottom edge. The
+     slide-up + swipe-to-dismiss behaviour is preserved because
+     translateY-based animation and the pointer-drag logic operate on
+     the sheet's own bounds. */
+  @media (min-width: 900px) {
+    .bs-backdrop {
+      align-items: center;
+    }
+    .bs-sheet {
+      width: 100%;
+      max-width: 480px;
+      margin-bottom: 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+  }
 </style>
