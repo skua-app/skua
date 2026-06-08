@@ -64,6 +64,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `GET /api/glance` responses for as long as it stays inside the
   active window. Persisted alongside the seen-id set in `glance.json`
   and survives restarts even when the seen set is empty.
+- Configurable cap on glance peek output: a new `glance_max_moments`
+  preference (10 / 20 / 30 / 50, default 20) controls how many
+  moments the peek shows. The setting is persisted in `prefs.json`,
+  exposed in Settings → Appearance, and forwarded to `GET /api/glance`
+  via a `?max=N` query parameter (server-clamped to 1..200) so device
+  clocks never matter. Each glance moment now also carries its full
+  cluster detection list (`events`, newest first), the foundation for
+  a reviewable moment modal where the player can switch between
+  individual detections inside the cluster.
 
 ### Fixed
 
@@ -76,11 +85,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `GET /api/glance` now fetches a fixed 20-event lookback (down from
-  the events endpoint's 200-event cap) and filters that page by
-  `since = max(now - hours, cleared_at)` before grouping. Full event
-  history continues to live behind `GET /api/events`; the glance
-  surface is a small "while you were away" rollup, not a feed.
+- `GET /api/glance` now covers the requested `hours` window by walking
+  Frigate backwards through `/api/events` (page size 200, capped at
+  five pages = 1000 source events as a safety net) instead of pulling
+  a single fixed 20-event lookback. The user-visible limit shifts from
+  "source events fetched" to "moments shown": after grouping, the
+  moment list is truncated to the newest `max` (default 20,
+  configurable via the new `glance_max_moments` pref or the
+  `?max=N` query). On exceptionally busy installs the safety cap may
+  stop the loop before the full window is covered; full event history
+  continues to live behind `GET /api/events`.
 - Container restart-policy requirement for runtime reconfiguration is
   now stated up front. The first-run wizard Save and Settings →
   Connection Apply both restart Skua by exiting the process and rely

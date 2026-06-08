@@ -63,6 +63,12 @@ func TestGroupMoments_SingleEvent(t *testing.T) {
 	if m.EndedAt == nil {
 		t.Error("ended_at should be non-nil for a finished event")
 	}
+	if len(m.Events) != 1 {
+		t.Fatalf("events len = %d, want 1", len(m.Events))
+	}
+	if m.Events[0].ID != "e1" {
+		t.Errorf("events[0].id = %q, want e1", m.Events[0].ID)
+	}
 }
 
 func TestGroupMoments_WithinGapMerges(t *testing.T) {
@@ -91,6 +97,17 @@ func TestGroupMoments_WithinGapMerges(t *testing.T) {
 	}
 	if !m.RepresentativeHasClip {
 		t.Error("rep has_clip should be true (from e2)")
+	}
+	if len(m.Events) != m.EventCount {
+		t.Fatalf("events len = %d, want %d (== event_count)", len(m.Events), m.EventCount)
+	}
+	// Newest detection first: e2 started 60s after e1.
+	wantOrder := []string{"e2", "e1"}
+	for i, w := range wantOrder {
+		if m.Events[i].ID != w {
+			t.Errorf("events[%d].id = %q, want %q (newest first)",
+				i, m.Events[i].ID, w)
+		}
 	}
 }
 

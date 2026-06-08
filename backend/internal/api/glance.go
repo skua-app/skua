@@ -14,11 +14,20 @@ import (
 )
 
 const (
-	glanceListTimeout   = 5 * time.Second
-	glanceLookbackLimit = 20
-	glanceDefaultHours  = 24
-	glanceMinHours      = 1
-	glanceMaxHours      = 168
+	glanceListTimeout = 5 * time.Second
+	// glancePageLimit is the per-Frigate-call page size used by the
+	// backward pagination loop. Same value as eventsMaxLimit (Frigate's
+	// observed per-request cap).
+	glancePageLimit = 200
+	// glanceMaxPages caps how many pages the loop will fetch before it
+	// surrenders, even if the `hours` window is not yet covered. At
+	// glancePageLimit per page this is 1000 source events.
+	glanceMaxPages          = 5
+	glanceDefaultHours      = 24
+	glanceMinHours          = 1
+	glanceMaxHours          = 168
+	glanceDefaultMaxMoments = 20
+	glanceMaxMomentsCeil    = 200
 )
 
 // glanceMoment embeds events.Moment and adds a per-moment seen flag
@@ -47,13 +56,17 @@ type glanceSeenRequest struct {
 }
 
 // handleGlance serves GET /api/glance: the "while you were away"
-// payload. Pulls a fixed lookback of glanceLookbackLimit recent events,
-// filters them by since = max(now - hours, cleared_at) where hours is
-// the optional query param (default glanceDefaultHours, clamped to
-// glanceMinHours..glanceMaxHours), groups the survivors into moments,
-// and annotates each moment with seen = its representative_event_id
-// is in the household seen-set. unseen_count is the count of moments
-// whose seen flag is false.
+// payload. Walks Frigate backwards (page size glancePageLimit, up to
+// glanceMaxPages pages for safety) until the source events cover the
+// since = max(now - hours, cleared_at) window, groups the survivors
+// into moments, truncates to the newest `max` moments, and annotates
+// each moment with seen = its representative_event_id is in the
+// household seen-set. unseen_count is the count of moments whose seen
+// flag is false. `hours` is the optional query param (default
+// glanceDefaultHours, clamped to glanceMinHours..glanceMaxHours). `max`
+// is the optional output cap (default glanceDefaultMaxMoments, clamped
+// to 1..glanceMaxMomentsCeil) — it bounds the number of moments
+// returned, NOT the source events fetched.
 func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	hours := glanceDefaultHours
 	if s := r.URL.Query().Get("hours"); s != "" {
@@ -68,27 +81,71 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 		hours = glanceMaxHours
 	}
 
+	maxMoments := glanceDefaultMaxMoments
+	if s := r.URL.Query().Get("max"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			maxMoments = n
+		}
+	}
+	if maxMoments < 1 {
+		maxMoments = 1
+	}
+	if maxMoments > glanceMaxMomentsCeil {
+		maxMoments = glanceMaxMomentsCeil
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), glanceListTimeout)
 	defer cancel()
-
-	resp, err := h.events.List(ctx, events.ListParams{Limit: glanceLookbackLimit})
-	if err != nil {
-		status := http.StatusBadGateway
-		code := "upstream_error"
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			status = http.StatusGatewayTimeout
-			code = "upstream_timeout"
-		}
-		writeError(w, h.logger, status, code, "events upstream error", err)
-		return
-	}
 
 	since := time.Now().Add(-time.Duration(hours) * time.Hour)
 	if cleared := h.glance.ClearedAt(glance.ScopeHousehold); cleared.After(since) {
 		since = cleared
 	}
 
-	moments := events.GroupMoments(resp.Items, since)
+	var allItems []events.Item
+	var before time.Time
+	for page := 0; page < glanceMaxPages; page++ {
+		params := events.ListParams{Limit: glancePageLimit}
+		if !before.IsZero() {
+			params.Before = before
+		}
+		resp, err := h.events.List(ctx, params)
+		if err != nil {
+			status := http.StatusBadGateway
+			code := "upstream_error"
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				status = http.StatusGatewayTimeout
+				code = "upstream_timeout"
+			}
+			writeError(w, h.logger, status, code, "events upstream error", err)
+			return
+		}
+		allItems = append(allItems, resp.Items...)
+		// Short page or no cursor ⇒ end of history.
+		if resp.NextBefore == nil {
+			break
+		}
+		// Window fully covered: oldest item (last, since Frigate returns
+		// newest-first) sits at or below since.
+		if len(resp.Items) > 0 {
+			oldest := resp.Items[len(resp.Items)-1]
+			if t, perr := time.Parse(time.RFC3339, oldest.StartedAt); perr == nil && !t.After(since) {
+				break
+			}
+		}
+		next, perr := time.Parse(time.RFC3339, *resp.NextBefore)
+		if perr != nil {
+			// Unparseable cursor: degrade gracefully rather than burn the
+			// safety budget on guaranteed-failing requests.
+			break
+		}
+		before = next
+	}
+
+	moments := events.GroupMoments(allItems, since)
+	if len(moments) > maxMoments {
+		moments = moments[:maxMoments]
+	}
 	seenSet := h.glance.SeenSet(glance.ScopeHousehold)
 
 	out := glanceResponse{Moments: make([]glanceMoment, len(moments))}
