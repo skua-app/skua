@@ -1,24 +1,21 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
-  import type { EventItem, GlanceMoment } from '$lib/api'
+  import type { GlanceMoment } from '$lib/api'
   import { eventThumbnailURL } from '$lib/api'
   import BottomSheet from '$lib/components/BottomSheet.svelte'
-  import EventModal from '$lib/components/EventModal.svelte'
+  import MomentModal from '$lib/components/MomentModal.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import { glanceStore } from '$lib/stores/glance.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
-  import { isMomentLive, momentToEventItem } from '$lib/glance'
+  import { isMomentLive } from '$lib/glance'
   import { relativeTime } from '$lib/util/time'
 
-  // Local-only modal state so a row tap can open EventModal on top of
-  // the sheet (mirrors routes/events/+page.svelte's modalEvent pattern).
-  // modalLiveMoment tracks the source moment alongside modalEvent so
-  // the modal's optional "Open live" wire-up can read the live/online
-  // gate against the same moment that opened the modal.
-  let modalEvent = $state<EventItem | null>(null)
-  let modalLiveMoment = $state<GlanceMoment | null>(null)
+  // Local-only modal state: a row tap opens MomentModal on top of the
+  // sheet so the user can review the cluster and switch between
+  // detections inside it.
+  let modalMoment = $state<GlanceMoment | null>(null)
 
   // One-minute tick so "5 min ago" doesn't drift while the sheet is open.
   let now = $state(new Date())
@@ -34,27 +31,38 @@
     return camerasStore.cameras.find((c) => c.id === camId)?.name ?? camId
   }
 
+  // kindsLine joins the moment's distinct kinds; the cluster count is
+  // surfaced separately as an accent chip next to the camera name.
   function kindsLine(moment: GlanceMoment): string {
     const parts = moment.kinds.map((k) => eventKindLabels[k] ?? k)
-    const base = parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
-    return moment.event_count > 1 ? `${base} (${moment.event_count})` : base
+    return parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
+  }
+
+  function countChipText(moment: GlanceMoment): string {
+    const tpl = moment.event_count === 1 ? ui.glanceEventOne : ui.glanceEventMany
+    return tpl.replace('{n}', String(moment.event_count))
+  }
+
+  // Row time reflects the NEWEST detection in the cluster, not the
+  // earliest. moment.events is newest-first; fall back to started_at
+  // when the cluster slice is unexpectedly empty.
+  function newestTime(moment: GlanceMoment): string {
+    const newest = moment.events[0]?.started_at ?? moment.started_at
+    return relativeTime(newest, now)
   }
 
   function onRowClick(moment: GlanceMoment) {
-    // Opening a moment marks just that one seen on the server. A row
-    // tap is always a review tap: it opens the modal on top of the
-    // peek so the user can work through the list. The modal itself
-    // surfaces an optional "Open live" action when the moment is
-    // still in progress and the camera is online — see openLiveFor.
+    // Opening a moment marks just that one seen on the server. The
+    // modal opens on top of the peek so the user can work through the
+    // list and switch between the detections inside the cluster.
     void glanceStore.markOneSeen(moment.representative_event_id)
-    modalEvent = momentToEventItem(moment)
-    modalLiveMoment = moment
+    modalMoment = moment
   }
 
   // openLiveFor produces the optional onOpenLive callback for the
-  // modal. A non-null return wires the action button up; null hides
-  // it entirely. Available only when the moment is still live AND
-  // the camera is currently online — an offline live moment has
+  // modal. A non-null return wires the action button up; undefined
+  // hides it entirely. Available only when the moment is still live
+  // AND the camera is currently online — an offline live moment has
   // nothing playable behind the action.
   function openLiveFor(moment: GlanceMoment | null): (() => void) | undefined {
     if (!moment) return undefined
@@ -62,8 +70,7 @@
     const cam = camerasStore.cameras.find((c) => c.id === moment.cam_id)
     if (!cam?.online) return undefined
     return () => {
-      modalEvent = null
-      modalLiveMoment = null
+      modalMoment = null
       glanceStore.closePeek()
       goto(`/cam/${encodeURIComponent(moment.cam_id)}`)
     }
@@ -126,8 +133,17 @@
             </div>
             <div class="gp-body">
               <div class="gp-row-line">
-                <span class="gp-cam">{camName(m.cam_id)}</span>
-                <Mono size={11} color="var(--text-3)">{relativeTime(m.started_at, now)}</Mono>
+                <div class="gp-cam-wrap">
+                  <span class="gp-cam">{camName(m.cam_id)}</span>
+                  {#if m.event_count >= 1}
+                    <span class="gp-count">
+                      <Mono size={10} color="var(--accent)" weight={600} letterSpacing={0.3}>
+                        {countChipText(m)}
+                      </Mono>
+                    </span>
+                  {/if}
+                </div>
+                <Mono size={11} color="var(--text-3)">{newestTime(m)}</Mono>
               </div>
               <div class="gp-kinds">{kindsLine(m)}</div>
             </div>
@@ -141,14 +157,13 @@
   {/if}
 </BottomSheet>
 
-{#if modalEvent}
-  <EventModal
-    event={modalEvent}
+{#if modalMoment}
+  <MomentModal
+    moment={modalMoment}
     onClose={() => {
-      modalEvent = null
-      modalLiveMoment = null
+      modalMoment = null
     }}
-    onOpenLive={openLiveFor(modalLiveMoment)}
+    onOpenLive={openLiveFor(modalMoment)}
   />
 {/if}
 
@@ -263,6 +278,12 @@
     gap: 10px;
     min-width: 0;
   }
+  .gp-cam-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
   .gp-cam {
     font-size: 13px;
     font-weight: 500;
@@ -270,6 +291,15 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .gp-count {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--accent) 16%, transparent);
+    text-transform: uppercase;
+    flex-shrink: 0;
   }
   .gp-kinds {
     font-size: 12px;

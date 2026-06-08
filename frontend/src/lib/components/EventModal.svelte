@@ -10,10 +10,9 @@
   type Props = {
     event: EventItem
     onClose: () => void
-    onOpenLive?: () => void
   }
 
-  let { event, onClose, onOpenLive }: Props = $props()
+  let { event, onClose }: Props = $props()
 
   const camName = $derived(
     camerasStore.cameras.find((c) => c.id === event.cam_id)?.name ?? event.cam_id
@@ -171,11 +170,6 @@
         <a class="em-btn em-btn-secondary" href={eventClipURL(event.id, true)} download>
           {ui.downloadVideo}
         </a>
-      {/if}
-      {#if onOpenLive}
-        <button type="button" class="em-btn em-btn-secondary" onclick={onOpenLive}>
-          {ui.openLive}
-        </button>
       {/if}
       {#if deepLink}
         <a class="em-btn em-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
