@@ -108,7 +108,11 @@
   })
 
   $effect(() => {
-    closeBtn?.focus()
+    // preventScroll keeps the card from scrolling to the focused button
+    // on open — belt-and-suspenders now that the card itself no longer
+    // scrolls, but it also stops the focused element from being pushed
+    // into view on any future layout change.
+    closeBtn?.focus({ preventScroll: true })
   })
 
   function onBackdropClick(e: MouseEvent) {
@@ -249,7 +253,10 @@
   .mm-card {
     width: min(560px, 100%);
     max-height: calc(100dvh - 40px);
-    overflow: auto;
+    /* Card itself is NOT the scroller — its only flexible child (the
+       detection list) scrolls. This keeps the player, meta, and actions
+       pinned even when the detection list overflows. */
+    overflow: hidden;
     background: #15171a;
     border: 1px solid var(--border-strong);
     border-radius: 12px;
@@ -263,12 +270,18 @@
     font-weight: 600;
     color: var(--text-2);
     letter-spacing: -0.1px;
+    flex-shrink: 0;
   }
 
   .mm-snap {
     aspect-ratio: 16 / 9;
+    /* Cap on short viewports so a tall iPhone in landscape doesn't let
+       the 16:9 box eat the entire modal — the detection list still
+       needs room below. */
+    max-height: 45dvh;
     background: #0c0d0f;
     overflow: hidden;
+    flex-shrink: 0;
   }
   .mm-snap img,
   .mm-snap video {
@@ -284,6 +297,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex-shrink: 0;
   }
   .mm-clip-fallback-heading {
     font-size: 13px;
@@ -302,6 +316,7 @@
     flex-direction: column;
     gap: 8px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
   .mm-meta-row {
     display: flex;
@@ -324,6 +339,14 @@
   }
 
   .mm-events {
+    /* The events block is the only flexible column child: it takes
+       whatever space remains and its list scrolls. min-height: 0 lets
+       the flex item shrink below its content's intrinsic height so
+       overflow:auto on the list actually engages. */
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     border-bottom: 1px solid var(--border);
   }
   .mm-events-toggle {
@@ -340,6 +363,7 @@
     font-weight: 500;
     text-align: left;
     cursor: pointer;
+    flex-shrink: 0;
   }
   .mm-events-toggle:hover {
     color: var(--text);
@@ -363,6 +387,8 @@
     margin: 0;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
   }
   .mm-events-row {
     display: grid;
@@ -413,6 +439,7 @@
     justify-content: flex-end;
     gap: 10px;
     flex-wrap: wrap;
+    flex-shrink: 0;
   }
   .mm-btn {
     padding: 8px 14px;
