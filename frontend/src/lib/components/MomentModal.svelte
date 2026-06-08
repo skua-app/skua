@@ -62,6 +62,7 @@
 
   let closeBtn = $state<HTMLButtonElement | null>(null)
   let cardEl = $state<HTMLDivElement | null>(null)
+  let videoEl = $state<HTMLVideoElement | null>(null)
 
   function focusableIn(root: HTMLElement): HTMLElement[] {
     const sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -119,8 +120,26 @@
     if (e.target === e.currentTarget) onClose()
   }
 
-  function selectEvent(ev: EventItem) {
+  async function selectEvent(ev: EventItem) {
+    // Re-tapping the already-playing row must not restart playback.
+    if (ev.id === selectedEvent.id) return
     selectedEvent = ev
+    // The snapshot <img> renders for clipless events, so there's nothing
+    // to drive — leave the existing clipFailed-reset effect to handle
+    // the meta refresh.
+    if (!ev.has_clip) return
+    // After tick() the reactive src binding (and the clipFailed reset
+    // effect) have applied, so videoEl points at the <video> with the
+    // new source. iOS Safari does not restart the media pipeline on a
+    // bare src swap; an explicit load() + play() is required. The
+    // user-gesture activation from the tap survives the tick()
+    // microtask, so play() is permitted. Any rejection (autoplay
+    // policy, decoder error) is swallowed — the native controls remain
+    // usable.
+    await tick()
+    if (!videoEl) return
+    videoEl.load()
+    void videoEl.play().catch(() => {})
   }
 
   // On initial open we scroll the active (representative) detection
@@ -178,6 +197,7 @@
           controls
           playsinline
           preload="metadata"
+          bind:this={videoEl}
           onerror={() => (clipFailed = true)}
         ></video>
       {:else}
