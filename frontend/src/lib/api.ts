@@ -154,6 +154,8 @@ export function eventClipURL(id: string, download = false): string {
 // Moment mirrors backend/internal/events.Moment exactly: a per-camera
 // time-cluster summarising one or more events. started_at is RFC3339
 // UTC; ended_at is null while any clustered event is still in progress.
+// events lists every detection in the cluster, sorted by started_at
+// descending (newest first); length === event_count.
 export type Moment = {
   cam_id: string
   started_at: string
@@ -163,6 +165,7 @@ export type Moment = {
   event_count: number
   representative_event_id: string
   representative_has_clip: boolean
+  events: EventItem[]
 }
 
 // GlanceMoment is a Moment plus a per-moment seen flag, keyed against

@@ -166,7 +166,11 @@ export const ui = {
   glanceWindowLabel: 'Окно «пока вас не было»',
   glanceWindowChip: 'За {hours} ч',
   glanceMaxMomentsLabel: 'Сколько моментов',
-  // event modal
+  glanceMomentTitle: 'Момент',
+  glanceEventsSection: 'События',
+  glanceEventOne: '{n} событие',
+  glanceEventMany: '{n} событий',
+  // moment / event modal
   openLive: 'Открыть эфир'
 }
 
