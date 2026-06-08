@@ -136,10 +136,12 @@
     if (initialScrollDone || !eventsListEl) return
     const active = eventsListEl.querySelector<HTMLElement>('.mm-events-row.active')
     if (!active) return
-    // block:'nearest' walks up to the nearest scroller (.mm-events-list)
-    // and never touches the page; behaviour:'auto' is instant so the
-    // modal lands at its final position without a perceptible scroll.
-    active.scrollIntoView({ block: 'nearest' })
+    // block:'center' centers the active row inside the nearest scroller
+    // (.mm-events-list — the card is overflow:hidden and the backdrop is
+    // position:fixed, so the page never moves). 'nearest' aligned to the
+    // bottom edge and partly clipped the row; centering shows context
+    // both above and below the playing detection.
+    active.scrollIntoView({ block: 'center' })
     initialScrollDone = true
   }
 
