@@ -19,6 +19,7 @@ export type NameStyle = 'below' | 'overlay'
 export type DesktopColumns = 2 | 3 | 4 | 5
 export type MobileColumns = 1 | 2
 export type GlanceWindowHours = 6 | 12 | 24 | 48 | 72
+export type GlanceMaxMoments = 10 | 20 | 30 | 50
 
 export type Prefs = {
   grid_mode: 'hd' | 'eco'
@@ -32,6 +33,7 @@ export type Prefs = {
   mobile_columns: MobileColumns
   grid_filter: string | null
   glance_window_hours: GlanceWindowHours
+  glance_max_moments: GlanceMaxMoments
 }
 
 export const ACCENT_VALUES: Record<Accent, string> = {
@@ -176,9 +178,12 @@ export type GlanceResponse = {
   moments: GlanceMoment[]
 }
 
-export async function fetchGlance(hours?: number): Promise<GlanceResponse> {
-  const qs = hours !== undefined ? `?hours=${hours}` : ''
-  return apiFetch<GlanceResponse>(`/api/glance${qs}`)
+export async function fetchGlance(hours?: number, max?: number): Promise<GlanceResponse> {
+  const params = new URLSearchParams()
+  if (hours !== undefined) params.set('hours', String(hours))
+  if (max !== undefined) params.set('max', String(max))
+  const qs = params.toString()
+  return apiFetch<GlanceResponse>(`/api/glance${qs ? `?${qs}` : ''}`)
 }
 
 // clearGlance sets the household cleared_at watermark so subsequent

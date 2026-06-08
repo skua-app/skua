@@ -68,7 +68,8 @@ describe('success paths', () => {
       desktop_columns: 3,
       mobile_columns: 2,
       grid_filter: null,
-      glance_window_hours: 24
+      glance_window_hours: 24,
+      glance_max_moments: 20
     }
     mockFetchOnce(jsonResponse(prefs))
     await expect(updatePrefs({ grid_mode: 'eco' })).resolves.toEqual(prefs)

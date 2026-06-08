@@ -16,7 +16,7 @@ class GlanceStore {
 
   async load(): Promise<void> {
     try {
-      const resp = await fetchGlance(prefsStore.glanceWindowHours)
+      const resp = await fetchGlance(prefsStore.glanceWindowHours, prefsStore.glanceMaxMoments)
       this.unseenCount = resp.unseen_count
       this.moments = resp.moments
     } catch (err) {

@@ -163,6 +163,7 @@ export const ui = {
   glanceViewAll: 'View all events',
   glanceWindowLabel: 'While-you-were-away window',
   glanceWindowChip: 'Last {hours}h',
+  glanceMaxMomentsLabel: 'Moments shown',
   // event modal
   openLive: 'Open live'
 }

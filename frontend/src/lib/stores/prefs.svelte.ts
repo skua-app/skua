@@ -5,7 +5,8 @@ import type {
   NameStyle,
   DesktopColumns,
   MobileColumns,
-  GlanceWindowHours
+  GlanceWindowHours,
+  GlanceMaxMoments
 } from '$lib/api'
 
 class PrefsStore {
@@ -20,6 +21,7 @@ class PrefsStore {
   mobileColumns = $state<MobileColumns>(1)
   gridFilter = $state<string | null>(null)
   glanceWindowHours = $state<GlanceWindowHours>(24)
+  glanceMaxMoments = $state<GlanceMaxMoments>(20)
   loaded = $state(false)
 
   async load() {
@@ -36,6 +38,7 @@ class PrefsStore {
       this.mobileColumns = prefs.mobile_columns
       this.gridFilter = prefs.grid_filter
       this.glanceWindowHours = prefs.glance_window_hours
+      this.glanceMaxMoments = prefs.glance_max_moments
       this.applyAccent()
     } catch (err) {
       console.error('[prefs] load failed, using defaults:', err)
@@ -115,6 +118,11 @@ class PrefsStore {
   async setGlanceWindowHours(v: GlanceWindowHours) {
     this.glanceWindowHours = v
     await this.#persist({ glance_window_hours: v }, 'glance_window_hours')
+  }
+
+  async setGlanceMaxMoments(v: GlanceMaxMoments) {
+    this.glanceMaxMoments = v
+    await this.#persist({ glance_max_moments: v }, 'glance_max_moments')
   }
 }
 
