@@ -247,12 +247,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    /* iOS PWA: status-bar-style=black-translucent + viewport-fit=cover
+       means the layout extends under the notch and home indicator.
+       Pad by the larger of the 20px visual gap and the device inset
+       per side so the card never collides with system chrome. Matches
+       the .ah-mobile { padding-top: env(safe-area-inset-top) }
+       convention in AppHeader. */
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-right: max(20px, env(safe-area-inset-right));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    padding-left: max(20px, env(safe-area-inset-left));
     z-index: 100;
   }
   .mm-card {
     width: min(560px, 100%);
-    max-height: calc(100dvh - 40px);
+    /* The backdrop is position:fixed inset:0 with safe-area-aware
+       padding; bounding the card to 100% of that padded content box
+       keeps it clear of both the notch and the home indicator without
+       hard-coding any inset assumption. */
+    max-height: 100%;
     /* Card itself is NOT the scroller — its only flexible child (the
        detection list) scrolls. This keeps the player, meta, and actions
        pinned even when the detection list overflows. */
