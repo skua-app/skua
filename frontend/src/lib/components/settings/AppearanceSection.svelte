@@ -7,7 +7,8 @@
     NameStyle,
     DesktopColumns,
     MobileColumns,
-    GlanceWindowHours
+    GlanceWindowHours,
+    GlanceMaxMoments
   } from '$lib/api'
 
   const gridModeOptions = [
@@ -44,6 +45,12 @@
     { value: '24' as const, label: '24h' },
     { value: '48' as const, label: '48h' },
     { value: '72' as const, label: '72h' }
+  ]
+  const glanceMaxMomentsOptions = [
+    { value: '10' as const, label: '10' },
+    { value: '20' as const, label: '20' },
+    { value: '30' as const, label: '30' },
+    { value: '50' as const, label: '50' }
   ]
 </script>
 
@@ -112,6 +119,15 @@
       value={String(prefsStore.glanceWindowHours) as '6' | '12' | '24' | '48' | '72'}
       options={glanceWindowOptions}
       onChange={(v) => prefsStore.setGlanceWindowHours(Number(v) as GlanceWindowHours)}
+    />
+  </div>
+
+  <div class="setting-row">
+    <span class="setting-label">{ui.glanceMaxMomentsLabel}</span>
+    <Segmented
+      value={String(prefsStore.glanceMaxMoments) as '10' | '20' | '30' | '50'}
+      options={glanceMaxMomentsOptions}
+      onChange={(v) => prefsStore.setGlanceMaxMoments(Number(v) as GlanceMaxMoments)}
     />
   </div>
 </section>
