@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { slide } from 'svelte/transition'
   import type { EventItem, GlanceMoment } from '$lib/api'
   import { eventSnapshotURL, eventClipURL } from '$lib/api'
@@ -122,6 +122,43 @@
   function selectEvent(ev: EventItem) {
     selectedEvent = ev
   }
+
+  // On initial open we scroll the active (representative) detection
+  // into view inside the list so users can see which row is playing
+  // even when it sits below the visible cluster window. Subsequent
+  // taps on other detections must NOT trigger this — the user already
+  // sees the row they tapped — so a one-shot guard locks the behaviour
+  // to the first measurement.
+  let eventsListEl = $state<HTMLUListElement | null>(null)
+  let initialScrollDone = $state(false)
+
+  function scrollSelectedIntoView() {
+    if (initialScrollDone || !eventsListEl) return
+    const active = eventsListEl.querySelector<HTMLElement>('.mm-events-row.active')
+    if (!active) return
+    // block:'nearest' walks up to the nearest scroller (.mm-events-list)
+    // and never touches the page; behaviour:'auto' is instant so the
+    // modal lands at its final position without a perceptible scroll.
+    active.scrollIntoView({ block: 'nearest' })
+    initialScrollDone = true
+  }
+
+  // Fallback for when transition:slide does not emit `introend` on the
+  // initial mount (Svelte's local transitions are suppressed when an
+  // {#if} block opens already true). After tick() + rAF the list's
+  // geometry is laid out, so we can scroll the active row into view.
+  // The introend handler on the <ul> covers the case where the user
+  // collapses then re-expands the section before the initial scroll
+  // ever runs; the initialScrollDone guard keeps both paths idempotent.
+  $effect(() => {
+    if (!showEventsSection || !eventsExpanded) return
+    if (untrack(() => initialScrollDone)) return
+    void tick().then(() => {
+      requestAnimationFrame(() => {
+        scrollSelectedIntoView()
+      })
+    })
+  })
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -188,7 +225,13 @@
           <span class="mm-events-toggle-chevron" class:open={eventsExpanded}>›</span>
         </button>
         {#if eventsExpanded}
-          <ul class="mm-events-list" role="list" transition:slide={{ duration: 160 }}>
+          <ul
+            class="mm-events-list"
+            role="list"
+            bind:this={eventsListEl}
+            transition:slide={{ duration: 160 }}
+            onintroend={scrollSelectedIntoView}
+          >
             {#each moment.events as ev (ev.id)}
               <li>
                 <button
