@@ -94,10 +94,17 @@
   onClose={() => glanceStore.closePeek()}
   title={ui.glancePeekTitle}
 >
-  <div class="gp-window-chip">
-    <Mono size={10} color="var(--text-3)" letterSpacing={0.3} uppercase>
-      {ui.glanceWindowChip.replace('{hours}', String(prefsStore.glanceWindowHours))}
-    </Mono>
+  <div class="gp-header">
+    <span class="gp-window-chip">
+      <Mono size={10} color="var(--text-3)" letterSpacing={0.3} uppercase>
+        {ui.glanceWindowChip.replace('{hours}', String(prefsStore.glanceWindowHours))}
+      </Mono>
+    </span>
+    {#if glanceStore.moments.length > 0}
+      <button type="button" class="gp-clear" onclick={() => void glanceStore.clearGlance()}>
+        {ui.glanceClear}
+      </button>
+    {/if}
   </div>
 
   {#if glanceStore.moments.length === 0}
@@ -106,13 +113,6 @@
       <button type="button" class="gp-view-all" onclick={onViewAll}>{ui.glanceViewAll}</button>
     </div>
   {:else}
-    {#if glanceStore.moments.length > 0}
-      <div class="gp-actions">
-        <button type="button" class="gp-clear" onclick={() => void glanceStore.clearGlance()}>
-          {ui.glanceClear}
-        </button>
-      </div>
-    {/if}
     <ul class="gp-list" role="list">
       {#each glanceStore.moments as m (m.cam_id + m.started_at)}
         <li>
@@ -174,13 +174,16 @@
     color: var(--text-3);
     font-size: 13px;
   }
-  .gp-window-chip {
-    padding: 6px 20px 2px;
-  }
-  .gp-actions {
+  .gp-header {
     display: flex;
-    justify-content: flex-end;
-    padding: 4px 16px 8px;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 20px;
+  }
+  .gp-window-chip {
+    display: inline-flex;
+    align-items: center;
   }
   .gp-clear {
     background: transparent;

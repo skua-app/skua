@@ -1,6 +1,7 @@
 <script lang="ts">
   import Segmented from '$lib/components/Segmented.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
+  import { glanceStore } from '$lib/stores/glance.svelte'
   import { ui } from '$lib/i18n/strings'
   import type {
     Accent,
@@ -118,7 +119,15 @@
     <Segmented
       value={String(prefsStore.glanceWindowHours) as '6' | '12' | '24' | '48' | '72'}
       options={glanceWindowOptions}
-      onChange={(v) => prefsStore.setGlanceWindowHours(Number(v) as GlanceWindowHours)}
+      onChange={(v) => {
+        // prefs setters assign local state synchronously before awaiting
+        // the PUT, so the immediately-following refetch reads the new
+        // value from prefsStore. Refetch so the peek's window chip,
+        // moment list, and badge count match the new setting on the
+        // next open.
+        void prefsStore.setGlanceWindowHours(Number(v) as GlanceWindowHours)
+        void glanceStore.load()
+      }}
     />
   </div>
 
@@ -127,7 +136,10 @@
     <Segmented
       value={String(prefsStore.glanceMaxMoments) as '10' | '20' | '30' | '50'}
       options={glanceMaxMomentsOptions}
-      onChange={(v) => prefsStore.setGlanceMaxMoments(Number(v) as GlanceMaxMoments)}
+      onChange={(v) => {
+        void prefsStore.setGlanceMaxMoments(Number(v) as GlanceMaxMoments)
+        void glanceStore.load()
+      }}
     />
   </div>
 </section>
