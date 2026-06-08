@@ -23,6 +23,9 @@ type Moment struct {
 	EventCount            int      `json:"event_count"`
 	RepresentativeEventID string   `json:"representative_event_id"`
 	RepresentativeHasClip bool     `json:"representative_has_clip"`
+	// Events lists every detection in the cluster, sorted by started_at
+	// descending (newest first). Length always equals EventCount.
+	Events []Item `json:"events"`
 }
 
 // momentEvent is an Item with its parsed timestamps cached. Internal to
@@ -176,6 +179,13 @@ func buildMoment(camID string, cluster []momentEvent) builtMoment {
 	}
 	sort.Strings(labels)
 
+	// Reverse the ascending cluster into a newest-first Item slice. The
+	// input slice itself is left untouched.
+	reversed := make([]Item, len(cluster))
+	for i, ev := range cluster {
+		reversed[len(cluster)-1-i] = ev.item
+	}
+
 	return builtMoment{
 		moment: Moment{
 			CamID:                 camID,
@@ -186,6 +196,7 @@ func buildMoment(camID string, cluster []momentEvent) builtMoment {
 			EventCount:            len(cluster),
 			RepresentativeEventID: cluster[repIdx].item.ID,
 			RepresentativeHasClip: cluster[repIdx].item.HasClip,
+			Events:                reversed,
 		},
 		latestStart: latest,
 	}

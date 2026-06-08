@@ -69,9 +69,10 @@ type Prefs = {
   mobile_columns: 1 | 2
   grid_filter: string | null  // last-selected group id, null = "Все" (E3.3)
   glance_window_hours: 6 | 12 | 24 | 48 | 72  // "while you were away" lookback
+  glance_max_moments: 10 | 20 | 30 | 50       // cap on glance peek output moments
 }
 // Stored at /data/prefs.json. Atomic write (tmp + rename).
-// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null / 24
+// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null / 24 / 20
 
 // === E3 (stable) ===
 
@@ -458,6 +459,7 @@ type Moment = {
   event_count: number
   representative_event_id: string
   representative_has_clip: boolean
+  events: EventItem[]               // cluster detections, newest first; length === event_count
 }
 
 // === Glance — Phase 2 (internal) ===
@@ -477,18 +479,27 @@ type Moment = {
 // entries are pruned to a 30-day retention window on load and after
 // every write so the file stays bounded.
 
-// GET /api/glance?hours=
+// GET /api/glance?hours=&max=
 //   hours: optional positive integer (default 24, clamped to 1..168 =
 //          1 hour through 7 days). Controls how far back the "while you
 //          were away" window extends.
-//   Source fetch is fixed at glanceLookbackLimit = 20 recent events
-//   from Frigate (full history lives in GET /api/events); the BFF then
-//   filters that page by since = max(now - hours, cleared_at) and
-//   groups the survivors into moments. Each moment carries a `seen`
-//   boolean derived from the household seen-set keyed on its
+//   max:   optional positive integer (default 20, clamped to 1..200).
+//          Caps the number of MOMENTS returned in the response (not
+//          the source events fetched). After grouping, the moment list
+//          is truncated to the newest `max`.
+//   The BFF walks Frigate backwards via the /api/events cursor (page
+//   size glancePageLimit = 200, up to glanceMaxPages = 5 pages = 1000
+//   source events for safety) until the source events cover
+//   since = max(now - hours, cleared_at), then groups them into
+//   moments. On exceptionally busy installs the safety cap may stop
+//   the loop before the full `hours` window is covered — older moments
+//   may then be missing from the response; full event history continues
+//   to live behind GET /api/events. After grouping, moments are
+//   truncated to the newest `max`. Each moment carries a `seen` boolean
+//   derived from the household seen-set keyed on its
 //   representative_event_id; `unseen_count` is the count of moments
-//   whose `seen` is false. There is no pagination cursor; clients
-//   re-fetch from the top.
+//   whose `seen` is false. There is no pagination cursor on this
+//   endpoint; clients re-fetch from the top.
 //
 // Response: Cache-Control: no-store.
 

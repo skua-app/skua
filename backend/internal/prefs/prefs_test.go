@@ -282,6 +282,64 @@ func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 	}
 }
 
+func TestNew_MissingFile_ReturnsGlanceMaxMomentsDefault(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := store.Get().GlanceMaxMoments; got != 20 {
+		t.Errorf("GlanceMaxMoments: got %d, want default 20", got)
+	}
+}
+
+func TestUpdate_GlanceMaxMoments_ValidValue(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := store.Update(map[string]any{"glance_max_moments": float64(30)})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.GlanceMaxMoments != 30 {
+		t.Errorf("GlanceMaxMoments: got %d, want 30", updated.GlanceMaxMoments)
+	}
+}
+
+func TestUpdate_GlanceMaxMoments_InvalidValueRejected(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Update(map[string]any{"glance_max_moments": float64(7)}); err == nil {
+		t.Fatal("expected error for out-of-set glance_max_moments, got nil")
+	}
+	if _, err := store.Update(map[string]any{"glance_max_moments": float64(20.5)}); err == nil {
+		t.Fatal("expected error for non-integer glance_max_moments, got nil")
+	}
+}
+
+func TestNew_InvalidGlanceMaxMoments_SanitizedToDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefs.json")
+	raw := []byte(`{"glance_max_moments": 7}`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := prefs.New(path)
+	if err != nil {
+		t.Fatalf("New must not error on invalid field values, got: %v", err)
+	}
+	if got := store.Get().GlanceMaxMoments; got != 20 {
+		t.Errorf("GlanceMaxMoments: got %d, want default 20", got)
+	}
+}
+
 func TestNew_MalformedJSON_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prefs.json")

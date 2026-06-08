@@ -24,6 +24,7 @@ type Prefs struct {
 	MobileColumns     int     `json:"mobile_columns"`
 	GridFilter        *string `json:"grid_filter"`
 	GlanceWindowHours int     `json:"glance_window_hours"`
+	GlanceMaxMoments  int     `json:"glance_max_moments"`
 }
 
 var defaults = Prefs{
@@ -38,6 +39,7 @@ var defaults = Prefs{
 	MobileColumns:     1,
 	GridFilter:        nil,
 	GlanceWindowHours: 24,
+	GlanceMaxMoments:  20,
 }
 
 var validGridModes = map[string]bool{"hd": true, "eco": true}
@@ -46,6 +48,7 @@ var validNameStyles = map[string]bool{"below": true, "overlay": true}
 var validDesktopColumns = map[int]bool{2: true, 3: true, 4: true, 5: true}
 var validMobileColumns = map[int]bool{1: true, 2: true}
 var validGlanceWindowHours = map[int]bool{6: true, 12: true, 24: true, 48: true, 72: true}
+var validGlanceMaxMoments = map[int]bool{10: true, 20: true, 30: true, 50: true}
 
 var knownFields = map[string]bool{
 	"grid_mode":           true,
@@ -59,6 +62,7 @@ var knownFields = map[string]bool{
 	"mobile_columns":      true,
 	"grid_filter":         true,
 	"glance_window_hours": true,
+	"glance_max_moments":  true,
 }
 
 // Store is a thread-safe, file-backed preferences store.
@@ -124,6 +128,10 @@ func sanitize(p Prefs) (Prefs, []string) {
 	if !validGlanceWindowHours[p.GlanceWindowHours] {
 		p.GlanceWindowHours = defaults.GlanceWindowHours
 		reset = append(reset, "glance_window_hours")
+	}
+	if !validGlanceMaxMoments[p.GlanceMaxMoments] {
+		p.GlanceMaxMoments = defaults.GlanceMaxMoments
+		reset = append(reset, "glance_max_moments")
 	}
 	return p, reset
 }
@@ -273,6 +281,21 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("glance_window_hours must be 6/12/24/48/72, got %d", n)
 		}
 		next.GlanceWindowHours = n
+	}
+
+	if v, ok := partial["glance_max_moments"]; ok {
+		f, ok := v.(float64)
+		if !ok {
+			return Prefs{}, fmt.Errorf("glance_max_moments must be a number")
+		}
+		n := int(f)
+		if float64(n) != f {
+			return Prefs{}, fmt.Errorf("glance_max_moments must be an integer, got %v", f)
+		}
+		if !validGlanceMaxMoments[n] {
+			return Prefs{}, fmt.Errorf("glance_max_moments must be 10/20/30/50, got %d", n)
+		}
+		next.GlanceMaxMoments = n
 	}
 
 	if err := s.atomicWrite(next); err != nil {
