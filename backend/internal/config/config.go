@@ -29,6 +29,7 @@ type Config struct {
 	StreamOverridesPath string
 	RuntimeConfigPath   string
 	GlanceStatePath     string
+	AwaySessionGap      time.Duration
 
 	// Provenance flags — true when the corresponding URL came from a
 	// non-empty environment variable. The setup wizard renders env-sourced
@@ -63,6 +64,7 @@ func Load() (*Config, error) {
 		StreamOverridesPath: env("STREAM_OVERRIDES_CONFIG_PATH", "/data/stream_overrides.yaml"),
 		RuntimeConfigPath:   env("RUNTIME_CONFIG_PATH", "/data/config.yaml"),
 		GlanceStatePath:     env("GLANCE_STATE_PATH", "/data/glance.json"),
+		AwaySessionGap:      parseDuration("AWAY_SESSION_GAP", env("AWAY_SESSION_GAP", "30m"), &errs),
 	}
 
 	frigateEnv := os.Getenv("FRIGATE_URL")

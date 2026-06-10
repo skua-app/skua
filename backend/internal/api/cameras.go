@@ -21,6 +21,7 @@ import (
 	"github.com/skua-app/skua/internal/names"
 	"github.com/skua-app/skua/internal/prefs"
 	"github.com/skua-app/skua/internal/runtimeconfig"
+	"github.com/skua-app/skua/internal/session"
 	"github.com/skua-app/skua/internal/streamoverrides"
 )
 
@@ -210,6 +211,7 @@ type Handler struct {
 	capabilities    *capabilities.Store
 	streamOverrides *streamoverrides.Store
 	glance          *glance.Store
+	session         *session.Store
 	runtime         RuntimeConfigDeps
 }
 
@@ -236,6 +238,7 @@ type HandlerDeps struct {
 	Capabilities    *capabilities.Store
 	StreamOverrides *streamoverrides.Store
 	Glance          *glance.Store
+	Session         *session.Store
 	Runtime         RuntimeConfigDeps
 }
 
@@ -257,6 +260,7 @@ func NewHandler(d HandlerDeps) *Handler {
 		capabilities:    d.Capabilities,
 		streamOverrides: d.StreamOverrides,
 		glance:          d.Glance,
+		session:         d.Session,
 		runtime:         d.Runtime,
 	}
 }

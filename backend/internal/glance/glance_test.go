@@ -111,8 +111,8 @@ func TestMarkSeen_Idempotent_RefreshesTimestamp(t *testing.T) {
 		t.Fatalf("read: %v", err)
 	}
 	var decoded map[string]struct {
-		Seen      map[string]int64 `json:"seen"`
-		ClearedAt int64            `json:"cleared_at"`
+		Seen        map[string]int64 `json:"seen"`
+		SeenThrough int64            `json:"seen_through"`
 	}
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("unmarshal: %v", err)
@@ -192,7 +192,7 @@ func TestNew_PrunesOldEntriesOnLoad(t *testing.T) {
 	// Hand-craft a file where the entry is far older than the
 	// retention window. New must drop it on load and leave the
 	// scope empty (then also drop the now-empty scope when its
-	// cleared_at watermark is zero).
+	// seen_through watermark is zero).
 	veryOld := time.Now().Add(-365 * 24 * time.Hour).Unix()
 	payload, err := json.Marshal(map[string]map[string]any{
 		glance.ScopeHousehold: {
@@ -214,7 +214,7 @@ func TestNew_PrunesOldEntriesOnLoad(t *testing.T) {
 	}
 }
 
-func TestClear_SetsWatermarkAndPersists(t *testing.T) {
+func TestMarkAllSeen_SetsWatermarkAndPersists(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "glance.json")
 	store, err := glance.New(path)
@@ -222,23 +222,23 @@ func TestClear_SetsWatermarkAndPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
-	if err := store.Clear(glance.ScopeHousehold, at); err != nil {
-		t.Fatalf("Clear: %v", err)
+	if err := store.MarkAllSeen(glance.ScopeHousehold, at); err != nil {
+		t.Fatalf("MarkAllSeen: %v", err)
 	}
-	if got := store.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
-		t.Errorf("ClearedAt = %v, want %v", got, at)
+	if got := store.SeenThrough(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("SeenThrough = %v, want %v", got, at)
 	}
 
 	reloaded, err := glance.New(path)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got := reloaded.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
-		t.Errorf("reloaded ClearedAt = %v, want %v", got, at)
+	if got := reloaded.SeenThrough(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("reloaded SeenThrough = %v, want %v", got, at)
 	}
 }
 
-func TestClear_PreservesScopeAcrossPrune_WithEmptySeen(t *testing.T) {
+func TestMarkAllSeen_PreservesScopeAcrossPrune_WithEmptySeen(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "glance.json")
 	store, err := glance.New(path)
@@ -246,38 +246,38 @@ func TestClear_PreservesScopeAcrossPrune_WithEmptySeen(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
-	if err := store.Clear(glance.ScopeHousehold, at); err != nil {
-		t.Fatalf("Clear: %v", err)
+	if err := store.MarkAllSeen(glance.ScopeHousehold, at); err != nil {
+		t.Fatalf("MarkAllSeen: %v", err)
 	}
 
 	// A subsequent MarkSeen on a different scope must not drop the
 	// household scope just because its seen set is empty — the
-	// cleared_at watermark must survive pruning.
+	// seen_through watermark must survive pruning.
 	if err := store.MarkSeen("other-scope", []string{"x"}, at.Add(time.Hour)); err != nil {
 		t.Fatalf("MarkSeen other: %v", err)
 	}
-	if got := store.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
-		t.Errorf("ClearedAt after prune = %v, want %v", got, at)
+	if got := store.SeenThrough(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("SeenThrough after prune = %v, want %v", got, at)
 	}
 
 	reloaded, err := glance.New(path)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if got := reloaded.ClearedAt(glance.ScopeHousehold); !got.Equal(at) {
-		t.Errorf("reloaded ClearedAt = %v, want %v", got, at)
+	if got := reloaded.SeenThrough(glance.ScopeHousehold); !got.Equal(at) {
+		t.Errorf("reloaded SeenThrough = %v, want %v", got, at)
 	}
 }
 
-func TestClearedAt_AbsentScope_ReturnsZero(t *testing.T) {
+func TestSeenThrough_AbsentScope_ReturnsZero(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "glance.json")
 	store, err := glance.New(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := store.ClearedAt(glance.ScopeHousehold); !got.IsZero() {
-		t.Errorf("ClearedAt for unset scope = %v, want zero", got)
+	if got := store.SeenThrough(glance.ScopeHousehold); !got.IsZero() {
+		t.Errorf("SeenThrough for unset scope = %v, want zero", got)
 	}
 }
 

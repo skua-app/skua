@@ -58,11 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   setting is persisted in `prefs.json` and exposed in Settings →
   Appearance. The endpoint accepts an `?hours=N` query parameter
   (server-clamped to 1..168) so device clocks never matter.
-- Clear action for the glance peek and a matching `POST /api/glance/clear`
-  endpoint that sets a household `cleared_at` watermark on the glance
-  store. The watermark filters all earlier moments out of subsequent
-  `GET /api/glance` responses for as long as it stays inside the
-  active window. Persisted alongside the seen-id set in `glance.json`
+- Non-destructive mark-all-seen action for the glance peek and a
+  matching `POST /api/glance/seen-all` endpoint that advances a
+  household `seen_through` watermark on the glance store. Moments
+  whose newest event start sits at or before the watermark render
+  with `seen: true` in subsequent `GET /api/glance` responses
+  instead of being removed from the list, so the peek can still
+  surface them as "already seen" history without forcing a refetch
+  to confirm. Persisted alongside the seen-id set in `glance.json`
   and survives restarts even when the seen set is empty.
 - Configurable cap on glance peek output: a new `glance_max_moments`
   preference (10 / 20 / 30 / 50, default 20) controls how many
@@ -73,6 +76,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cluster detection list (`events`, newest first), the foundation for
   a reviewable moment modal where the player can switch between
   individual detections inside the cluster.
+- Per-device away detection for the glance peek via
+  `POST /api/glance/heartbeat` and the new `AWAY_SESSION_GAP`
+  environment variable (default 30 minutes). The server identifies
+  the calling device through an httpOnly `skua_device` cookie minted
+  on first contact and reports `{ away: boolean }` based on the gap
+  between this beat and the previous one for the same device. The
+  SPA uses the verdict to decide whether to auto-surface the "while
+  you were away" sheet after an absence; the unseen badge count
+  continues to come from `GET /api/glance`. The store is in-memory,
+  so a server restart reports every device as away once.
 
 ### Fixed
 
@@ -85,6 +98,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Glance peek "Mark all seen" replaces the previous "Clear" action.
+  Moments are marked seen in place instead of being removed from
+  the list: `POST /api/glance/seen-all` supersedes
+  `POST /api/glance/clear`, and a household `seen_through`
+  watermark supersedes the `cleared_at` watermark in
+  `glance.json`. The pre-rename `{"cleared_at": <unix>}` shape is
+  silently ignored on load — best-effort state, no automatic
+  migration; the worst case is one mark-all-seen lost across the
+  upgrade.
 - `GET /api/glance` now covers the requested `hours` window by walking
   Frigate backwards through `/api/events` (page size 200, capped at
   five pages = 1000 source events as a safety net) instead of pulling

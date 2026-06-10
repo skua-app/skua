@@ -57,6 +57,23 @@ func TestLoad_Defaults(t *testing.T) {
 	if !cfg.FrigateURLFromEnv {
 		t.Errorf("FrigateURLFromEnv: want true, got false")
 	}
+	if cfg.AwaySessionGap != 30*time.Minute {
+		t.Errorf("AwaySessionGap: want 30m, got %v", cfg.AwaySessionGap)
+	}
+}
+
+func TestLoad_AwaySessionGapOverride(t *testing.T) {
+	withIsolatedRuntimeConfig(t)
+	t.Setenv("FRIGATE_URL", "http://frigate:5000")
+	t.Setenv("AWAY_SESSION_GAP", "2h")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AwaySessionGap != 2*time.Hour {
+		t.Errorf("AwaySessionGap: want 2h, got %v", cfg.AwaySessionGap)
+	}
 }
 
 func TestLoad_StripsTrailingSlash(t *testing.T) {
