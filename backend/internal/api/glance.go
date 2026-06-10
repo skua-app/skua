@@ -32,7 +32,9 @@ const (
 
 // glanceMoment embeds events.Moment and adds a per-moment seen flag
 // computed from the household scope's seen-set keyed on the moment's
-// representative event id.
+// representative event id, OR from the seen_through watermark
+// (moments whose newest event start sits at or before the watermark
+// are also reported as seen).
 type glanceMoment struct {
 	events.Moment
 	Seen bool `json:"seen"`
@@ -58,15 +60,17 @@ type glanceSeenRequest struct {
 // handleGlance serves GET /api/glance: the "while you were away"
 // payload. Walks Frigate backwards (page size glancePageLimit, up to
 // glanceMaxPages pages for safety) until the source events cover the
-// since = max(now - hours, cleared_at) window, groups the survivors
-// into moments, truncates to the newest `max` moments, and annotates
-// each moment with seen = its representative_event_id is in the
-// household seen-set. unseen_count is the count of moments whose seen
-// flag is false. `hours` is the optional query param (default
-// glanceDefaultHours, clamped to glanceMinHours..glanceMaxHours). `max`
-// is the optional output cap (default glanceDefaultMaxMoments, clamped
-// to 1..glanceMaxMomentsCeil) — it bounds the number of moments
-// returned, NOT the source events fetched.
+// since = now - hours window, groups the survivors into moments,
+// truncates to the newest `max` moments, and annotates each moment
+// with seen. seen is true when the moment's representative_event_id
+// sits in the household seen-set, OR when its newest event start is
+// at or before the household seen_through watermark. unseen_count is
+// the count of moments whose seen flag is false. `hours` is the
+// optional query param (default glanceDefaultHours, clamped to
+// glanceMinHours..glanceMaxHours). `max` is the optional output cap
+// (default glanceDefaultMaxMoments, clamped to 1..glanceMaxMomentsCeil)
+// — it bounds the number of moments returned, NOT the source events
+// fetched.
 func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	hours := glanceDefaultHours
 	if s := r.URL.Query().Get("hours"); s != "" {
@@ -98,9 +102,6 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	since := time.Now().Add(-time.Duration(hours) * time.Hour)
-	if cleared := h.glance.ClearedAt(glance.ScopeHousehold); cleared.After(since) {
-		since = cleared
-	}
 
 	var allItems []events.Item
 	var before time.Time
@@ -147,10 +148,25 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 		moments = moments[:maxMoments]
 	}
 	seenSet := h.glance.SeenSet(glance.ScopeHousehold)
+	seenThrough := h.glance.SeenThrough(glance.ScopeHousehold)
 
 	out := glanceResponse{Moments: make([]glanceMoment, len(moments))}
 	for i, m := range moments {
 		_, seen := seenSet[m.RepresentativeEventID]
+		if !seen && !seenThrough.IsZero() {
+			// Fall back to the watermark: a moment is seen if its
+			// newest event started at or before seen_through. Use the
+			// first event in m.Events (newest-first) when available;
+			// otherwise fall back to the moment's earliest started_at
+			// so a malformed cluster still produces a defined answer.
+			newest := m.StartedAt
+			if len(m.Events) > 0 {
+				newest = m.Events[0].StartedAt
+			}
+			if t, perr := time.Parse(time.RFC3339, newest); perr == nil && !t.After(seenThrough) {
+				seen = true
+			}
+		}
 		out.Moments[i] = glanceMoment{Moment: m, Seen: seen}
 		if !seen {
 			out.UnseenCount++
@@ -164,20 +180,21 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// glanceClearRequest is the JSON body for POST /api/glance/clear.
+// glanceSeenAllRequest is the JSON body for POST /api/glance/seen-all.
 // Scope is optional and defaults to ScopeHousehold when absent.
-type glanceClearRequest struct {
+type glanceSeenAllRequest struct {
 	Scope string `json:"scope"`
 }
 
-// handleGlanceClear serves POST /api/glance/clear: sets the scope's
-// cleared_at watermark to now so subsequent GET /api/glance responses
-// drop moments at or before this instant. An empty/absent body is
+// handleGlanceSeenAll serves POST /api/glance/seen-all: advances the
+// scope's seen_through watermark to now so subsequent GET /api/glance
+// responses render every moment at or before this instant as seen
+// (moments are NOT dropped from the list). An empty/absent body is
 // allowed and resolves to the household scope.
-func (h *Handler) handleGlanceClear(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleGlanceSeenAll(w http.ResponseWriter, r *http.Request) {
 	scope := glance.ScopeHousehold
 	if r.Body != nil {
-		var body glanceClearRequest
+		var body glanceSeenAllRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			writeError(w, h.logger, http.StatusBadRequest, "bad_request", "request body must be valid JSON", err)
 			return
@@ -186,8 +203,8 @@ func (h *Handler) handleGlanceClear(w http.ResponseWriter, r *http.Request) {
 			scope = body.Scope
 		}
 	}
-	if err := h.glance.Clear(scope, time.Now()); err != nil {
-		writeError(w, h.logger, http.StatusInternalServerError, "internal", "could not persist glance clear", err)
+	if err := h.glance.MarkAllSeen(scope, time.Now()); err != nil {
+		writeError(w, h.logger, http.StatusInternalServerError, "internal", "could not persist glance seen-all", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

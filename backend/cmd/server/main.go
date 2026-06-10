@@ -29,6 +29,7 @@ import (
 	"github.com/skua-app/skua/internal/names"
 	"github.com/skua-app/skua/internal/prefs"
 	"github.com/skua-app/skua/internal/runtimeconfig"
+	"github.com/skua-app/skua/internal/session"
 	"github.com/skua-app/skua/internal/setup"
 	"github.com/skua-app/skua/internal/sse"
 	"github.com/skua-app/skua/internal/static"
@@ -101,6 +102,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "glance: %v\n", err)
 		os.Exit(1)
 	}
+
+	sessionStore := session.New(cfg.AwaySessionGap)
 
 	// httpClient is shared by frigate, go2rtc, and the WHEP signaling path.
 	// Timeouts on the Frigate side are governed by each call's context (e.g.
@@ -298,6 +301,7 @@ func main() {
 		Capabilities:    capabilitiesStore,
 		StreamOverrides: streamOverridesStore,
 		Glance:          glanceStore,
+		Session:         sessionStore,
 		Runtime: api.RuntimeConfigDeps{
 			Store:               runtimeConfigStore,
 			FrigateURL:          cfg.FrigateURL,

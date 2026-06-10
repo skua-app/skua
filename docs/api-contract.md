@@ -490,16 +490,20 @@ type Moment = {
 //   The BFF walks Frigate backwards via the /api/events cursor (page
 //   size glancePageLimit = 200, up to glanceMaxPages = 5 pages = 1000
 //   source events for safety) until the source events cover
-//   since = max(now - hours, cleared_at), then groups them into
-//   moments. On exceptionally busy installs the safety cap may stop
-//   the loop before the full `hours` window is covered — older moments
-//   may then be missing from the response; full event history continues
-//   to live behind GET /api/events. After grouping, moments are
-//   truncated to the newest `max`. Each moment carries a `seen` boolean
-//   derived from the household seen-set keyed on its
-//   representative_event_id; `unseen_count` is the count of moments
-//   whose `seen` is false. There is no pagination cursor on this
-//   endpoint; clients re-fetch from the top.
+//   since = now - hours, then groups them into moments. The window
+//   is purely time-based: there is no `cleared_at`-style clamp, and
+//   moments already at-or-before the household `seen_through`
+//   watermark stay in the response (they render with `seen: true`,
+//   not dropped). On exceptionally busy installs the safety cap may
+//   stop the loop before the full `hours` window is covered — older
+//   moments may then be missing from the response; full event history
+//   continues to live behind GET /api/events. After grouping, moments
+//   are truncated to the newest `max`. Each moment carries a `seen`
+//   boolean that is true iff its `representative_event_id` is in the
+//   household seen-set OR its newest event start is at or before the
+//   household `seen_through` watermark. `unseen_count` is the count
+//   of moments whose `seen` is false. There is no pagination cursor
+//   on this endpoint; clients re-fetch from the top.
 //
 // Response: Cache-Control: no-store.
 
@@ -526,38 +530,64 @@ type GlanceSeenRequest = {
   scope?: string   // defaults to "household"; reserved for a future per-user split
 }
 
-// POST /api/glance/clear
+// POST /api/glance/seen-all
 //   body: { scope?: string } (or empty body — both accepted)
-//   Sets the scope's `cleared_at` watermark to the server's current
-//   time. Subsequent GET /api/glance responses drop every moment at
-//   or before that instant for as long as the watermark stays above
-//   `now - hours` (older watermarks age out naturally as the window
-//   slides forward). `scope` defaults to "household" when absent or
-//   empty. Returns 204 No Content on success; 500 internal on
-//   persistence failure. The /api cross-site guard covers this
-//   mutating route.
+//   Advances the scope's `seen_through` watermark to the server's
+//   current time. Subsequent GET /api/glance responses still surface
+//   every moment in the window, but moments whose newest event start
+//   sits at or before the watermark render with `seen: true` (they
+//   are NOT removed from the list). `scope` defaults to "household"
+//   when absent or empty. Returns 204 No Content on success; 500
+//   internal on persistence failure. The /api cross-site guard
+//   covers this mutating route.
 
-type GlanceClearRequest = {
+type GlanceSeenAllRequest = {
   scope?: string   // defaults to "household"; reserved for a future per-user split
 }
 
+// POST /api/glance/heartbeat
+//   No body. Per-device away detection: the server consults the
+//   `skua_device` cookie (httpOnly + SameSite=Lax + Path=/, MaxAge
+//   ≈ 1 year; minted server-side from 16 bytes of crypto/rand on
+//   first contact when absent) to identify the calling device, then
+//   stamps that device's last activity at "now" in an in-memory
+//   store. The response is:
+//
+//     { "away": boolean }
+//
+//   where `away` is true iff the device has no prior activity OR
+//   its previous heartbeat is older than `AWAY_SESSION_GAP`
+//   (default 30m, env-tunable). Clients use `away` to decide
+//   whether to auto-surface the glance "while you were away" sheet
+//   on visibility/route changes; the unseen badge count keeps
+//   coming from GET /api/glance. The store is in-memory only —
+//   a server restart reports every device as away on its next
+//   beat, which is acceptable for a household glance feature.
+//   Response: Cache-Control: no-store. The /api cross-site guard
+//   covers this mutating route.
+
+type GlanceHeartbeatResponse = {
+  away: boolean
+}
+
 // Storage: JSON at $GLANCE_STATE_PATH (default /data/glance.json;
-// the file is auto-created on the first non-empty MarkSeen or Clear).
-// Shape:
+// the file is auto-created on the first non-empty MarkSeen or
+// MarkAllSeen). Shape:
 //   {
 //     "<scope>": {
 //       "seen": { "<event_id>": <seen_at_unix_seconds>, ... },
-//       "cleared_at": <unix_seconds>   // omitted when zero
+//       "seen_through": <unix_seconds>   // omitted when zero
 //     }, ...
 //   }
 // A missing file means an empty store; a corrupt file, the older
-// scope→{id:ts} shape, and the pre-Model-B { "last_seen": ... } shape
-// are all logged and start the store empty — best-effort recency
-// state must not block startup, and there is no automatic migration.
-// Pruning drops seen entries older than the 30-day retention window
-// and only removes a scope when both its seen set is empty AND its
-// cleared_at watermark is zero — a clear must survive an empty seen
-// set across restarts.
+// scope→{id:ts} shape, the pre-Model-B { "last_seen": ... } shape,
+// and the pre-rename { "cleared_at": <unix> } shape are all logged
+// and start the store empty — best-effort recency state must not
+// block startup, and there is no automatic migration off the legacy
+// watermark tag. Pruning drops seen entries older than the 30-day
+// retention window and only removes a scope when both its seen set
+// is empty AND its seen_through watermark is zero — a mark-all-seen
+// must survive an empty seen set across restarts.
 //
 // Known edge: `seen` is keyed on representative_event_id, which is
 // derived per request from the current Frigate result set. If the

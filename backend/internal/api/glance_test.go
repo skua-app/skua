@@ -299,9 +299,10 @@ func TestHandleGlance_HoursParamFiltersOlderEvents(t *testing.T) {
 	}
 }
 
-func TestHandleGlance_ClearWatermarkHidesOlderMoments(t *testing.T) {
-	// Two events within window. Clear at a point between them; only
-	// the moment strictly after cleared_at survives.
+func TestHandleGlance_SeenThroughMarksOlderMomentsSeen(t *testing.T) {
+	// Two events within window. MarkAllSeen at a point between them;
+	// both moments survive, but the older one is reported with
+	// seen=true (it is NOT dropped from the list).
 	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
 	tNew := float64(time.Now().Add(-10 * time.Minute).Unix())
 	page := []events.FrigateEvent{
@@ -310,10 +311,10 @@ func TestHandleGlance_ClearWatermarkHidesOlderMoments(t *testing.T) {
 	}
 	router, store, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
 
-	// Clear at 1h ago — old event (2h ago) is below the watermark,
-	// new event (10m ago) is above it.
-	if err := store.Clear(glance.ScopeHousehold, time.Now().Add(-1*time.Hour)); err != nil {
-		t.Fatalf("Clear: %v", err)
+	// MarkAllSeen at 1h ago — old event (2h ago) is at or before the
+	// watermark, new event (10m ago) is after it.
+	if err := store.MarkAllSeen(glance.ScopeHousehold, time.Now().Add(-1*time.Hour)); err != nil {
+		t.Fatalf("MarkAllSeen: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
@@ -326,42 +327,56 @@ func TestHandleGlance_ClearWatermarkHidesOlderMoments(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(body.Moments) != 1 {
-		t.Fatalf("moments len = %d, want 1 (only above watermark)", len(body.Moments))
+	if len(body.Moments) != 2 {
+		t.Fatalf("moments len = %d, want 2 (both surfaced; watermark only flips seen)", len(body.Moments))
 	}
-	if body.Moments[0].RepresentativeEventID != "new" {
-		t.Errorf("rep id = %q, want new", body.Moments[0].RepresentativeEventID)
+	if body.UnseenCount != 1 {
+		t.Errorf("unseen_count = %d, want 1 (only the post-watermark moment)", body.UnseenCount)
+	}
+	for _, m := range body.Moments {
+		switch m.RepresentativeEventID {
+		case "old":
+			if !m.Seen {
+				t.Errorf("moment %q: seen=false, want true (at or before watermark)", m.RepresentativeEventID)
+			}
+		case "new":
+			if m.Seen {
+				t.Errorf("moment %q: seen=true, want false (after watermark)", m.RepresentativeEventID)
+			}
+		default:
+			t.Errorf("unexpected moment rep id %q", m.RepresentativeEventID)
+		}
 	}
 }
 
-func TestHandleGlanceClear_EmptyBody_HouseholdScope(t *testing.T) {
+func TestHandleGlanceSeenAll_EmptyBody_HouseholdScope(t *testing.T) {
 	router, store, _ := glanceRouterWith(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		t.Fatal("upstream must not be called on clear")
+		t.Fatal("upstream must not be called on seen-all")
 	}))
-	req := httptest.NewRequest(http.MethodPost, "/api/glance/clear", strings.NewReader(""))
+	req := httptest.NewRequest(http.MethodPost, "/api/glance/seen-all", strings.NewReader(""))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("want 204, got %d (body=%s)", w.Code, w.Body.String())
 	}
-	if got := store.ClearedAt(glance.ScopeHousehold); got.IsZero() {
-		t.Errorf("ClearedAt is zero after clear; want non-zero")
+	if got := store.SeenThrough(glance.ScopeHousehold); got.IsZero() {
+		t.Errorf("SeenThrough is zero after seen-all; want non-zero")
 	}
 }
 
-func TestHandleGlanceClear_WithScopeBody(t *testing.T) {
+func TestHandleGlanceSeenAll_WithScopeBody(t *testing.T) {
 	router, store, _ := glanceRouterWith(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		t.Fatal("upstream must not be called on clear")
+		t.Fatal("upstream must not be called on seen-all")
 	}))
-	req := httptest.NewRequest(http.MethodPost, "/api/glance/clear",
+	req := httptest.NewRequest(http.MethodPost, "/api/glance/seen-all",
 		strings.NewReader(`{"scope":"household"}`))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("want 204, got %d", w.Code)
 	}
-	if got := store.ClearedAt(glance.ScopeHousehold); got.IsZero() {
-		t.Errorf("ClearedAt is zero after clear; want non-zero")
+	if got := store.SeenThrough(glance.ScopeHousehold); got.IsZero() {
+		t.Errorf("SeenThrough is zero after seen-all; want non-zero")
 	}
 }
 
