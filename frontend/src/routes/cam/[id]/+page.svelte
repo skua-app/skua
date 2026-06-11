@@ -319,6 +319,7 @@
     {isPaused}
     {showTelemetry}
     showTimestamp={prefsStore.showTimestamp}
+    isLive={streamState === 'connected'}
     {latencyMs}
     {bitrateKbps}
     {videoCodec}
