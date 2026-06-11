@@ -27,6 +27,7 @@ backend/internal/static/dist/*
 
 # Private reference material — never publish
 design_handoff_security_cams/
+.design-reference/
 
 # Claude Code local state
 .claude/
