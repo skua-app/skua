@@ -10,7 +10,10 @@
   let { name, size = 18, class: className = '' }: Props = $props()
 
   const def = $derived(ICONS[name])
-  const pathList = $derived(Array.isArray(def.paths) ? def.paths : [def.paths])
+  const pathList = $derived.by(() => {
+    if (!def.paths) return [] as string[]
+    return Array.isArray(def.paths) ? def.paths : [def.paths]
+  })
 </script>
 
 <svg
@@ -27,5 +30,20 @@
 >
   {#each pathList as d}
     <path {d} />
+  {/each}
+  {#each def.rects ?? [] as r}
+    <rect x={r.x} y={r.y} width={r.width} height={r.height} rx={r.rx ?? 0} />
+  {/each}
+  {#each def.lines ?? [] as l}
+    <line x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
+  {/each}
+  {#each def.circles ?? [] as c}
+    <circle
+      cx={c.cx}
+      cy={c.cy}
+      r={c.r}
+      fill={c.fill ?? 'none'}
+      stroke={c.stroke ?? 'currentColor'}
+    />
   {/each}
 </svg>
