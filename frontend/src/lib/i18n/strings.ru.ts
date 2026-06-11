@@ -162,6 +162,8 @@ export const ui = {
   glancePeekEmpty: 'Ничего нового',
   glanceBellLabel: 'Пока вас не было',
   glanceMarkAllSeen: 'Отметить все просмотренными',
+  filterAllCams: 'Все камеры',
+  gridDensityLabel: 'Плотность сетки',
   glanceViewAll: 'Посмотреть все события',
   glanceWindowLabel: 'Окно «пока вас не было»',
   glanceWindowChip: 'За {hours} ч',

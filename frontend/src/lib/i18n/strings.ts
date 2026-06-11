@@ -160,6 +160,8 @@ export const ui = {
   glancePeekEmpty: 'Nothing new',
   glanceBellLabel: 'While you were away',
   glanceMarkAllSeen: 'Mark all seen',
+  filterAllCams: 'All cams',
+  gridDensityLabel: 'Grid density',
   glanceViewAll: 'View all events',
   glanceWindowLabel: 'While-you-were-away window',
   glanceWindowChip: 'Last {hours}h',
