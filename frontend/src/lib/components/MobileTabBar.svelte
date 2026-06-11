@@ -7,7 +7,7 @@
   type Tab = { icon: IconName; label: string; href: string }
 
   const tabs: Tab[] = [
-    { icon: 'grid', label: ui.cameras, href: '/' },
+    { icon: 'cams', label: ui.cameras, href: '/' },
     { icon: 'events', label: ui.events, href: '/events' },
     { icon: 'settings', label: ui.settings, href: '/settings' }
   ]
@@ -19,53 +19,52 @@
   }
 </script>
 
-<nav class="tab-bar" aria-label={ui.primaryNavLabel}>
+<nav class="tabbar" aria-label={ui.primaryNavLabel}>
   {#each tabs as tab (tab.href)}
     <a
       href={tab.href}
-      class="tab"
-      class:active={isActive(tab.href)}
+      class="ti"
+      class:on={isActive(tab.href)}
       aria-current={isActive(tab.href) ? 'page' : undefined}
     >
-      <Icon name={tab.icon} size={20} />
-      <span class="tab-label">{tab.label}</span>
+      <Icon name={tab.icon} size={25} />
+      <span class="lbl">{tab.label}</span>
     </a>
   {/each}
 </nav>
 
 <style>
-  .tab-bar {
+  .tabbar {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     display: flex;
-    justify-content: space-around;
-    background: rgba(10, 11, 13, 0.85);
-    backdrop-filter: blur(20px);
+    background: var(--bg);
     border-top: 1px solid var(--border);
-    padding-top: 10px;
-    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+    padding: 9px 0 max(env(safe-area-inset-bottom, 0px), 14px);
     z-index: 20;
   }
-  .tab {
+  .ti {
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 500;
     color: var(--text-3);
     text-decoration: none;
+    cursor: pointer;
     transition: color 120ms;
   }
-  .tab:hover {
+  .ti:hover {
     color: var(--text-2);
   }
-  .tab.active {
-    color: var(--text);
+  .ti.on {
+    color: var(--accent);
   }
-  .tab-label {
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.2px;
+  .lbl {
+    letter-spacing: 0.1px;
   }
 </style>

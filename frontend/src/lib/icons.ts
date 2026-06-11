@@ -1,11 +1,25 @@
 // SVG icon path data. All icons are designed for 24×24 viewBox, currentColor,
 // stroke 1.5, round line caps and joins. Filled icons override fill/stroke.
 //
-// Sourced from the design handoff (atoms.jsx — object `I`). Paths are
-// vector-identical; only the rendering wrapper differs (Icon.svelte).
+// Icons sourced from the Calm prototype (.design-reference/reference/calm).
+// `paths` covers stroke-only glyphs; `body` carries raw SVG children for
+// icons that mix primitives (rect/line/circle) — rendered via {@html}.
+
+export type IconRect = { x: number; y: number; width: number; height: number; rx?: number }
+export type IconLine = { x1: number; y1: number; x2: number; y2: number }
+export type IconCircle = {
+  cx: number
+  cy: number
+  r: number
+  fill?: 'currentColor' | 'none'
+  stroke?: 'currentColor' | 'none'
+}
 
 export type IconDef = {
-  paths: string | string[]
+  paths?: string | string[]
+  rects?: IconRect[]
+  lines?: IconLine[]
+  circles?: IconCircle[]
   fill?: 'currentColor' | 'none'
   stroke?: 'currentColor' | 'none'
   strokeWidth?: number
@@ -25,6 +39,7 @@ export type IconName =
   | 'download'
   | 'events'
   | 'grid'
+  | 'cams'
   | 'settings'
   | 'refresh'
   | 'more'
@@ -35,6 +50,10 @@ export type IconName =
   | 'bell'
   | 'history'
   | 'filter'
+  | 'chevDown'
+  | 'check'
+  | 'cols1'
+  | 'cols2'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -64,8 +83,27 @@ export const ICONS: Record<IconName, IconDef> = {
     ]
   },
   download: { paths: ['M12 4v12', 'M7 12l5 5 5-5', 'M4 20h16'] },
-  events: { paths: ['M5 4h14v16H5z', 'M9 9h6', 'M9 13h6', 'M9 17h4'] },
+  events: {
+    lines: [
+      { x1: 8, y1: 6, x2: 20, y2: 6 },
+      { x1: 8, y1: 12, x2: 20, y2: 12 },
+      { x1: 8, y1: 18, x2: 20, y2: 18 }
+    ],
+    circles: [
+      { cx: 3.8, cy: 6, r: 1.2, fill: 'currentColor', stroke: 'none' },
+      { cx: 3.8, cy: 12, r: 1.2, fill: 'currentColor', stroke: 'none' },
+      { cx: 3.8, cy: 18, r: 1.2, fill: 'currentColor', stroke: 'none' }
+    ]
+  },
   grid: { paths: ['M4 4h7v7H4z', 'M13 4h7v7h-7z', 'M4 13h7v7H4z', 'M13 13h7v7h-7z'] },
+  cams: {
+    rects: [
+      { x: 3, y: 3, width: 7.5, height: 7.5, rx: 1.6 },
+      { x: 13.5, y: 3, width: 7.5, height: 7.5, rx: 1.6 },
+      { x: 3, y: 13.5, width: 7.5, height: 7.5, rx: 1.6 },
+      { x: 13.5, y: 13.5, width: 7.5, height: 7.5, rx: 1.6 }
+    ]
+  },
   settings: {
     paths: [
       'M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7z',
@@ -89,7 +127,29 @@ export const ICONS: Record<IconName, IconDef> = {
     ]
   },
   warning: { paths: ['M12 4l10 17H2z', 'M12 10v5', 'M12 18.5v.01'] },
-  bell: { paths: ['M6 8a6 6 0 0112 0c0 7 3 7 3 9H3c0-2 3-2 3-9z', 'M10 21a2 2 0 004 0'] },
+  bell: {
+    paths: ['M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9', 'M13.7 21a2 2 0 0 1-3.4 0']
+  },
   history: { paths: ['M3 12a9 9 0 1 0 3-6.7L3 8', 'M3 3v5h5', 'M12 7v5l4 2'] },
-  filter: { paths: 'M3 5h18l-7 9v6l-4-2v-4z' }
+  filter: { paths: 'M3 5h18l-7 9v6l-4-2v-4z' },
+  chevDown: { paths: 'M6 9l6 6 6-6', strokeWidth: 2 },
+  check: { paths: 'M20 6L9 17l-5-5', strokeWidth: 2.4 },
+  cols1: {
+    rects: [
+      { x: 4, y: 4, width: 16, height: 7, rx: 1.6 },
+      { x: 4, y: 13, width: 16, height: 7, rx: 1.6 }
+    ],
+    fill: 'currentColor',
+    stroke: 'none'
+  },
+  cols2: {
+    rects: [
+      { x: 4, y: 4, width: 7, height: 7, rx: 1.5 },
+      { x: 13, y: 4, width: 7, height: 7, rx: 1.5 },
+      { x: 4, y: 13, width: 7, height: 7, rx: 1.5 },
+      { x: 13, y: 13, width: 7, height: 7, rx: 1.5 }
+    ],
+    fill: 'currentColor',
+    stroke: 'none'
+  }
 }
