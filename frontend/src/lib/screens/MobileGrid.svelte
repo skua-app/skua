@@ -22,7 +22,11 @@
 </script>
 
 <div class="mobile-grid">
-  <div class="mg-grid" style:--cols={prefsStore.mobileColumns}>
+  <div
+    class="grid"
+    class:name-below={prefsStore.nameStyle === 'below'}
+    style:--cols={prefsStore.mobileColumns}
+  >
     {#each cameras as camera, i (camera.id)}
       <CameraTile
         {camera}
@@ -41,12 +45,12 @@
     display: flex;
     flex-direction: column;
   }
-
-  .mg-grid {
-    padding: 14px 14px 96px;
+  .grid {
     flex: 1;
     display: grid;
     grid-template-columns: repeat(var(--cols, 1), 1fr);
     gap: 14px;
+    margin-top: 2px;
+    padding: 14px 14px 96px;
   }
 </style>

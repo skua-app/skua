@@ -1,9 +1,10 @@
-// SVG icon path data. All icons are designed for 24×24 viewBox, currentColor,
-// stroke 1.5, round line caps and joins. Filled icons override fill/stroke.
+// SVG icon definitions. 24×24 viewBox, currentColor, stroke 1.5, round caps
+// and joins by default; filled icons override fill/stroke at the root.
 //
-// Icons sourced from the Calm prototype (.design-reference/reference/calm).
-// `paths` covers stroke-only glyphs; `body` carries raw SVG children for
-// icons that mix primitives (rect/line/circle) — rendered via {@html}.
+// Sourced from the Calm prototype (.design-reference/reference/calm). Icons
+// are typed primitives — `paths` for stroke-only glyphs, plus optional
+// `rects`/`lines`/`circles` for mixed-primitive icons (e.g. the events tab
+// glyph). Icon.svelte renders each list in order.
 
 export type IconRect = { x: number; y: number; width: number; height: number; rx?: number }
 export type IconLine = { x1: number; y1: number; x2: number; y2: number }
@@ -126,7 +127,14 @@ export const ICONS: Record<IconName, IconDef> = {
       'M18 9l3 3-3 3'
     ]
   },
-  warning: { paths: ['M12 4l10 17H2z', 'M12 10v5', 'M12 18.5v.01'] },
+  warning: {
+    paths: ['M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z'],
+    lines: [
+      { x1: 12, y1: 9, x2: 12, y2: 13 },
+      { x1: 12, y1: 17, x2: 12, y2: 17 }
+    ],
+    strokeWidth: 1.8
+  },
   bell: {
     paths: ['M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9', 'M13.7 21a2 2 0 0 1-3.4 0']
   },
