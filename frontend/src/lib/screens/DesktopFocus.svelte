@@ -22,6 +22,7 @@
     audioAvailable: boolean
     isMuted: boolean
     isPaused: boolean
+    isLive: boolean
     showTelemetry: boolean
     showTimestamp: boolean
     latencyMs: number | null
@@ -46,6 +47,7 @@
     audioAvailable,
     isMuted,
     isPaused,
+    isLive,
     showTelemetry,
     showTimestamp,
     latencyMs,
@@ -82,8 +84,6 @@
     }, 1000)
     return () => clearInterval(t)
   })
-
-  const otherCameras = $derived(camerasStore.cameras.filter((c) => c.id !== camera?.id).slice(0, 6))
 
   const qualityOptions = $derived([
     { value: 'main' as const, label: 'HQ' },
@@ -196,16 +196,8 @@
           <div class="df-video-frame">
             {@render videoSnippet()}
 
-            {#if showTimestamp}
-              <div class="ts-chip">
-                <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}
-                  >{currentTime}</Mono
-                >
-              </div>
-            {/if}
-
             {#if showTelemetry}
-              <div class="telemetry-pill">
+              <div class="df-statspanel">
                 <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>LATENCY</Mono>
                 <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
                   {latencyMs !== null ? `${latencyMs} ms` : '—'}
@@ -225,6 +217,23 @@
                     >{audioCodec ?? '—'}</Mono
                   >
                 {/if}
+              </div>
+            {/if}
+
+            {#if isLive}
+              <div class="df-live-tag">
+                <span class="df-live-dot" aria-hidden="true"></span>
+                <Mono size={10} color="rgba(255,255,255,0.92)" letterSpacing={0.8} weight={600}>
+                  {ui.liveTag}
+                </Mono>
+              </div>
+            {/if}
+
+            {#if showTimestamp}
+              <div class="ts-chip">
+                <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}
+                  >{currentTime}</Mono
+                >
               </div>
             {/if}
           </div>
@@ -263,6 +272,56 @@
           </div>
         </div>
       </div>
+
+      {#if camerasStore.cameras.length > 1}
+        <div class="df-filmstrip-wrap">
+          <div class="df-filmstrip-header">
+            <Mono size={10} color="var(--text-2)" letterSpacing={0.6} uppercase>
+              {ui.cameras}
+            </Mono>
+          </div>
+          <div class="df-filmstrip">
+            {#each camerasStore.cameras as c (c.id)}
+              {#if c.id === camera?.id}
+                <div class="df-film df-film-current" class:offline={!c.online} aria-current="page">
+                  <div class="df-film-frame">
+                    <img
+                      src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
+                      alt={c.name}
+                      class="df-film-img"
+                      loading="lazy"
+                    />
+                    <div class="df-film-dot">
+                      <OnlineDot online={c.online} size={4} />
+                    </div>
+                  </div>
+                  <span class="df-film-name">{c.name}</span>
+                </div>
+              {:else}
+                <a
+                  href={`/cam/${c.id}`}
+                  class="df-film"
+                  class:offline={!c.online}
+                  onclick={(e) => switchCam(e, c.id)}
+                >
+                  <div class="df-film-frame">
+                    <img
+                      src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
+                      alt={c.name}
+                      class="df-film-img"
+                      loading="lazy"
+                    />
+                    <div class="df-film-dot">
+                      <OnlineDot online={c.online} size={4} />
+                    </div>
+                  </div>
+                  <span class="df-film-name">{c.name}</span>
+                </a>
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {/if}
     </div>
 
     <aside class="df-sidebar">
@@ -299,40 +358,6 @@
             </button>
           {/each}
         {/if}
-      </div>
-
-      <div class="df-sidebar-section">
-        <div class="df-sidebar-header">
-          <Mono size={10} color="var(--text-2)" letterSpacing={0.6} uppercase
-            >{ui.otherCamerasLabel}</Mono
-          >
-        </div>
-        <div class="df-other-grid">
-          {#each otherCameras as c (c.id)}
-            <a
-              href={`/cam/${c.id}`}
-              class="df-other-tile"
-              class:offline={!c.online}
-              onclick={(e) => switchCam(e, c.id)}
-            >
-              <div class="df-other-frame">
-                <img
-                  src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
-                  alt={c.name}
-                  class="df-other-img"
-                  loading="lazy"
-                />
-                <div class="df-other-dot">
-                  <OnlineDot online={c.online} size={4} />
-                </div>
-              </div>
-              <div class="df-other-label">
-                <span class="df-other-name">{c.name}</span>
-                <Mono size={9} color="var(--text-3)">{c.id}</Mono>
-              </div>
-            </a>
-          {/each}
-        </div>
       </div>
     </aside>
   </div>
@@ -400,7 +425,7 @@
   .df-body {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 320px;
+    grid-template-columns: minmax(0, 1fr) 348px;
     min-height: 0;
   }
   .df-video-col {
@@ -457,25 +482,67 @@
   }
   .ts-chip {
     position: absolute;
-    top: 14px;
-    right: 16px;
+    bottom: 14px;
+    left: 16px;
     padding: 5px 9px;
     border-radius: 5px;
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(10px);
   }
-  .telemetry-pill {
+
+  /* Top-left stats overlay (replaces the bottom-right telemetry pill).
+     Translucent dark + blur, mono key/value rows. Gated by showTelemetry. */
+  .df-statspanel {
     position: absolute;
-    bottom: 14px;
-    right: 16px;
+    top: 14px;
+    left: 16px;
     padding: 8px 12px;
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     display: grid;
     grid-template-columns: auto auto;
     gap: 3px 14px;
-    text-align: right;
+    text-align: left;
+  }
+
+  /* Top-right LIVE tag with a pulsing dot. Static under reduce-motion. */
+  .df-live-tag {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .df-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--online);
+    animation: df-live-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes df-live-pulse {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--online) 60%, transparent);
+    }
+    70% {
+      box-shadow: 0 0 0 6px color-mix(in oklab, var(--online) 0%, transparent);
+    }
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--online) 0%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .df-live-dot {
+      animation: none;
+    }
   }
 
   .df-controls {
@@ -502,6 +569,75 @@
   }
   .df-id-strong {
     color: var(--text);
+  }
+
+  /* Bottom filmstrip: flex-none sibling so .df-player-center keeps flex:1
+     and the deterministic 16:9 sizing math is unchanged. */
+  .df-filmstrip-wrap {
+    flex: none;
+    margin-top: 16px;
+  }
+  .df-filmstrip-header {
+    margin-bottom: 8px;
+  }
+  .df-filmstrip {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .df-filmstrip::-webkit-scrollbar {
+    display: none;
+  }
+  .df-film {
+    flex: none;
+    width: 174px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+  }
+  .df-film.offline {
+    opacity: 0.55;
+  }
+  .df-film-current {
+    cursor: default;
+  }
+  .df-film-frame {
+    position: relative;
+    width: 174px;
+    aspect-ratio: 16 / 9;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #0c0d0f;
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .df-film-current .df-film-frame {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .df-film-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .df-film-dot {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+  }
+  .df-film-name {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .df-film-current .df-film-name {
+    color: var(--accent);
+    font-weight: 500;
   }
 
   .df-sidebar {
@@ -562,54 +698,5 @@
   }
   .df-event-label.active-label {
     font-weight: 500;
-  }
-
-  .df-other-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .df-other-tile {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    opacity: 1;
-    transition: opacity 200ms;
-    cursor: pointer;
-    text-decoration: none;
-    color: inherit;
-  }
-  .df-other-tile.offline {
-    opacity: 0.7;
-  }
-  .df-other-frame {
-    position: relative;
-    aspect-ratio: 16 / 9;
-    border-radius: 5px;
-    overflow: hidden;
-    box-shadow: inset 0 0 0 1px var(--border);
-    background: #0c0d0f;
-  }
-  .df-other-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  .df-other-dot {
-    position: absolute;
-    top: 5px;
-    left: 5px;
-  }
-  .df-other-label {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-  }
-  .df-other-name {
-    font-size: 11px;
-    color: var(--text-2);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 </style>

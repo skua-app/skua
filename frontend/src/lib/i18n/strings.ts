@@ -175,7 +175,8 @@ export const ui = {
   glanceEventOne: '{n} event',
   glanceEventMany: '{n} events',
   // moment / event modal
-  openLive: 'Open live'
+  openLive: 'Open live',
+  liveTag: 'LIVE'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.
