@@ -1,7 +1,5 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
-  import OnlineDot from './OnlineDot.svelte'
-  import Mono from './Mono.svelte'
   import type { Camera } from '$lib/api'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { ui } from '$lib/i18n/strings'
@@ -39,16 +37,15 @@
     imgError = false
     snapshotSrc = `${srcBase}?t=${Math.floor(Date.now() / 1000)}`
   }
-
   function tickTime() {
     currentTime = timeFmt.format(new Date())
   }
 
-  // Polling: set up once on mount, runs at 1 Hz. Stagger initial fetch by
-  // index * 100ms so the tiles don't all hit the BFF at the same instant.
+  // Stagger first fetch by index so all tiles don't hit the BFF at once;
+  // then poll at 1 Hz. Visibility wake-up forces a refresh on resume.
   $effect(() => {
     const stagger = untrack(() => index * 100)
-    const startTimer = setTimeout(() => {
+    const start = setTimeout(() => {
       refreshSnapshot()
       tickTime()
     }, stagger)
@@ -56,7 +53,6 @@
       refreshSnapshot()
       tickTime()
     }, 1000)
-
     function onVisibility() {
       if (document.visibilityState === 'visible') {
         refreshSnapshot()
@@ -64,15 +60,14 @@
       }
     }
     document.addEventListener('visibilitychange', onVisibility)
-
     return () => {
-      clearTimeout(startTimer)
+      clearTimeout(start)
       clearInterval(ticker)
       document.removeEventListener('visibilitychange', onVisibility)
     }
   })
 
-  // Immediate refresh when HD/ECO toggles, without waiting for next tick.
+  // Immediate refresh when HD/ECO toggles.
   $effect(() => {
     void srcBase
     refreshSnapshot()
@@ -83,63 +78,49 @@
   type="button"
   {onclick}
   class="cam-tile"
-  class:offline={!camera.online}
+  class:name-below={nameStyle === 'below'}
+  class:offline-tile={!camera.online}
   aria-label={camera.name}
 >
-  <div class="tile-frame">
-    {#if snapshotSrc && !imgError && camera.online}
-      <img
-        src={snapshotSrc}
-        alt={camera.name}
-        class="tile-img"
-        loading="lazy"
-        onerror={() => (imgError = true)}
-      />
-    {:else if !camera.online}
-      <div class="no-signal">
-        <span class="no-signal-icon" aria-hidden="true">
-          <Icon name="warning" size={30} />
-        </span>
-        <Mono color="var(--text-2)" size={13} weight={500}>{ui.noSignal}</Mono>
-      </div>
-    {/if}
-
-    <div class="tile-top-row">
-      <OnlineDot online={camera.online} size={5} />
-      {#if showTimestamp && camera.online}
-        <span class="ts-chip">
-          <Mono color="rgba(255, 255, 255, 0.7)" size={10} weight={500} letterSpacing={0.4}>
-            {currentTime}
-          </Mono>
-        </span>
+  {#if camera.online}
+    <div class="cam">
+      {#if snapshotSrc && !imgError}
+        <img
+          src={snapshotSrc}
+          alt={camera.name}
+          class="cam-img"
+          loading="lazy"
+          onerror={() => (imgError = true)}
+        />
       {/if}
+      <span class="livedot" aria-hidden="true"></span>
+      {#if showTimestamp}
+        <span class="ts">{currentTime}</span>
+      {/if}
+      <div class="cam-hover" aria-hidden="true">
+        <span class="pchip">
+          <Icon name="play" size={15} />
+          <span>{ui.openLive}</span>
+        </span>
+      </div>
     </div>
-
-    {#if nameStyle === 'overlay' && camera.online}
-      <div class="name-overlay">
-        <span class="name-text">{camera.name}</span>
-      </div>
-    {/if}
-
-    {#if camera.online}
-      <span class="open-live-pill" aria-hidden="true">
-        <Icon name="play" size={12} />
-        <span class="open-live-text">{ui.openLive}</span>
-      </span>
-    {/if}
-  </div>
-
-  {#if nameStyle !== 'overlay'}
-    <div class="tile-label">
-      <div class="tile-label-left">
-        <span class="cam-name">{camera.name}</span>
-        <Mono color="var(--text-3)" size={10}>{camera.id}</Mono>
-      </div>
+  {:else}
+    <div class="cam offline">
+      <span class="off-ico" aria-hidden="true"><Icon name="warning" size={22} /></span>
+      <span class="off-txt">{ui.offline}</span>
     </div>
   {/if}
+
+  <div class="cam-name">
+    <span class="cn-name">{camera.name}</span>
+    <span class="cn-sub">{camera.id}</span>
+  </div>
 </button>
 
 <style>
+  /* Tile root mirrors calm .cam-tile. In overlay mode it clips the gradient
+     name overlay (border-radius + overflow hidden); in name-below mode it
+     stays unclipped so the name sits underneath the framed feed. */
   .cam-tile {
     position: relative;
     display: block;
@@ -149,147 +130,181 @@
     border: none;
     text-align: left;
     cursor: pointer;
-    opacity: 1;
-    transition: opacity 200ms;
     color: inherit;
     font: inherit;
   }
-  .cam-tile.offline {
-    opacity: 0.8;
-  }
-
-  .tile-frame {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    border-radius: 10px;
+  .cam-tile:not(.name-below) {
+    border-radius: var(--r);
     overflow: hidden;
-    background: #0c0d0f;
-    box-shadow: inset 0 0 0 1px var(--border);
+  }
+  .cam-tile:active {
+    transform: translateY(1px);
+  }
+  .cam-tile:focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
+    outline-offset: 2px;
+    border-radius: var(--r);
   }
 
-  .tile-img {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: fill;
-  }
-
-  .no-signal {
-    position: absolute;
-    inset: 0;
+  /* Feed frame — calm .cam */
+  .cam {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--r);
+    overflow: hidden;
+    background: var(--feed);
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    color: var(--text-3);
+    transition:
+      transform 160ms ease,
+      box-shadow 200ms ease,
+      border-color 160ms ease;
   }
-  .no-signal-icon {
-    display: inline-flex;
-    color: var(--offline);
+  .cam-img {
+    width: 100%;
+    height: 100%;
+    /* DO NOT change object-fit: load-bearing for our anamorphic snapshots. */
+    object-fit: fill;
+    display: block;
   }
-
-  .tile-top-row {
+  .livedot {
     position: absolute;
-    top: 8px;
-    left: 10px;
-    right: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    top: 9px;
+    right: 9px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--online);
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.28);
+    z-index: 2;
+  }
+  .ts {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    z-index: 2;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.82);
+    background: rgba(8, 10, 12, 0.4);
+    padding: 2px 7px;
+    border-radius: 6px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    letter-spacing: 0.2px;
   }
 
-  .ts-chip {
-    background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(8px);
-    padding: 2px 6px;
-    border-radius: 4px;
+  /* Offline state — dashed border, warn glyph, "Offline" text */
+  .cam.offline {
+    flex-direction: column;
+    gap: 6px;
+    color: var(--warn);
+    border: 1px dashed var(--border-strong);
+  }
+  .cam-tile:not(.name-below) .cam.offline {
+    padding-bottom: 24px;
+  }
+  .off-ico {
+    color: var(--warn);
+    display: inline-flex;
+  }
+  .off-txt {
+    font-size: 13px;
+    font-weight: 500;
   }
 
-  .name-overlay {
+  /* Name — overlay default, static-below variant when .name-below set */
+  .cam-name {
     position: absolute;
     left: 0;
     right: 0;
     bottom: 0;
-    padding: 20px 12px 10px;
-    background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.55));
+    padding: 30px 14px 12px;
+    background: linear-gradient(transparent, rgba(6, 8, 10, 0.82));
     display: flex;
-    align-items: flex-end;
+    flex-direction: column;
+    gap: 1px;
+    z-index: 2;
   }
-  .name-text {
+  .cn-name {
+    font-size: 16px;
+    font-weight: 600;
     color: #fff;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: -0.1px;
-  }
-
-  .tile-label {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    padding-top: 8px;
-    padding-left: 2px;
-    padding-right: 2px;
-  }
-  .tile-label-left {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-  }
-  .cam-name {
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: -0.1px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
-  .cam-tile:focus-visible {
-    outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
-    outline-offset: 2px;
-    border-radius: 12px;
+  .cn-sub {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.66);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cam-tile.name-below .cam-name {
+    position: static;
+    padding: 9px 2px 0;
+    background: none;
+  }
+  .cam-tile.name-below .cn-name {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.1px;
+  }
+  .cam-tile.name-below .cn-sub {
+    color: var(--text-2);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+  }
+  .cam-tile.name-below.offline-tile .cn-name {
+    color: var(--text-2);
   }
 
-  .open-live-pill {
+  /* Desktop hover affordance — lift + "Open live" pill. Gated to hover-capable
+     pointing devices so touchscreens (mobile grid) get nothing. */
+  .cam-hover {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
-    color: #fff;
-    font-size: 12px;
-    font-weight: 500;
+    inset: 0;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    background: rgba(8, 10, 12, 0.34);
     opacity: 0;
     pointer-events: none;
-    transition: opacity 160ms;
+    transition: opacity 160ms ease;
   }
-
-  /* Hover affordance is desktop-only: a pointing device with hover capability.
-     Touch devices (the mobile grid uses this same tile) get nothing. */
+  .pchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 15px;
+    border-radius: 999px;
+    background: rgba(12, 14, 16, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .pchip :global(svg) {
+    fill: #fff;
+    stroke: none;
+  }
   @media (hover: hover) and (pointer: fine) {
-    .tile-frame {
-      transition:
-        transform 160ms,
-        box-shadow 160ms;
-    }
-    .cam-tile:hover .tile-frame {
+    .cam-tile:not(.offline-tile):hover .cam {
       transform: translateY(-2px);
-      box-shadow:
-        0 8px 24px rgba(0, 0, 0, 0.35),
-        inset 0 0 0 1px var(--border);
+      border: 1px solid var(--border-strong);
+      box-shadow: 0 16px 34px -20px rgba(0, 0, 0, 0.7);
     }
-    .cam-tile:hover .open-live-pill {
+    .cam-tile:not(.offline-tile):hover .cam-hover {
       opacity: 1;
+    }
+    .cam-tile.offline-tile {
+      cursor: default;
     }
   }
 </style>

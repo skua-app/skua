@@ -29,10 +29,10 @@
     | { kind: 'label'; key: string; name: string }
     | { kind: 'tile'; key: string; camera: Camera; index: number }
 
-  // When a filter is active, render a flat grid; when not, group tiles by
+  // When a filter is active, render a flat wall; when not, group tiles by
   // room (groups in store order, then a final "ungrouped" bucket). Every
-  // tile carries a running flat index so CameraTile's stagger stays
-  // unique and stable across rooms.
+  // tile carries a running flat index so CameraTile's stagger stays unique
+  // and stable across rooms.
   const gridItems = $derived.by<GridItem[]>(() => {
     if (prefsStore.gridFilter !== null) {
       return cameras.map((c, i) => ({ kind: 'tile' as const, key: c.id, camera: c, index: i }))
@@ -71,6 +71,9 @@
   const density = $derived<Density>(
     prefsStore.desktopColumns <= 3 ? 'cozy' : prefsStore.desktopColumns === 4 ? 'compact' : 'dense'
   )
+  // Match the prototype's DENSITY map (cozy 360 / compact 288 / dense 224)
+  // — tile min-width drives the auto-fill grid.
+  const tilePx = $derived(density === 'cozy' ? 360 : density === 'compact' ? 288 : 224)
   function setDensity(v: Density) {
     const n = v === 'cozy' ? 3 : v === 'compact' ? 4 : 5
     prefsStore.setDesktopColumns(n as DesktopColumns)
@@ -125,14 +128,16 @@
       </div>
     </div>
 
-    <div class="dg-grid" style:--cols={prefsStore.desktopColumns}>
+    <div
+      class="dg-wall"
+      class:name-below={prefsStore.nameStyle === 'below'}
+      style:--tile="{tilePx}px"
+    >
       {#each gridItems as item (item.key)}
         {#if item.kind === 'label'}
-          <div class="dg-room-label">
-            <Mono size={11} weight={500} color="var(--text-3)" letterSpacing={1.4} uppercase>
-              {item.name}
-            </Mono>
-            <span class="dg-room-rule" aria-hidden="true"></span>
+          <div class="dg-roomlabel">
+            <span class="rl-text">{item.name}</span>
+            <span class="ln" aria-hidden="true"></span>
           </div>
         {:else}
           <CameraTile
@@ -154,12 +159,10 @@
     display: flex;
     flex-direction: column;
   }
-
   .dg-main {
     flex: 1;
     padding: 24px 28px;
   }
-
   .dg-section-header {
     display: flex;
     align-items: center;
@@ -177,7 +180,6 @@
     align-items: center;
     gap: 14px;
   }
-
   .dg-filters {
     display: flex;
     gap: 6px;
@@ -204,7 +206,6 @@
     border-color: color-mix(in oklab, var(--accent) 50%, transparent);
     background: color-mix(in oklab, var(--accent) 14%, transparent);
   }
-
   .dg-divider {
     width: 1px;
     height: 14px;
@@ -214,24 +215,34 @@
     display: inline-flex;
   }
 
-  .dg-grid {
+  /* Calm desktop wall — auto-fill with tile min-width driven by density. */
+  .dg-wall {
     display: grid;
-    grid-template-columns: repeat(var(--cols, 4), 1fr);
-    gap: 18px;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--tile, 280px), 1fr));
   }
-  .dg-room-label {
+  .dg-roomlabel {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-top: 6px;
+    gap: 10px;
+    padding: 14px 2px 2px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--text-3);
   }
-  .dg-room-label:first-child {
-    margin-top: 0;
+  .dg-roomlabel:first-child {
+    padding-top: 0;
   }
-  .dg-room-rule {
-    flex: 1;
+  .dg-roomlabel .ln {
+    flex: 1 1 auto;
     height: 1px;
     background: var(--border);
+  }
+  .rl-text {
+    flex: 0 0 auto;
   }
 </style>
