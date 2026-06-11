@@ -10,6 +10,7 @@
   import { groupsStore } from '$lib/stores/groups.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { ui } from '$lib/i18n/strings'
+  import type { MobileColumns } from '$lib/api'
 
   type Props = { isDesktop: boolean }
   let { isDesktop }: Props = $props()
@@ -90,6 +91,10 @@
     { value: 'hd' as const, label: 'HD' },
     { value: 'eco' as const, label: 'ECO' }
   ]
+  const mobileColumnsOptions = [
+    { value: '1' as const, label: '1' },
+    { value: '2' as const, label: '2' }
+  ]
 </script>
 
 {#if isDesktop}
@@ -143,24 +148,7 @@
 {:else}
   <header class="ah-mobile" bind:this={mobileHeader}>
     <div class="ah-m-title-row">
-      <div class="ah-m-title-left">
-        {#if showGridFilter && groupsStore.groups.length > 0}
-          <button
-            type="button"
-            class="ah-m-filter-btn"
-            class:active={activeGroup !== null}
-            aria-label={ui.groupFilterLabel}
-            aria-expanded={filterSheetOpen}
-            onclick={() => (filterSheetOpen = true)}
-          >
-            <Icon name="filter" size={14} />
-            {#if activeGroup}
-              <span class="ah-m-filter-label">{activeGroup.name}</span>
-            {/if}
-          </button>
-        {/if}
-        <span class="ah-m-title">{mobileTitle}</span>
-      </div>
+      <span class="ah-m-title">{mobileTitle}</span>
       <div class="ah-m-title-right">
         {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
           <button
@@ -176,6 +164,21 @@
             {/if}
           </button>
         {/if}
+      </div>
+    </div>
+    {#if showGridFilter}
+      <div class="ah-m-control-row">
+        <button
+          type="button"
+          class="ah-m-filter-btn"
+          class:active={activeGroup !== null}
+          aria-label={ui.groupFilterLabel}
+          aria-expanded={filterSheetOpen}
+          onclick={() => (filterSheetOpen = true)}
+        >
+          <Icon name="filter" size={14} />
+          <span class="ah-m-filter-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
+        </button>
         {#if showGridMode}
           <Segmented
             value={prefsStore.gridMode}
@@ -183,8 +186,15 @@
             onChange={(v) => prefsStore.setGridMode(v)}
           />
         {/if}
+        <div class="ah-m-density" aria-label={ui.gridDensityLabel}>
+          <Segmented
+            value={String(prefsStore.mobileColumns)}
+            options={mobileColumnsOptions}
+            onChange={(v) => prefsStore.setMobileColumns(Number(v) as MobileColumns)}
+          />
+        </div>
       </div>
-    </div>
+    {/if}
     <div class="ah-m-status-row">
       <div class="ah-m-status-left">
         <span class="status-item">
@@ -270,7 +280,7 @@
     backdrop-filter: blur(20px);
   }
   .ah-m-title-row {
-    padding: 6px 18px 14px;
+    padding: 6px 18px 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -282,11 +292,14 @@
     font-weight: 600;
     letter-spacing: -0.4px;
   }
-  .ah-m-title-left {
-    display: inline-flex;
+  .ah-m-control-row {
+    padding: 0 18px 10px;
+    display: flex;
     align-items: center;
-    gap: 10px;
-    min-width: 0;
+    gap: 8px;
+  }
+  .ah-m-density {
+    margin-left: auto;
   }
   .ah-m-filter-btn {
     display: inline-flex;
