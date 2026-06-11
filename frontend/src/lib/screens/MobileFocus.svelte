@@ -182,7 +182,7 @@
     {/if}
 
     {#if showTelemetry}
-      <div class="telemetry-pill">
+      <div class="mf-statspanel">
         <Mono size={9} color="rgba(255,255,255,0.4)">LAT</Mono>
         <Mono size={9} color="rgba(255,255,255,0.85)" weight={500}>
           {latencyMs !== null ? `${latencyMs}ms` : '—'}
@@ -222,25 +222,27 @@
     </div>
   {/if}
 
-  <div class="mf-meta">
-    <div class="mf-meta-left">
-      <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.streamLabel}</Mono>
-      <Segmented
-        value={effectiveQuality}
-        options={qualityOptions}
-        onChange={(v) => {
-          if (v !== effectiveQuality) toggleQuality()
-        }}
-      />
-      {#if !subAvailable}
-        <Mono size={9} color="var(--text-3)" letterSpacing={0.3}>{ui.subUnavailable}</Mono>
-      {/if}
+  {#if camera?.online}
+    <div class="mf-meta">
+      <div class="mf-meta-left">
+        <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.streamLabel}</Mono>
+        <Segmented
+          value={effectiveQuality}
+          options={qualityOptions}
+          onChange={(v) => {
+            if (v !== effectiveQuality) toggleQuality()
+          }}
+        />
+        {#if !subAvailable}
+          <Mono size={9} color="var(--text-3)" letterSpacing={0.3}>{ui.subUnavailable}</Mono>
+        {/if}
+      </div>
+      <div class="mf-meta-right">
+        <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.qualityLabel}</Mono>
+        <Mono size={12} color="var(--text)" weight={500}>{resolution ?? '—'}</Mono>
+      </div>
     </div>
-    <div class="mf-meta-right">
-      <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.qualityLabel}</Mono>
-      <Mono size={12} color="var(--text)" weight={500}>{resolution ?? '—'}</Mono>
-    </div>
-  </div>
+  {/if}
 
   <div class="mf-controls">
     <div class="mf-controls-group">
@@ -254,8 +256,6 @@
         disabled={!audioAvailable}
       />
       <IconBtn icon="fullscreen" label="fullscreen" onclick={toggleFullscreen} size={40} />
-    </div>
-    <div class="mf-controls-group">
       <IconBtn icon="snapshot" label="snap" onclick={downloadSnapshot} size={40} />
       {#if camera?.capabilities.talk_back}
         <IconBtn icon="mic" label="talkback" size={40} accent disabled />
@@ -358,18 +358,19 @@
     background: rgba(0, 0, 0, 0.42);
     backdrop-filter: blur(8px);
   }
-  .telemetry-pill {
+  .mf-statspanel {
     position: absolute;
-    bottom: 10px;
-    right: 12px;
+    top: 10px;
+    left: 10px;
     padding: 6px 10px;
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     display: grid;
     grid-template-columns: auto auto;
     gap: 2px 10px;
-    text-align: right;
+    text-align: left;
   }
   /* Horizontal scroll-rail of other cameras' ECO tiles, polling 1 Hz via
      tileTick. Fixed tile size keeps ~4 visible on a stock iPhone width;
@@ -438,7 +439,7 @@
     padding: 18px 18px 14px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
   }
   .mf-controls-group {
     display: flex;
