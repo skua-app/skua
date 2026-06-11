@@ -8,6 +8,7 @@
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { groupsStore } from '$lib/stores/groups.svelte'
   import { ui } from '$lib/i18n/strings'
+  import type { Camera, DesktopColumns } from '$lib/api'
 
   // Drop a stale gridFilter (group deleted on another device) silently.
   $effect(() => {
@@ -24,10 +25,56 @@
       : camerasStore.cameras
   )
 
+  type GridItem =
+    | { kind: 'label'; key: string; name: string }
+    | { kind: 'tile'; key: string; camera: Camera; index: number }
+
+  // When a filter is active, render a flat grid; when not, group tiles by
+  // room (groups in store order, then a final "ungrouped" bucket). Every
+  // tile carries a running flat index so CameraTile's stagger stays
+  // unique and stable across rooms.
+  const gridItems = $derived.by<GridItem[]>(() => {
+    if (prefsStore.gridFilter !== null) {
+      return cameras.map((c, i) => ({ kind: 'tile' as const, key: c.id, camera: c, index: i }))
+    }
+    const out: GridItem[] = []
+    let idx = 0
+    for (const g of groupsStore.groups) {
+      const tiles = camerasStore.cameras.filter((c) => c.groups.includes(g.id))
+      if (tiles.length === 0) continue
+      out.push({ kind: 'label', key: `label:${g.id}`, name: g.name })
+      for (const c of tiles) {
+        out.push({ kind: 'tile', key: c.id, camera: c, index: idx++ })
+      }
+    }
+    const ungrouped = camerasStore.cameras.filter((c) => c.groups.length === 0)
+    if (ungrouped.length > 0) {
+      out.push({ kind: 'label', key: 'label:__ungrouped', name: ui.ungrouped })
+      for (const c of ungrouped) {
+        out.push({ kind: 'tile', key: c.id, camera: c, index: idx++ })
+      }
+    }
+    return out
+  })
+
   const gridModeOptions = [
     { value: 'hd' as const, label: 'HD' },
     { value: 'eco' as const, label: 'ECO' }
   ]
+
+  type Density = 'cozy' | 'compact' | 'dense'
+  const densityOptions = [
+    { value: 'cozy' as const, label: ui.densityCozy },
+    { value: 'compact' as const, label: ui.densityCompact },
+    { value: 'dense' as const, label: ui.densityDense }
+  ]
+  const density = $derived<Density>(
+    prefsStore.desktopColumns <= 3 ? 'cozy' : prefsStore.desktopColumns === 4 ? 'compact' : 'dense'
+  )
+  function setDensity(v: Density) {
+    const n = v === 'cozy' ? 3 : v === 'compact' ? 4 : 5
+    prefsStore.setDesktopColumns(n as DesktopColumns)
+  }
 </script>
 
 <div class="desktop-grid">
@@ -66,6 +113,9 @@
           options={gridModeOptions}
           onChange={(v) => prefsStore.setGridMode(v)}
         />
+        <div class="dg-density" aria-label={ui.gridDensityLabel}>
+          <Segmented value={density} options={densityOptions} onChange={setDensity} />
+        </div>
         <IconBtn
           icon="refresh"
           label={ui.refreshCameras}
@@ -76,14 +126,23 @@
     </div>
 
     <div class="dg-grid" style:--cols={prefsStore.desktopColumns}>
-      {#each cameras as camera, i (camera.id)}
-        <CameraTile
-          {camera}
-          index={i}
-          nameStyle={prefsStore.nameStyle}
-          showTimestamp={prefsStore.showTimestamp}
-          onclick={() => goto(`/cam/${camera.id}`)}
-        />
+      {#each gridItems as item (item.key)}
+        {#if item.kind === 'label'}
+          <div class="dg-room-label">
+            <Mono size={11} weight={500} color="var(--text-3)" letterSpacing={1.4} uppercase>
+              {item.name}
+            </Mono>
+            <span class="dg-room-rule" aria-hidden="true"></span>
+          </div>
+        {:else}
+          <CameraTile
+            camera={item.camera}
+            index={item.index}
+            nameStyle={prefsStore.nameStyle}
+            showTimestamp={prefsStore.showTimestamp}
+            onclick={() => goto(`/cam/${item.camera.id}`)}
+          />
+        {/if}
       {/each}
     </div>
   </main>
@@ -151,10 +210,28 @@
     height: 14px;
     background: var(--border);
   }
+  .dg-density {
+    display: inline-flex;
+  }
 
   .dg-grid {
     display: grid;
     grid-template-columns: repeat(var(--cols, 4), 1fr);
     gap: 18px;
+  }
+  .dg-room-label {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 6px;
+  }
+  .dg-room-label:first-child {
+    margin-top: 0;
+  }
+  .dg-room-rule {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
   }
 </style>
