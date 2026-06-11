@@ -120,6 +120,13 @@
         <span class="name-text">{camera.name}</span>
       </div>
     {/if}
+
+    {#if camera.online}
+      <span class="open-live-pill" aria-hidden="true">
+        <Icon name="play" size={12} />
+        <span class="open-live-text">{ui.openLive}</span>
+      </span>
+    {/if}
   </div>
 
   {#if nameStyle !== 'overlay'}
@@ -245,5 +252,44 @@
     outline: 2px solid color-mix(in oklab, var(--accent) 80%, transparent);
     outline-offset: 2px;
     border-radius: 12px;
+  }
+
+  .open-live-pill {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms;
+  }
+
+  /* Hover affordance is desktop-only: a pointing device with hover capability.
+     Touch devices (the mobile grid uses this same tile) get nothing. */
+  @media (hover: hover) and (pointer: fine) {
+    .tile-frame {
+      transition:
+        transform 160ms,
+        box-shadow 160ms;
+    }
+    .cam-tile:hover .tile-frame {
+      transform: translateY(-2px);
+      box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.35),
+        inset 0 0 0 1px var(--border);
+    }
+    .cam-tile:hover .open-live-pill {
+      opacity: 1;
+    }
   }
 </style>
