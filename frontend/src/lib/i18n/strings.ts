@@ -159,7 +159,7 @@ export const ui = {
   glancePeekTitle: 'While you were away',
   glancePeekEmpty: 'Nothing new',
   glanceBellLabel: 'While you were away',
-  glanceClear: 'Clear',
+  glanceMarkAllSeen: 'Mark all seen',
   glanceViewAll: 'View all events',
   glanceWindowLabel: 'While-you-were-away window',
   glanceWindowChip: 'Last {hours}h',

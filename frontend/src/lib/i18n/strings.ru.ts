@@ -161,7 +161,7 @@ export const ui = {
   glancePeekTitle: 'Пока вас не было',
   glancePeekEmpty: 'Ничего нового',
   glanceBellLabel: 'Пока вас не было',
-  glanceClear: 'Очистить',
+  glanceMarkAllSeen: 'Отметить все просмотренными',
   glanceViewAll: 'Посмотреть все события',
   glanceWindowLabel: 'Окно «пока вас не было»',
   glanceWindowChip: 'За {hours} ч',

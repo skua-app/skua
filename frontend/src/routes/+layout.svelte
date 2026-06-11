@@ -64,47 +64,66 @@
     } catch (err) {
       console.error('[layout] groupsStore.init failed:', err)
     }
-    // Cold-open trigger: if the user lands on the grid with genuinely
-    // new unseen moments (none of which the session has already
-    // surfaced), slide the peek up. The same condition runs again on
-    // every iOS resume below — that's the path that re-opens the peek
-    // for moments that arrived while the app was backgrounded.
-    try {
-      void glanceStore.load().then(() => {
-        if (page.route.id === '/' && glanceStore.hasNewUnseen()) {
+    // Cold-open trigger: surface the peek only when the server says
+    // this device is "away" AND the user is on the grid AND there are
+    // unseen moments. The away verdict comes from the per-device
+    // heartbeat session — an active device never trips it.
+    async function surfaceGlance(): Promise<void> {
+      try {
+        const [away] = await Promise.all([glanceStore.heartbeat(), glanceStore.load()])
+        if (away && page.route.id === '/' && glanceStore.unseenCount > 0) {
           glanceStore.openPeek()
         }
-      })
-    } catch (err) {
-      console.error('[layout] glanceStore.load failed:', err)
+      } catch (err) {
+        console.error('[layout] surfaceGlance failed:', err)
+      }
     }
+
+    // Foreground heartbeat ping: while the user has the app open, keep
+    // the device session active so it never trips the away threshold
+    // server-side. The result is ignored — surfacing is driven by the
+    // resume-time heartbeat in surfaceGlance(), not by this tick.
+    let pingTimer: ReturnType<typeof setInterval> | null = null
+    function startPing(): void {
+      if (pingTimer !== null) return
+      pingTimer = setInterval(
+        () => {
+          void glanceStore.heartbeat()
+        },
+        5 * 60 * 1000
+      )
+    }
+    function stopPing(): void {
+      if (pingTimer === null) return
+      clearInterval(pingTimer)
+      pingTimer = null
+    }
+
+    void surfaceGlance()
+    startPing()
 
     lifecycle.init()
 
     // Cameras polling and SSE re-open on resume; pause/close on background.
-    // Glance is also refreshed on resume and the peek re-opens for any
-    // genuinely new moments — moments already surfaced in this session
-    // stay suppressed via presentedIds. Long absences (>30 min) hit the
-    // lifecycle full-reload path instead and go through the cold-open
-    // branch above.
+    // Glance surfacing also runs on resume — the server's away verdict
+    // decides whether the peek pops, so a short absence stays quiet.
     const offBg = lifecycle.onBackground(() => {
       camerasStore.stopPolling()
       eventsStreamStore.close()
+      stopPing()
     })
     const offFg = lifecycle.onForeground(() => {
       camerasStore.startPolling()
       eventsStreamStore.reopen()
-      void glanceStore.load().then(() => {
-        if (page.route.id === '/' && glanceStore.hasNewUnseen()) {
-          glanceStore.openPeek()
-        }
-      })
+      void surfaceGlance()
+      startPing()
     })
 
     return () => {
       offBg()
       offFg()
       camerasStore.stopPolling()
+      stopPing()
     }
   })
 </script>

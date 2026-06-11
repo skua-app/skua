@@ -189,18 +189,18 @@ export async function fetchGlance(hours?: number, max?: number): Promise<GlanceR
   return apiFetch<GlanceResponse>(`/api/glance${qs ? `?${qs}` : ''}`)
 }
 
-// clearGlance sets the household cleared_at watermark so subsequent
-// GET /api/glance responses drop moments at or before now. scope is
-// optional and defaults to "household" on the server. Returns 204 with
-// no body — callers should not parse a payload.
-export async function clearGlance(scope?: string): Promise<void> {
-  const body: { scope?: string } = {}
-  if (scope !== undefined) body.scope = scope
-  const res = await fetch('/api/glance/clear', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
+// markAllGlanceSeen advances the household watermark non-destructively:
+// every currently-listed moment flips to seen=true on the next GET, but
+// nothing is dropped. scope is optional and defaults to "household" on
+// the server; with no scope the body is omitted entirely. Returns 204
+// with no body — callers should not parse a payload.
+export async function markAllGlanceSeen(scope?: string): Promise<void> {
+  const init: RequestInit = { method: 'POST' }
+  if (scope !== undefined) {
+    init.headers = { 'Content-Type': 'application/json' }
+    init.body = JSON.stringify({ scope })
+  }
+  const res = await fetch('/api/glance/seen-all', init)
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
     try {
@@ -211,8 +211,30 @@ export async function clearGlance(scope?: string): Promise<void> {
     } catch {
       // non-JSON or empty body: keep the status-text fallback
     }
-    throw new Error(`/api/glance/clear: ${message}`)
+    throw new Error(`/api/glance/seen-all: ${message}`)
   }
+}
+
+// glanceHeartbeat pings the per-device session so the server can tell
+// active devices from away ones. The BFF mints an httpOnly skua_device
+// cookie on first call; same-origin fetch carries it automatically.
+// Returns the server's away verdict for this device.
+export async function glanceHeartbeat(): Promise<boolean> {
+  const res = await fetch('/api/glance/heartbeat', { method: 'POST' })
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const errBody = (await res.json()) as { error?: string; message?: string }
+      if (errBody && typeof errBody.message === 'string' && errBody.message) {
+        message = errBody.message
+      }
+    } catch {
+      // non-JSON or empty body: keep the status-text fallback
+    }
+    throw new Error(`/api/glance/heartbeat: ${message}`)
+  }
+  const body = (await res.json()) as { away: boolean }
+  return body.away
 }
 
 // markGlanceSeen records that the listed event ids have been viewed.
