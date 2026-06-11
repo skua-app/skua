@@ -101,8 +101,8 @@
       </Mono>
     </span>
     {#if glanceStore.moments.length > 0}
-      <button type="button" class="gp-clear" onclick={() => void glanceStore.clearGlance()}>
-        {ui.glanceClear}
+      <button type="button" class="gp-clear" onclick={() => void glanceStore.markAllSeen()}>
+        {ui.glanceMarkAllSeen}
       </button>
     {/if}
   </div>
