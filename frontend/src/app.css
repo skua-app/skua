@@ -62,20 +62,34 @@
 /* ─── Design tokens ────────────────────────────────────────────── */
 :root {
   /* Surfaces */
-  --bg: #0a0b0d;
-  --surface: rgba(255, 255, 255, 0.025);
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.12);
+  --bg: #15171b;
+  --surface: #1e2127;
+  --surface-2: #252931;
+  --elev: #262a32;
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --scrim: rgba(0, 0, 0, 0.55);
+  --feed: #0e1013;
 
   /* Text */
-  --text: #f5f6f7;
-  --text-2: rgba(245, 246, 247, 0.58);
-  --text-3: rgba(245, 246, 247, 0.34);
+  --text: #f4f5f7;
+  --text-2: rgba(244, 245, 247, 0.6);
+  --text-3: rgba(244, 245, 247, 0.38);
 
   /* Semantic */
   --accent: oklch(0.78 0.1 200);
+  --accent-soft: color-mix(in oklab, var(--accent) 15%, transparent);
+  --on-accent: #04161a;
   --online: oklch(0.74 0.14 145);
   --offline: oklch(0.55 0.06 30);
+  --warn: #ec8a5a;
+
+  /* Shape + elevation */
+  --r: 14px;
+  --r-sm: 10px;
+  --r-xs: 8px;
+  --ctrl-h: 38px;
+  --shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.6);
 }
 
 html,
