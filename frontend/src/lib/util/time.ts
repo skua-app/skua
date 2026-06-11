@@ -1,3 +1,5 @@
+import type { EventItem } from '$lib/api'
+
 const rtf = new Intl.RelativeTimeFormat([], { numeric: 'auto' })
 
 // relativeTime returns "now" / "5 min ago" / "yesterday" etc. relative to
@@ -45,6 +47,31 @@ export function eventTimestamp(iso: string, now: Date = new Date()): string {
     return sameDayTimeFmt.format(then)
   }
   return datedTimeFmt.format(then)
+}
+
+// EventDay buckets events by local calendar day for the desktop events
+// grid. `key` is a stable YYYY-MM-DD slug for keyed-each rendering; `date`
+// is local midnight for that day, so callers can format a human label
+// (Today / Yesterday / weekday + short date) via i18n + Intl.
+export type EventDay = { key: string; date: Date; items: EventItem[] }
+
+// groupEventsByDay preserves the input order (newest-first) and groups
+// adjacent same-day events into one bucket. The input is expected to be
+// already sorted newest-first; this only sees the next item, so out-of-
+// order inputs would split the same day into multiple groups.
+export function groupEventsByDay(items: EventItem[]): EventDay[] {
+  const out: EventDay[] = []
+  let current: EventDay | null = null
+  for (const ev of items) {
+    const d = new Date(ev.started_at)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (current === null || current.key !== key) {
+      current = { key, date: new Date(d.getFullYear(), d.getMonth(), d.getDate()), items: [] }
+      out.push(current)
+    }
+    current.items.push(ev)
+  }
+  return out
 }
 
 // formatDuration — "12s", "1min 30s", "1h 5min".
