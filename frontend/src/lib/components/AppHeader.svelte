@@ -2,7 +2,6 @@
   import { page } from '$app/state'
   import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
-  import OnlineDot from '$lib/components/OnlineDot.svelte'
   import Segmented from '$lib/components/Segmented.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { glanceStore } from '$lib/stores/glance.svelte'
@@ -10,6 +9,7 @@
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { ui } from '$lib/i18n/strings'
   import type { MobileColumns } from '$lib/api'
+  import type { IconName } from '$lib/icons'
 
   type Props = { isDesktop: boolean }
   let { isDesktop }: Props = $props()
@@ -44,10 +44,10 @@
   const onlineCount = $derived(cameras.filter((c) => c.online).length)
   const offlineCount = $derived(cameras.length - onlineCount)
 
-  const navItems = [
-    { label: ui.cameras, href: '/' },
-    { label: ui.events, href: '/events' },
-    { label: ui.settings, href: '/settings' }
+  const navItems: { label: string; href: string; icon: IconName }[] = [
+    { label: ui.cameras, href: '/', icon: 'cams' },
+    { label: ui.events, href: '/events', icon: 'events' },
+    { label: ui.settings, href: '/settings', icon: 'settings' }
   ]
 
   function isActiveNav(href: string): boolean {
@@ -130,51 +130,47 @@
 </script>
 
 {#if isDesktop}
-  <header class="ah-desktop">
-    <div class="ah-d-left">
-      <div class="logo-mark" aria-hidden="true">
-        <span class="bracket tl"></span>
-        <span class="bracket tr"></span>
-        <span class="bracket bl"></span>
-        <span class="bracket br"></span>
-      </div>
-      <span class="ah-brand">skua</span>
-      <nav class="ah-nav" aria-label={ui.primaryNavLabel}>
-        {#each navItems as item (item.href)}
-          <a
-            href={item.href}
-            class="ah-nav-item"
-            class:active={isActiveNav(item.href)}
-            aria-current={isActiveNav(item.href) ? 'page' : undefined}
-          >
-            {item.label}
-          </a>
-        {/each}
-      </nav>
+  <header class="dk-top">
+    <div class="dk-brand">
+      <span class="dk-mark" aria-hidden="true">
+        <span class="logo-mark">
+          <span class="bracket tl"></span>
+          <span class="bracket tr"></span>
+          <span class="bracket bl"></span>
+          <span class="bracket br"></span>
+        </span>
+      </span>
+      <span class="dk-wordmark">Skua</span>
     </div>
-
-    <div class="ah-d-right">
+    <nav class="dk-tabs" aria-label={ui.primaryNavLabel}>
+      {#each navItems as item (item.href)}
+        <a
+          href={item.href}
+          class="dk-tab"
+          class:on={isActiveNav(item.href)}
+          aria-current={isActiveNav(item.href) ? 'page' : undefined}
+        >
+          <Icon name={item.icon} size={18} />
+          <span class="tl">{item.label}</span>
+        </a>
+      {/each}
+    </nav>
+    <span class="spacer" aria-hidden="true"></span>
+    <div class="dk-actions">
       {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
           type="button"
-          class="ah-bell"
-          class:muted={glanceStore.unseenCount === 0}
+          class="dk-iconbtn"
+          class:quiet={glanceStore.unseenCount === 0}
           aria-label={ui.glanceBellLabel}
           onclick={() => glanceStore.openPeek()}
         >
-          <Icon name="bell" size={16} />
+          <Icon name="bell" size={20} />
           {#if glanceStore.unseenCount > 0}
-            <span class="ah-bell-count">{glanceStore.unseenCount}</span>
+            <span class="badge">{glanceStore.unseenCount}</span>
           {/if}
         </button>
       {/if}
-      <span class="status-item">
-        <OnlineDot online={true} size={5} />
-        <Mono size={10} color="var(--text-2)" letterSpacing={0.5} uppercase>
-          {onlineCount}/{cameras.length}
-          {ui.online}
-        </Mono>
-      </span>
     </div>
   </header>
 {:else}
@@ -604,33 +600,47 @@
     place-items: center;
   }
 
-  /* Desktop header — unchanged */
-  .ah-desktop {
-    padding: 14px 28px;
+  /* ============================================================
+     DESKTOP TOP BAR (calm .dk-top)
+     ============================================================ */
+  .dk-top {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    height: 64px;
+    flex: 0 0 64px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 28px;
+    padding: 0 26px;
+    background: color-mix(in oklab, var(--bg) 86%, transparent);
+    backdrop-filter: saturate(1.2) blur(16px);
+    -webkit-backdrop-filter: saturate(1.2) blur(16px);
     border-bottom: 1px solid var(--border);
-    background: var(--bg);
   }
-  .ah-d-left {
+  .dk-brand {
     display: flex;
     align-items: center;
-    gap: 32px;
+    gap: 11px;
+    flex: 0 0 auto;
+    user-select: none;
   }
-  .ah-d-left > :global(*) {
-    display: inline-flex;
-    align-items: center;
+  .dk-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: grid;
+    place-items: center;
   }
-  .ah-d-left .ah-brand,
-  .ah-d-left .logo-mark {
-    align-items: baseline;
+  .dk-wordmark {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+    color: var(--text);
   }
-  .ah-d-right {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
+  /* The four-bracket logo sits inside the rounded .dk-mark square. */
   .logo-mark {
     width: 14px;
     height: 14px;
@@ -642,7 +652,7 @@
     width: 5px;
     height: 5px;
   }
-  .tl {
+  .logo-mark .tl {
     top: 0;
     left: 0;
     border-top: 1.5px solid var(--accent);
@@ -666,86 +676,90 @@
     border-bottom: 1.5px solid var(--accent);
     border-right: 1.5px solid var(--accent);
   }
-  .ah-brand {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.2px;
-    margin-left: 10px;
-  }
-  .ah-nav {
+
+  /* tabs */
+  .dk-tabs {
     display: flex;
-    gap: 22px;
-    margin-left: 22px;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
   }
-  .ah-nav-item {
-    font-size: 13px;
+  .dk-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-size: 14.5px;
     font-weight: 500;
     color: var(--text-2);
     text-decoration: none;
-    padding-bottom: 4px;
-    border-bottom: 1px solid transparent;
+    cursor: pointer;
+    user-select: none;
     transition:
-      color 120ms,
-      border-color 120ms;
+      color 0.16s ease,
+      background 0.16s ease;
   }
-  .ah-nav-item:hover {
+  .dk-tab:hover {
     color: var(--text);
+    background: var(--surface);
   }
-  .ah-nav-item.active {
-    color: var(--text);
-    border-bottom-width: 2px;
-    border-bottom-color: var(--accent);
+  .dk-tab.on {
+    color: var(--accent);
+    background: var(--accent-soft);
   }
-  .status-item {
-    display: inline-flex;
+
+  .spacer {
+    flex: 1 1 auto;
+  }
+
+  /* actions */
+  .dk-actions {
+    display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
+    flex: 0 0 auto;
   }
-  .ah-bell {
+  .dk-iconbtn {
     position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    color: var(--text-2);
-    background: transparent;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-2);
+    display: grid;
+    place-items: center;
     cursor: pointer;
     font-family: inherit;
     transition:
-      color 120ms,
-      border-color 120ms,
-      background 120ms;
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease;
   }
-  .ah-bell:hover {
+  .dk-iconbtn:hover {
     color: var(--text);
     border-color: var(--border-strong);
-    background: rgba(255, 255, 255, 0.04);
   }
-  .ah-bell.muted {
+  .dk-iconbtn.quiet {
     color: var(--text-3);
-    border-color: color-mix(in oklab, var(--border) 60%, transparent);
   }
-  .ah-bell.muted:hover {
-    color: var(--text-2);
-    border-color: var(--border);
-  }
-  .ah-bell-count {
+  .dk-iconbtn .badge {
     position: absolute;
     top: -5px;
     right: -5px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    border-radius: 8px;
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
     background: var(--accent);
     color: var(--on-accent);
+    border: 2px solid var(--bg);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 10px;
     font-weight: 600;
-    line-height: 16px;
-    text-align: center;
+    display: grid;
+    place-items: center;
   }
 </style>
