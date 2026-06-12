@@ -173,105 +173,99 @@
         {/if}
       </div>
 
-      <div class="df-player-center">
-        <div class="df-player">
-          <div class="df-video-frame dk-feed">
-            {@render videoSnippet()}
+      <div class="df-video-frame dk-feed">
+        {@render videoSnippet()}
 
-            {#if isLive}
-              <div class="dk-live-tag">
-                <span class="pulse" aria-hidden="true"></span>
-                <span class="live-text">{ui.liveTag}</span>
-              </div>
-            {/if}
+        {#if isLive}
+          <div class="dk-live-tag">
+            <span class="pulse" aria-hidden="true"></span>
+            <span class="live-text">{ui.liveTag}</span>
+          </div>
+        {/if}
 
-            {#if showTelemetry}
-              <div class="dk-statspanel">
-                <div class="sp-row">
-                  <span class="sp-k">LAT</span><span class="sp-v"
-                    >{latencyMs !== null ? `${latencyMs} ms` : '—'}</span
-                  >
-                </div>
-                <div class="sp-row">
-                  <span class="sp-k">BR</span><span class="sp-v"
-                    >{bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}</span
-                  >
-                </div>
-                <div class="sp-row">
-                  <span class="sp-k">FPS</span><span class="sp-v"
-                    >{fps !== null ? `${fps} fps` : '—'}</span
-                  >
-                </div>
-                <div class="sp-row">
-                  <span class="sp-k">VID</span><span class="sp-v">{videoCodec ?? '—'}</span>
-                </div>
-                <div class="sp-row">
-                  <span class="sp-k">RES</span><span class="sp-v">{resolution ?? '—'}</span>
-                </div>
-                {#if audioAvailable}
-                  <div class="sp-row">
-                    <span class="sp-k">AUD</span><span class="sp-v">{audioCodec ?? '—'}</span>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-
-            {#if showTimestamp}
-              <div class="ts-chip">
-                <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}
-                  >{currentTime}</Mono
-                >
+        {#if showTelemetry}
+          <div class="dk-statspanel">
+            <div class="sp-row">
+              <span class="sp-k">LAT</span><span class="sp-v"
+                >{latencyMs !== null ? `${latencyMs} ms` : '—'}</span
+              >
+            </div>
+            <div class="sp-row">
+              <span class="sp-k">BR</span><span class="sp-v"
+                >{bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}</span
+              >
+            </div>
+            <div class="sp-row">
+              <span class="sp-k">FPS</span><span class="sp-v"
+                >{fps !== null ? `${fps} fps` : '—'}</span
+              >
+            </div>
+            <div class="sp-row">
+              <span class="sp-k">VID</span><span class="sp-v">{videoCodec ?? '—'}</span>
+            </div>
+            <div class="sp-row">
+              <span class="sp-k">RES</span><span class="sp-v">{resolution ?? '—'}</span>
+            </div>
+            {#if audioAvailable}
+              <div class="sp-row">
+                <span class="sp-k">AUD</span><span class="sp-v">{audioCodec ?? '—'}</span>
               </div>
             {/if}
           </div>
+        {/if}
 
-          <div class="dk-livebar">
-            {#if camera?.online}
-              <button type="button" class="dk-livebtn primary" onclick={togglePause}>
-                <Icon name={isPaused ? 'play' : 'pause'} size={20} />
-                <span>{isPaused ? 'Play' : 'Pause'}</span>
-              </button>
-              <button
-                type="button"
-                class="dk-livebtn"
-                class:active={!isMuted}
-                onclick={toggleMute}
-                disabled={!audioAvailable}
-                aria-label={isMuted ? 'Unmute' : 'Mute'}
-              >
-                <Icon name={isMuted ? 'mute' : 'unmute'} size={20} />
-              </button>
-              <button
-                type="button"
-                class="dk-livebtn"
-                class:active={showTelemetry}
-                onclick={onShowTelemetry}
-              >
-                <Icon name="activity" size={20} />
-                <span>{ui.statsLabel}</span>
-              </button>
-              {#if camera?.capabilities.talk_back}
-                <button type="button" class="dk-livebtn" disabled aria-label="Talkback">
-                  <Icon name="mic" size={20} />
-                </button>
-              {/if}
-              <span class="grow"></span>
-              <button type="button" class="dk-livebtn" onclick={downloadSnapshot}>
-                <Icon name="snapshot" size={20} />
-                <span>Snapshot</span>
-              </button>
-              <button type="button" class="dk-livebtn" onclick={toggleFullscreen}>
-                <Icon name="fullscreen" size={20} />
-                <span>Fullscreen</span>
-              </button>
-            {:else}
-              <button type="button" class="dk-livebtn" onclick={onBack}>
-                <Icon name="back" size={20} />
-                <span>{ui.cameras}</span>
-              </button>
-            {/if}
+        {#if showTimestamp}
+          <div class="ts-chip">
+            <Mono size={11} color="rgba(255,255,255,0.9)" letterSpacing={0.4}>{currentTime}</Mono>
           </div>
-        </div>
+        {/if}
+      </div>
+
+      <div class="dk-livebar">
+        {#if camera?.online}
+          <button type="button" class="dk-livebtn primary" onclick={togglePause}>
+            <Icon name={isPaused ? 'play' : 'pause'} size={20} />
+            <span>{isPaused ? 'Play' : 'Pause'}</span>
+          </button>
+          <button
+            type="button"
+            class="dk-livebtn"
+            class:active={!isMuted}
+            onclick={toggleMute}
+            disabled={!audioAvailable}
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
+          >
+            <Icon name={isMuted ? 'mute' : 'unmute'} size={20} />
+          </button>
+          <button
+            type="button"
+            class="dk-livebtn"
+            class:active={showTelemetry}
+            onclick={onShowTelemetry}
+          >
+            <Icon name="activity" size={20} />
+            <span>{ui.statsLabel}</span>
+          </button>
+          {#if camera?.capabilities.talk_back}
+            <button type="button" class="dk-livebtn" disabled aria-label="Talkback">
+              <Icon name="mic" size={20} />
+            </button>
+          {/if}
+          <span class="grow"></span>
+          <button type="button" class="dk-livebtn" onclick={downloadSnapshot}>
+            <Icon name="snapshot" size={20} />
+            <span>Snapshot</span>
+          </button>
+          <button type="button" class="dk-livebtn" onclick={toggleFullscreen}>
+            <Icon name="fullscreen" size={20} />
+            <span>Fullscreen</span>
+          </button>
+        {:else}
+          <button type="button" class="dk-livebtn" onclick={onBack}>
+            <Icon name="back" size={20} />
+            <span>{ui.cameras}</span>
+          </button>
+        {/if}
       </div>
 
       {#if camerasStore.cameras.length > 1}
@@ -382,28 +376,26 @@
 <style>
   .df-root {
     width: 100%;
-    height: 100dvh;
+    min-height: 100dvh;
     background: var(--bg);
     color: var(--text);
     display: flex;
     flex-direction: column;
   }
 
-  /* dk-live two-column layout */
+  /* dk-live two-column layout — top-aligned, page scrolls naturally */
   .df-body {
-    flex: 1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 348px;
     gap: 22px;
     padding: 22px 28px;
-    min-height: 0;
+    align-items: start;
   }
   .df-live-main {
     display: flex;
     flex-direction: column;
     gap: 14px;
     min-width: 0;
-    min-height: 0;
   }
 
   /* dk-crumb */
@@ -459,25 +451,6 @@
     text-overflow: ellipsis;
   }
 
-  /* Player sizing — PRESERVE viewport-fit math (container queries on the
-     center wrapper feed cqw/cqh into the .df-player width formula). The
-     filmstrip below is a flex:none sibling so the math stays clean. */
-  .df-player-center {
-    flex: 1;
-    min-height: 0;
-    min-width: 0;
-    container-type: size;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .df-player {
-    --controls-reserved: 76px;
-    width: min(100cqw, calc((100cqh - var(--controls-reserved)) * 16 / 9));
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
   .df-video-frame {
     position: relative;
     width: 100%;
@@ -641,7 +614,6 @@
     flex-direction: column;
     gap: 11px;
     margin-top: 2px;
-    flex: none;
   }
   .dk-sec-label {
     font-size: 14px;
@@ -730,8 +702,6 @@
     flex-direction: column;
     gap: 18px;
     min-width: 0;
-    min-height: 0;
-    overflow: hidden;
   }
   .dk-panel {
     border: 1px solid var(--border);
@@ -740,7 +710,6 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    min-height: 0;
   }
   .dk-panel-h {
     display: flex;
@@ -772,8 +741,6 @@
   .dk-panel-body {
     padding: 8px;
     overflow-y: auto;
-    flex: 1;
-    min-height: 0;
   }
   .dk-events-empty {
     padding: 10px 8px;

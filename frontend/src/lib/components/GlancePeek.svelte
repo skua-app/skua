@@ -16,6 +16,46 @@
   // Local moment-filter state — prototype `MSTATE.filter`.
   let filter = $state<'all' | 'unseen'>('all')
 
+  // Sliding-thumb refs for the All/Unseen segmented switch. The subBar
+  // snippet renders in exactly one branch at a time (mobile sheet OR desktop
+  // panel), so component-scoped refs target the live instance.
+  let mfEl: HTMLDivElement | undefined = $state()
+  let mfThumb: HTMLSpanElement | undefined = $state()
+  let mfButtons: HTMLButtonElement[] = $state([])
+  let mfMeasured = $state(false)
+
+  function placeMfThumb() {
+    if (!mfEl || !mfThumb) return
+    const idx = filter === 'all' ? 0 : 1
+    const btn = mfButtons[idx]
+    if (!btn || btn.offsetWidth === 0) return
+    if (!mfMeasured) {
+      mfThumb.style.transition = 'none'
+      mfThumb.style.transform = `translate(${btn.offsetLeft}px, ${btn.offsetTop}px)`
+      mfThumb.style.width = `${btn.offsetWidth}px`
+      mfThumb.style.height = `${btn.offsetHeight}px`
+      void mfThumb.offsetWidth
+      mfThumb.style.transition = ''
+      mfMeasured = true
+    } else {
+      mfThumb.style.transform = `translate(${btn.offsetLeft}px, ${btn.offsetTop}px)`
+      mfThumb.style.width = `${btn.offsetWidth}px`
+      mfThumb.style.height = `${btn.offsetHeight}px`
+    }
+  }
+  $effect(() => {
+    void filter
+    void mfButtons.length
+    void glanceStore.unseenCount
+    placeMfThumb()
+  })
+  $effect(() => {
+    if (!mfEl) return
+    const ro = new ResizeObserver(() => placeMfThumb())
+    ro.observe(mfEl)
+    return () => ro.disconnect()
+  })
+
   // Local-only modal: a row tap opens MomentModal on top of the surface so
   // the user can review the cluster and switch between detections inside it.
   let modalMoment = $state<GlanceMoment | null>(null)
@@ -269,11 +309,13 @@
 <svelte:window bind:innerWidth={width} />
 
 {#snippet subBar()}
-  <div class="moment-filter" role="group" aria-label={ui.glanceTitle}>
+  <div class="moment-filter" role="group" aria-label={ui.glanceTitle} bind:this={mfEl}>
+    <span class="seg-thumb" class:visible={mfMeasured} bind:this={mfThumb}></span>
     <button
       type="button"
       class="mf-seg"
       class:on={filter === 'all'}
+      bind:this={mfButtons[0]}
       onclick={() => (filter = 'all')}
     >
       {ui.glanceFilterAll}
@@ -282,6 +324,7 @@
       type="button"
       class="mf-seg"
       class:on={filter === 'unseen'}
+      bind:this={mfButtons[1]}
       onclick={() => (filter = 'unseen')}
     >
       {ui.glanceFilterUnseen}
@@ -634,6 +677,7 @@
      SHARED — sub-bar, rows, empty
      ============================================================ */
   .moment-filter {
+    position: relative;
     display: inline-flex;
     background: var(--surface-2);
     border: 1px solid var(--border);
@@ -641,7 +685,30 @@
     padding: 3px;
     gap: 2px;
   }
+  .seg-thumb {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+      width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .seg-thumb.visible {
+    opacity: 1;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .seg-thumb {
+      transition: none;
+    }
+  }
   .mf-seg {
+    position: relative;
+    z-index: 1;
     -webkit-appearance: none;
     appearance: none;
     background: transparent;
@@ -656,9 +723,7 @@
     align-items: center;
     gap: 6px;
     cursor: pointer;
-    transition:
-      color 0.18s ease,
-      background 0.18s ease;
+    transition: color 0.18s ease;
   }
   .mf-seg.on {
     color: var(--accent);
