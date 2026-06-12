@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { fly, fade } from 'svelte/transition'
+  import { cubicOut } from 'svelte/easing'
   import type { EventItem } from '$lib/api'
   import { eventSnapshotURL, eventClipURL } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
@@ -13,6 +15,13 @@
   }
 
   let { event, onClose }: Props = $props()
+
+  // Honour reduced-motion: the card/backdrop transitions collapse to 0ms,
+  // so the modal still appears but without the fly/fade.
+  const reducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const cardDuration = reducedMotion ? 0 : 260
+  const scrimDuration = reducedMotion ? 0 : 200
 
   const camName = $derived(
     camerasStore.cameras.find((c) => c.id === event.cam_id)?.name ?? event.cam_id
@@ -115,8 +124,15 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="em-backdrop" onclick={onBackdropClick}>
-  <div class="em-card" role="dialog" aria-modal="true" aria-label={kindLabel} bind:this={cardEl}>
+<div class="em-backdrop" onclick={onBackdropClick} transition:fade={{ duration: scrimDuration }}>
+  <div
+    class="em-card"
+    role="dialog"
+    aria-modal="true"
+    aria-label={kindLabel}
+    bind:this={cardEl}
+    transition:fly={{ y: 16, duration: cardDuration, easing: cubicOut }}
+  >
     <div class="em-snap">
       {#if event.has_clip && !clipFailed}
         <!-- iOS Safari: `playsinline` keeps playback inside the modal instead
@@ -184,8 +200,9 @@
   .em-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.65);
+    background: var(--scrim);
     backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -196,27 +213,29 @@
     width: min(560px, 100%);
     max-height: calc(100dvh - 40px);
     overflow: auto;
-    background: #15171a;
+    background: var(--surface);
     border: 1px solid var(--border-strong);
-    border-radius: 12px;
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
   }
 
   .em-snap {
     aspect-ratio: 16 / 9;
-    background: #0c0d0f;
+    background: var(--feed);
     overflow: hidden;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
+    border-top-left-radius: var(--r);
+    border-top-right-radius: var(--r);
   }
   .em-snap img,
   .em-snap video {
     width: 100%;
     height: 100%;
+    /* Review media: contain (NEVER fill). */
     object-fit: contain;
     display: block;
-    background: #000;
+    background: var(--feed);
   }
 
   .em-clip-fallback {
@@ -268,36 +287,43 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+    border-top: 1px solid var(--border);
   }
   .em-btn {
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    border-radius: 8px;
+    padding: 12px 18px;
+    font-size: 14.5px;
+    font-weight: 600;
+    border-radius: 11px;
     border: 1px solid transparent;
     cursor: pointer;
     text-decoration: none;
     font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
     transition:
-      background 120ms,
-      border-color 120ms,
-      color 120ms;
+      background 0.15s ease,
+      color 0.15s ease,
+      filter 0.15s ease;
+  }
+  .em-btn:active {
+    transform: translateY(1px);
   }
   .em-btn-secondary {
-    color: var(--text-2);
-    background: transparent;
-    border-color: var(--border-strong);
+    color: var(--text);
+    background: var(--surface-2);
   }
   .em-btn-secondary:hover {
-    color: var(--text);
-    border-color: var(--text-3);
+    background: var(--border-strong);
   }
   .em-btn-primary {
-    color: #08121c;
+    color: var(--on-accent);
     background: var(--accent);
-    border-color: var(--accent);
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .em-btn-primary:hover {
-    filter: brightness(1.1);
+    filter: brightness(1.05);
   }
 </style>

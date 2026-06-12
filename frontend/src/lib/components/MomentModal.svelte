@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from 'svelte'
-  import { slide } from 'svelte/transition'
+  import { fade, fly, slide } from 'svelte/transition'
+  import { cubicOut } from 'svelte/easing'
   import type { EventItem, GlanceMoment } from '$lib/api'
   import { eventSnapshotURL, eventClipURL } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
@@ -16,6 +17,12 @@
   }
 
   let { moment, onClose, onOpenLive }: Props = $props()
+
+  // Honour reduced-motion: collapse the fly/fade open animation to 0ms.
+  const reducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const cardDuration = reducedMotion ? 0 : 260
+  const scrimDuration = reducedMotion ? 0 : 200
 
   function pickInitial(m: GlanceMoment): EventItem {
     const rep = m.events.find((e) => e.id === m.representative_event_id)
@@ -184,8 +191,15 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="mm-backdrop" onclick={onBackdropClick}>
-  <div class="mm-card" role="dialog" aria-modal="true" aria-label={titleText} bind:this={cardEl}>
+<div class="mm-backdrop" onclick={onBackdropClick} transition:fade={{ duration: scrimDuration }}>
+  <div
+    class="mm-card"
+    role="dialog"
+    aria-modal="true"
+    aria-label={titleText}
+    bind:this={cardEl}
+    transition:fly={{ y: 16, duration: cardDuration, easing: cubicOut }}
+  >
     <div class="mm-title">{titleText}</div>
 
     <div class="mm-snap">
@@ -307,8 +321,9 @@
   .mm-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.65);
+    background: var(--scrim);
     backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -335,9 +350,10 @@
        detection list) scrolls. This keeps the player, meta, and actions
        pinned even when the detection list overflows. */
     overflow: hidden;
-    background: #15171a;
+    background: var(--surface);
     border: 1px solid var(--border-strong);
-    border-radius: 12px;
+    border-radius: var(--r);
+    box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
   }
@@ -357,7 +373,7 @@
        the 16:9 box eat the entire modal — the detection list still
        needs room below. */
     max-height: 45dvh;
-    background: #0c0d0f;
+    background: var(--feed);
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -365,9 +381,10 @@
   .mm-snap video {
     width: 100%;
     height: 100%;
+    /* Review media: contain (NEVER fill). */
     object-fit: contain;
     display: block;
-    background: #000;
+    background: var(--feed);
   }
 
   .mm-clip-fallback {
@@ -488,7 +505,7 @@
     background: rgba(255, 255, 255, 0.03);
   }
   .mm-events-row.active {
-    background: color-mix(in oklab, var(--accent) 14%, transparent);
+    background: var(--accent-soft);
   }
   .mm-events-time {
     min-width: 60px;
@@ -512,42 +529,49 @@
   }
 
   .mm-actions {
-    padding: 12px 18px;
+    padding: 14px 18px;
     display: flex;
     justify-content: flex-end;
     gap: 10px;
     flex-wrap: wrap;
     flex-shrink: 0;
+    border-top: 1px solid var(--border);
   }
   .mm-btn {
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    border-radius: 8px;
+    padding: 12px 18px;
+    font-size: 14.5px;
+    font-weight: 600;
+    border-radius: 11px;
     border: 1px solid transparent;
     cursor: pointer;
     text-decoration: none;
     font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
     transition:
-      background 120ms,
-      border-color 120ms,
-      color 120ms;
+      background 0.15s ease,
+      color 0.15s ease,
+      filter 0.15s ease;
+  }
+  .mm-btn:active {
+    transform: translateY(1px);
   }
   .mm-btn-secondary {
-    color: var(--text-2);
-    background: transparent;
-    border-color: var(--border-strong);
+    color: var(--text);
+    background: var(--surface-2);
   }
   .mm-btn-secondary:hover {
-    color: var(--text);
-    border-color: var(--text-3);
+    background: var(--border-strong);
   }
   .mm-btn-primary {
-    color: #08121c;
+    color: var(--on-accent);
     background: var(--accent);
-    border-color: var(--accent);
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .mm-btn-primary:hover {
-    filter: brightness(1.1);
+    filter: brightness(1.05);
   }
 </style>
