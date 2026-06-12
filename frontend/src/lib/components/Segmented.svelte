@@ -5,9 +5,11 @@
     options: Option[]
     onChange: (v: T) => void
     size?: 'sm' | 'md'
+    // 'mono' = the calm `.qseg` look (mono font, smaller, surface-2 frame).
+    variant?: 'standard' | 'mono'
   }
 
-  let { value, options, onChange, size = 'sm' }: Props = $props()
+  let { value, options, onChange, size = 'sm', variant = 'standard' }: Props = $props()
 
   let container: HTMLDivElement | undefined = $state()
   let thumb: HTMLSpanElement | undefined = $state()
@@ -53,7 +55,12 @@
   })
 </script>
 
-<div class="seg ctrl" class:md={size === 'md'} bind:this={container}>
+<div
+  class="seg ctrl"
+  class:md={size === 'md'}
+  class:mono={variant === 'mono'}
+  bind:this={container}
+>
   <span class="seg-thumb" class:visible={measured} bind:this={thumb}></span>
   {#each options as opt, i (opt.value)}
     <button
@@ -131,6 +138,18 @@
   .md .seg-opt {
     font-size: 14px;
     padding: 0 16px;
+  }
+  /* mono variant — calm .qseg */
+  .seg.mono {
+    height: auto;
+    background: var(--surface-2);
+  }
+  .seg.mono .seg-opt {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    padding: 5px 12px;
   }
   @media (prefers-reduced-motion: reduce) {
     .seg-thumb {

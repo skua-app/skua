@@ -6,7 +6,6 @@
   import { fetchEvents } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import Icon from '$lib/components/Icon.svelte'
-  import IconBtn from '$lib/components/IconBtn.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import OnlineDot from '$lib/components/OnlineDot.svelte'
   import Segmented from '$lib/components/Segmented.svelte'
@@ -66,17 +65,13 @@
   function pad(n: number): string {
     return String(n).padStart(2, '0')
   }
-
   function formatNow(): string {
     const d = new Date()
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
   }
 
   let currentTime = $state(formatNow())
-  // Bump every second to cache-bust the rail's tile.jpg <img> srcs — same
-  // pattern as DesktopFocus's sidebar tiles.
   let tileTick = $state(Math.floor(Date.now() / 1000))
-
   $effect(() => {
     const t = setInterval(() => {
       currentTime = formatNow()
@@ -87,24 +82,18 @@
 
   const otherCameras = $derived(camerasStore.cameras.filter((c) => c.id !== camera?.id))
 
-  // Focus → focus navigation must REPLACE the history entry so a single
-  // back-tap returns to the grid no matter how many cameras the user
-  // hopped through. Native <a href> would push every hop. We keep the
-  // anchor for accessibility / right-click-open-in-new-tab and intercept.
+  // Focus → focus must REPLACE the history entry so a single back tap returns
+  // to the grid regardless of how many cameras the user hopped through.
   function switchCam(e: MouseEvent, id: string) {
     e.preventDefault()
     goto(`/cam/${id}`, { replaceState: true })
   }
 
   const RECENT_LIMIT = 4
-
   let recentEvents = $state<EventItem[]>([])
   let recentLastAt = $state('')
   let modalEvent = $state<EventItem | null>(null)
 
-  // Fetch the latest events for this camera whenever cam.id changes.
-  // The cam-id read is tracked outside untrack so route navigation triggers
-  // a clean refetch; the fetch itself runs untracked.
   $effect(() => {
     const id = camera?.id
     if (!id) {
@@ -123,7 +112,6 @@
     })
   })
 
-  // Merge SSE event.new for this camera into the local list.
   $effect(() => {
     const id = camera?.id
     if (!id) return
@@ -149,143 +137,171 @@
 <div class="mf-root">
   <div class="status-spacer"></div>
 
-  <header class="mf-header">
-    <button type="button" onclick={onBack} class="mf-icon-btn" aria-label={ui.backLabel}>
-      <Icon name="back" size={20} />
-    </button>
-    <div class="mf-title-col">
-      <span class="mf-cam-name">{camera?.name ?? '—'}</span>
-      <span class="mf-status-row">
-        <OnlineDot online={camera?.online ?? null} size={5} />
-        <Mono size={10} color="var(--text-3)" letterSpacing={0.4}>
+  <div class="mf-body">
+    <div class="h-row">
+      <button type="button" class="cbtn" onclick={onBack} aria-label={ui.backLabel}>
+        <Icon name="back" size={21} />
+      </button>
+      <div class="crumb">
+        <div class="title-lg">{camera?.name ?? '—'}</div>
+        <div class="path">
           WEBRTC · {latencyMs !== null ? `${latencyMs} MS` : '—'}
-        </Mono>
-      </span>
-    </div>
-    <button
-      type="button"
-      onclick={onShowTelemetry}
-      class="mf-icon-btn"
-      aria-label={ui.telemetryLabel}
-    >
-      <Icon name="activity" size={20} />
-    </button>
-  </header>
-
-  <div class="mf-video-frame">
-    {@render videoSnippet()}
-
-    {#if showTimestamp}
-      <div class="ts-chip">
-        <Mono size={10} color="rgba(255,255,255,0.85)" letterSpacing={0.4}>{currentTime}</Mono>
+        </div>
       </div>
-    {/if}
-
-    {#if showTelemetry}
-      <div class="mf-statspanel">
-        <Mono size={9} color="rgba(255,255,255,0.4)">LAT</Mono>
-        <Mono size={9} color="rgba(255,255,255,0.85)" weight={500}>
-          {latencyMs !== null ? `${latencyMs}ms` : '—'}
-        </Mono>
-        <Mono size={9} color="rgba(255,255,255,0.4)">BR</Mono>
-        <Mono size={9} color="rgba(255,255,255,0.85)" weight={500}>
-          {bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)}Mbps` : '—'}
-        </Mono>
-        <Mono size={9} color="rgba(255,255,255,0.4)">VID</Mono>
-        <Mono size={9} color="rgba(255,255,255,0.85)" weight={500}>{videoCodec ?? '—'}</Mono>
-        {#if audioAvailable}
-          <Mono size={9} color="rgba(255,255,255,0.4)">AUD</Mono>
-          <Mono size={9} color="rgba(255,255,255,0.85)" weight={500}>{audioCodec ?? '—'}</Mono>
-        {/if}
-      </div>
-    {/if}
-  </div>
-
-  {#if otherCameras.length > 0}
-    <div class="mf-others-rail" aria-label={ui.otherCamerasLabel}>
-      {#each otherCameras as c (c.id)}
-        <a
-          href={`/cam/${c.id}`}
-          class="mf-other-tile"
-          class:offline={!c.online}
-          onclick={(e) => switchCam(e, c.id)}
-        >
-          <img
-            src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
-            alt={c.name}
-            class="mf-other-img"
-            loading="lazy"
-          />
-          <span class="mf-other-name">{c.name}</span>
-        </a>
-      {/each}
-    </div>
-  {/if}
-
-  {#if camera?.online}
-    <div class="mf-meta">
-      <div class="mf-meta-left">
-        <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.streamLabel}</Mono>
+      {#if camera?.online}
         <Segmented
           value={effectiveQuality}
           options={qualityOptions}
+          variant="mono"
           onChange={(v) => {
             if (v !== effectiveQuality) toggleQuality()
           }}
         />
-        {#if !subAvailable}
-          <Mono size={9} color="var(--text-3)" letterSpacing={0.3}>{ui.subUnavailable}</Mono>
-        {/if}
-      </div>
-      <div class="mf-meta-right">
-        <Mono size={10} color="var(--text-3)" letterSpacing={0.5} uppercase>{ui.qualityLabel}</Mono>
-        <Mono size={12} color="var(--text)" weight={500}>{resolution ?? '—'}</Mono>
-      </div>
-    </div>
-  {/if}
-
-  <div class="mf-controls">
-    <div class="mf-controls-group">
-      <IconBtn icon={isPaused ? 'play' : 'pause'} label="play" onclick={togglePause} size={40} />
-      <IconBtn
-        icon={isMuted ? 'mute' : 'unmute'}
-        label="mute"
-        onclick={toggleMute}
-        size={40}
-        active={!isMuted}
-        disabled={!audioAvailable}
-      />
-      <IconBtn icon="fullscreen" label="fullscreen" onclick={toggleFullscreen} size={40} />
-      <IconBtn icon="snapshot" label="snap" onclick={downloadSnapshot} size={40} />
-      {#if camera?.capabilities.talk_back}
-        <IconBtn icon="mic" label="talkback" size={40} accent disabled />
+      {:else}
+        <span class="cbtn-spacer" aria-hidden="true"></span>
       {/if}
     </div>
-  </div>
 
-  <div class="mf-events">
-    <div class="mf-events-header">
-      <Mono size={10} color="var(--text-3)" letterSpacing={0.6} uppercase>{ui.recentEvents}</Mono>
-      <a href="/events" class="mf-events-link">
-        <Mono size={10} color="var(--text-2)">{ui.viewAll}</Mono>
-      </a>
+    <div class="feedwrap">
+      {@render videoSnippet()}
+
+      {#if showTimestamp}
+        <div class="ts-chip">
+          <Mono size={10} color="rgba(255,255,255,0.85)" letterSpacing={0.4}>{currentTime}</Mono>
+        </div>
+      {/if}
+
+      {#if showTelemetry && camera?.online}
+        <div class="statspanel">
+          <div class="sp-row">
+            <span class="sp-k">LAT</span><span class="sp-v"
+              >{latencyMs !== null ? `${latencyMs}ms` : '—'}</span
+            >
+          </div>
+          <div class="sp-row">
+            <span class="sp-k">BR</span><span class="sp-v"
+              >{bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)}Mbps` : '—'}</span
+            >
+          </div>
+          <div class="sp-row">
+            <span class="sp-k">VID</span><span class="sp-v">{videoCodec ?? '—'}</span>
+          </div>
+          <div class="sp-row">
+            <span class="sp-k">RES</span><span class="sp-v">{resolution ?? '—'}</span>
+          </div>
+          {#if audioAvailable}
+            <div class="sp-row">
+              <span class="sp-k">AUD</span><span class="sp-v">{audioCodec ?? '—'}</span>
+            </div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <div class="livebar">
+      <button
+        type="button"
+        class="livebtn primary"
+        onclick={togglePause}
+        aria-label={isPaused ? 'Play' : 'Pause'}
+      >
+        <Icon name={isPaused ? 'play' : 'pause'} size={20} />
+      </button>
+      <button
+        type="button"
+        class="livebtn"
+        class:active={!isMuted}
+        onclick={toggleMute}
+        disabled={!audioAvailable}
+        aria-label={isMuted ? 'Unmute' : 'Mute'}
+      >
+        <Icon name={isMuted ? 'mute' : 'unmute'} size={20} />
+      </button>
+      <button type="button" class="livebtn" onclick={downloadSnapshot} aria-label="Snapshot">
+        <Icon name="snapshot" size={20} />
+      </button>
+      <button
+        type="button"
+        class="livebtn"
+        class:active={showTelemetry}
+        onclick={onShowTelemetry}
+        aria-label={ui.telemetryLabel}
+      >
+        <Icon name="activity" size={20} />
+      </button>
+      <button type="button" class="livebtn" onclick={toggleFullscreen} aria-label="Fullscreen">
+        <Icon name="fullscreen" size={20} />
+      </button>
+      {#if camera?.capabilities.talk_back}
+        <button type="button" class="livebtn" disabled aria-label="Talkback">
+          <Icon name="mic" size={20} />
+        </button>
+      {/if}
+    </div>
+
+    {#if otherCameras.length > 0}
+      <div class="sec-label">
+        <span>{ui.otherCamerasLabel}</span>
+      </div>
+      <div class="hscroll" aria-label={ui.otherCamerasLabel}>
+        {#each otherCameras as c (c.id)}
+          <a
+            href={`/cam/${c.id}`}
+            class="mini"
+            class:offline-tile={!c.online}
+            onclick={(e) => switchCam(e, c.id)}
+          >
+            {#if c.online}
+              <div class="cam">
+                <img
+                  src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
+                  alt={c.name}
+                  class="mini-img"
+                  loading="lazy"
+                />
+              </div>
+            {:else}
+              <div class="cam offline">
+                <span class="off-ico" aria-hidden="true"><Icon name="warning" size={18} /></span>
+              </div>
+            {/if}
+            <div class="lbl">
+              <OnlineDot online={c.online} size={5} />
+              <span class="mini-name">{c.name}</span>
+            </div>
+          </a>
+        {/each}
+      </div>
+    {/if}
+
+    <div class="h-row recent-h">
+      <span class="recent-title">{ui.recentEvents}</span>
+      <a href="/events" class="recent-link">{ui.viewAll}</a>
     </div>
     {#if recentEvents.length === 0}
-      <div class="mf-events-empty">
+      <div class="recent-empty">
         <Mono size={11} color="var(--text-3)">{ui.noRecentEvents}</Mono>
       </div>
     {:else}
-      {#each recentEvents as ev (ev.id)}
-        <button type="button" class="mf-event-row" onclick={() => (modalEvent = ev)}>
-          <div class="mf-event-left">
-            <Mono size={11} color="var(--text-2)">{eventTimestamp(ev.started_at)}</Mono>
-            <span class="mf-event-label">{eventKindLabels[ev.kind] ?? ev.kind}</span>
-          </div>
-          <Mono size={10} color="var(--text-3)"
-            >{ev.duration_seconds !== null ? `${ev.duration_seconds}${ui.secondsShort}` : '—'}</Mono
-          >
-        </button>
-      {/each}
+      <div class="recent-list">
+        {#each recentEvents as ev (ev.id)}
+          <button type="button" class="ev" onclick={() => (modalEvent = ev)}>
+            <span class="ev-ago mono">{eventTimestamp(ev.started_at)}</span>
+            <div class="ev-meta">
+              <div class="l1">
+                <span class="ev-kind">{eventKindLabels[ev.kind] ?? ev.kind}</span>
+                <span class="ev-score mono">
+                  {ev.score !== null
+                    ? ev.score.toFixed(2)
+                    : ev.duration_seconds !== null
+                      ? `${ev.duration_seconds}${ui.secondsShort}`
+                      : '—'}
+                </span>
+              </div>
+            </div>
+          </button>
+        {/each}
+      </div>
     {/if}
   </div>
 </div>
@@ -302,194 +318,323 @@
     color: var(--text);
     display: flex;
     flex-direction: column;
-    overflow: hidden;
   }
   .status-spacer {
     height: env(safe-area-inset-top, 0px);
     flex-shrink: 0;
   }
-  .mf-header {
-    padding: 4px 16px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .mf-icon-btn {
-    background: none;
-    border: none;
-    color: var(--text-2);
-    padding: 4px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-  }
-  .mf-icon-btn:hover {
-    color: var(--text);
-  }
-  .mf-title-col {
+  .mf-body {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 2px;
+    gap: 12px;
+    padding: 6px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
   }
-  .mf-cam-name {
-    font-size: 15px;
+
+  /* Header crumb row — calm .h-row + .cbtn + .crumb + .qseg */
+  .h-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .cbtn {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .cbtn:active {
+    transform: translateY(1px);
+  }
+  .cbtn-spacer {
+    width: 42px;
+    flex: 0 0 auto;
+  }
+  .crumb {
+    flex: 1 1 auto;
+    text-align: center;
+    min-width: 0;
+  }
+  .title-lg {
+    font-size: 18px;
     font-weight: 600;
     letter-spacing: -0.2px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .mf-status-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+  .path {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-2);
+    margin-top: 3px;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
   }
-  .mf-video-frame {
+
+  /* Feed — calm .feedwrap. The 16:9 frame + the video snippet sits inside.
+     object-fit on the video stays `fill` deliberately (anamorphic invariant). */
+  .feedwrap {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    background: #000;
+    border-radius: var(--r);
     overflow: hidden;
+    background: var(--feed);
   }
   .ts-chip {
     position: absolute;
-    top: 10px;
+    bottom: 12px;
     right: 12px;
     padding: 4px 7px;
     border-radius: 4px;
     background: rgba(0, 0, 0, 0.42);
     backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
-  .mf-statspanel {
+  .statspanel {
     position: absolute;
     top: 10px;
     left: 10px;
-    padding: 6px 10px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(8px);
+    min-width: 132px;
+    padding: 9px 12px;
+    border-radius: var(--r-sm);
+    background: rgba(8, 10, 12, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.14);
-    display: grid;
-    grid-template-columns: auto auto;
-    gap: 2px 10px;
-    text-align: left;
-  }
-  /* Horizontal scroll-rail of other cameras' ECO tiles, polling 1 Hz via
-     tileTick. Fixed tile size keeps ~4 visible on a stock iPhone width;
-     the rest scrolls. Scrollbar hidden to match native iOS feel. */
-  .mf-others-rail {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding: 8px 16px;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x mandatory;
-  }
-  .mf-others-rail::-webkit-scrollbar {
-    display: none;
-  }
-  .mf-other-tile {
-    flex-shrink: 0;
-    width: 96px;
+    box-shadow: 0 12px 28px -16px rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
+  }
+  .sp-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 18px;
+    white-space: nowrap;
+  }
+  .sp-k {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+  .sp-v {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: #fff;
+  }
+
+  /* Control bar — calm .livebar / .livebtn */
+  .livebar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 2px;
+  }
+  .livebtn {
+    width: 46px;
+    height: 46px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: var(--r);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+    transition:
+      background 0.18s ease,
+      color 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .livebtn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .livebtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .livebtn.primary {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
+  }
+  .livebtn.primary :global(svg) {
+    fill: var(--accent);
+    stroke: var(--accent);
+  }
+  .livebtn.active {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
+  }
+
+  /* Others rail — calm .hscroll .mini */
+  .sec-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    margin-top: 4px;
+  }
+  .hscroll {
+    display: flex;
+    gap: 11px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+    margin: 0 -18px;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .hscroll::-webkit-scrollbar {
+    height: 0;
+  }
+  .mini {
+    flex: 0 0 124px;
+    cursor: pointer;
     text-decoration: none;
     color: inherit;
-    scroll-snap-align: start;
-    opacity: 1;
-    transition: opacity 200ms;
   }
-  .mf-other-tile.offline {
-    opacity: 0.7;
-  }
-  .mf-other-img {
-    width: 96px;
-    height: 54px;
-    object-fit: cover;
-    border-radius: 4px;
-    background: #000;
-    box-shadow: inset 0 0 0 1px var(--border);
-  }
-  .mf-other-name {
-    font-size: 10px;
+  .mini .cam {
+    position: relative;
+    height: 74px;
+    border-radius: var(--r);
+    overflow: hidden;
+    background: var(--feed);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: var(--text-3);
-    text-align: center;
+  }
+  .mini .cam.offline {
+    border: 1px dashed var(--border-strong);
+    color: var(--warn);
+  }
+  .off-ico {
+    color: var(--warn);
+    display: inline-flex;
+  }
+  .mini-img {
+    width: 100%;
+    height: 100%;
+    /* object-fit: cover here is fine — these tiles are decorative thumbs,
+       not the live feed; the anamorphic invariant only applies to the
+       active <video> + poster, not the rail miniatures. */
+    object-fit: cover;
+    display: block;
+  }
+  .lbl {
+    font-size: 13px;
+    color: var(--text-2);
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .mini-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 96px;
+  }
+
+  /* Recent events */
+  .recent-h {
+    margin-top: 4px;
+  }
+  .recent-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1 1 auto;
+    text-align: left;
+  }
+  .recent-link {
+    font-size: 14px;
+    color: var(--text-2);
+    text-decoration: none;
+    flex: 0 0 auto;
+  }
+  .recent-link:hover {
+    color: var(--text);
+  }
+  .recent-empty {
+    padding: 12px 0;
+  }
+  .recent-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .ev {
+    width: 100%;
+    display: flex;
+    gap: 13px;
+    align-items: center;
+    padding: 11px 0;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .ev:last-child {
+    border-bottom: none;
+  }
+  .ev-ago {
+    flex: 0 0 auto;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .ev-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .l1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .ev-kind {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
-  .mf-meta {
-    padding: 14px 18px 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid var(--border);
-  }
-  .mf-meta-left,
-  .mf-meta-right {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .mf-meta-right {
-    align-items: flex-end;
-  }
-  .mf-controls {
-    padding: 18px 18px 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .mf-controls-group {
-    display: flex;
-    gap: 8px;
-  }
-  .mf-events {
-    padding: 6px 18px;
-    /* Clear the fixed MobileTabBar (~56px tall + its own safe-area-inset)
-       plus a small breathing gap so the last event row never hides
-       behind the bar at the bottom of scroll. */
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
-    flex: 1;
-    overflow: auto;
-  }
-  .mf-events-header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 10px;
-  }
-  .mf-events-link {
-    text-decoration: none;
-  }
-  .mf-event-row {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 0;
-    border: none;
-    border-bottom: 1px solid var(--border);
-    background: none;
-    color: inherit;
-    font-family: inherit;
-    cursor: pointer;
-    text-align: left;
-  }
-  .mf-event-row:hover {
-    background: rgba(255, 255, 255, 0.02);
-  }
-  .mf-events-empty {
-    padding: 12px 0;
-  }
-  .mf-event-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .mf-event-label {
-    font-size: 13px;
-    color: var(--text);
+  .ev-score {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--accent);
+    white-space: nowrap;
+    flex: 0 0 auto;
   }
 </style>

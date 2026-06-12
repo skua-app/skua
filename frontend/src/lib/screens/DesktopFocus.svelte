@@ -5,7 +5,6 @@
   import type { Camera, EventItem } from '$lib/api'
   import { fetchEvents } from '$lib/api'
   import Icon from '$lib/components/Icon.svelte'
-  import IconBtn from '$lib/components/IconBtn.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import OnlineDot from '$lib/components/OnlineDot.svelte'
   import Segmented from '$lib/components/Segmented.svelte'
@@ -68,7 +67,6 @@
   function pad(n: number): string {
     return String(n).padStart(2, '0')
   }
-
   function formatNow(): string {
     const d = new Date()
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} · ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
@@ -76,7 +74,6 @@
 
   let currentTime = $state(formatNow())
   let tileTick = $state(Math.floor(Date.now() / 1000))
-
   $effect(() => {
     const t = setInterval(() => {
       currentTime = formatNow()
@@ -90,24 +87,15 @@
     { value: 'sub' as const, label: 'LQ', disabled: !subAvailable }
   ])
 
-  // Real go2rtc stream name from the camera (Frigate-truth), selected by the
-  // active quality. Stream overrides are server-side only and not visible to
-  // the frontend, so this is the configured Main/Sub name — never a
-  // fabricated *_h264 string. Empty (shouldn't happen for Main) → render
-  // nothing.
   const streamName = $derived(
     effectiveQuality === 'sub' ? (camera?.streams.sub ?? '') : (camera?.streams.main ?? '')
   )
 
   const RECENT_LIMIT = 6
-
   let recentEvents = $state<EventItem[]>([])
   let recentLastAt = $state('')
   let modalEvent = $state<EventItem | null>(null)
 
-  // Focus → focus navigation must REPLACE the history entry so a single
-  // back goes to the grid rather than walking through prior cameras.
-  // The anchor stays for accessibility / right-click open-in-new-tab.
   function switchCam(e: MouseEvent, id: string) {
     e.preventDefault()
     goto(`/cam/${id}`, { replaceState: true })
@@ -149,83 +137,75 @@
 </script>
 
 <div class="df-root">
-  <header class="df-topbar">
-    <div class="df-topbar-left">
-      <button type="button" onclick={onBack} class="df-back" aria-label={ui.cameras}>
-        <Icon name="back" size={14} />
-        <span>{ui.cameras}</span>
-      </button>
-      <div class="df-divider"></div>
-      <span class="df-cam-name">{camera?.name ?? '—'}</span>
-      {#if streamName}
-        <Mono color="var(--text-3)" size={11}>{streamName}</Mono>
-      {/if}
-      <span class="df-status">
-        <OnlineDot online={camera?.online ?? null} size={5} />
-        <Mono size={10} color="var(--text-2)" letterSpacing={0.5}>
-          WEBRTC · {latencyMs !== null ? `${latencyMs} MS` : '—'}
-        </Mono>
-      </span>
-    </div>
-    <div class="df-topbar-right">
-      <Segmented
-        value={effectiveQuality}
-        options={qualityOptions}
-        onChange={(v) => {
-          if (v !== effectiveQuality) toggleQuality()
-        }}
-      />
-      {#if !subAvailable}
-        <Mono size={10} color="var(--text-3)" letterSpacing={0.3}>{ui.subUnavailable}</Mono>
-      {/if}
-      <div class="df-divider"></div>
-      <IconBtn
-        icon="activity"
-        label={ui.telemetryLabel}
-        onclick={onShowTelemetry}
-        size={32}
-        active={showTelemetry}
-      />
-    </div>
-  </header>
-
   <div class="df-body">
-    <div class="df-video-col">
+    <div class="df-live-main">
+      <div class="dk-crumb">
+        <button type="button" onclick={onBack} class="dk-back" aria-label={ui.cameras}>
+          <Icon name="back" size={21} />
+        </button>
+        <div class="dk-crumb-t">
+          <div class="nm">
+            {camera?.name ?? '—'}
+            <OnlineDot online={camera?.online ?? null} size={6} />
+          </div>
+          <div class="pth">
+            {#if camera?.online}
+              WEBRTC · WHEP · {latencyMs !== null ? `${latencyMs} MS` : '—'}
+            {:else}
+              STREAM OFFLINE
+            {/if}
+            {#if streamName}
+              · {streamName}
+            {/if}
+          </div>
+        </div>
+        {#if camera?.online}
+          <Segmented
+            value={effectiveQuality}
+            options={qualityOptions}
+            variant="mono"
+            onChange={(v) => {
+              if (v !== effectiveQuality) toggleQuality()
+            }}
+          />
+        {/if}
+      </div>
+
       <div class="df-player-center">
         <div class="df-player">
-          <div class="df-video-frame">
+          <div class="df-video-frame dk-feed">
             {@render videoSnippet()}
 
-            {#if showTelemetry}
-              <div class="df-statspanel">
-                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>LATENCY</Mono>
-                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-                  {latencyMs !== null ? `${latencyMs} ms` : '—'}
-                </Mono>
-                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>BITRATE</Mono>
-                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-                  {bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}
-                </Mono>
-                <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>VIDEO</Mono>
-                <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}>
-                  {videoCodec ?? '—'}
-                  {resolution ?? ''}
-                </Mono>
-                {#if audioAvailable}
-                  <Mono size={10} color="rgba(255,255,255,0.45)" letterSpacing={0.4}>AUDIO</Mono>
-                  <Mono size={10} color="rgba(255,255,255,0.9)" weight={500}
-                    >{audioCodec ?? '—'}</Mono
-                  >
-                {/if}
+            {#if isLive}
+              <div class="dk-live-tag">
+                <span class="pulse" aria-hidden="true"></span>
+                <span class="live-text">{ui.liveTag}</span>
               </div>
             {/if}
 
-            {#if isLive}
-              <div class="df-live-tag">
-                <span class="df-live-dot" aria-hidden="true"></span>
-                <Mono size={10} color="rgba(255,255,255,0.92)" letterSpacing={0.8} weight={600}>
-                  {ui.liveTag}
-                </Mono>
+            {#if showTelemetry}
+              <div class="dk-statspanel">
+                <div class="sp-row">
+                  <span class="sp-k">LAT</span><span class="sp-v"
+                    >{latencyMs !== null ? `${latencyMs} ms` : '—'}</span
+                  >
+                </div>
+                <div class="sp-row">
+                  <span class="sp-k">BR</span><span class="sp-v"
+                    >{bitrateKbps !== null ? `${(bitrateKbps / 1000).toFixed(1)} Mbps` : '—'}</span
+                  >
+                </div>
+                <div class="sp-row">
+                  <span class="sp-k">VID</span><span class="sp-v">{videoCodec ?? '—'}</span>
+                </div>
+                <div class="sp-row">
+                  <span class="sp-k">RES</span><span class="sp-v">{resolution ?? '—'}</span>
+                </div>
+                {#if audioAvailable}
+                  <div class="sp-row">
+                    <span class="sp-k">AUD</span><span class="sp-v">{audioCodec ?? '—'}</span>
+                  </div>
+                {/if}
               </div>
             {/if}
 
@@ -238,84 +218,115 @@
             {/if}
           </div>
 
-          <div class="df-controls">
-            <div class="df-controls-left">
-              <IconBtn
-                icon={isPaused ? 'play' : 'pause'}
-                label="play"
-                onclick={togglePause}
-                size={34}
-              />
-              <div class="df-ctrl-divider"></div>
-              <IconBtn
-                icon={isMuted ? 'mute' : 'unmute'}
-                label="mute"
+          <div class="dk-livebar">
+            {#if camera?.online}
+              <button type="button" class="dk-livebtn primary" onclick={togglePause}>
+                <Icon name={isPaused ? 'play' : 'pause'} size={20} />
+                <span>{isPaused ? 'Play' : 'Pause'}</span>
+              </button>
+              <button
+                type="button"
+                class="dk-livebtn"
+                class:active={!isMuted}
                 onclick={toggleMute}
-                size={34}
-                active={!isMuted}
                 disabled={!audioAvailable}
-              />
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
+              >
+                <Icon name={isMuted ? 'mute' : 'unmute'} size={20} />
+              </button>
+              <button
+                type="button"
+                class="dk-livebtn"
+                class:active={showTelemetry}
+                onclick={onShowTelemetry}
+              >
+                <Icon name="activity" size={20} />
+                <span>{ui.telemetryLabel}</span>
+              </button>
               {#if camera?.capabilities.talk_back}
-                <IconBtn icon="mic" label="talkback" size={34} accent disabled />
+                <button type="button" class="dk-livebtn" disabled aria-label="Talkback">
+                  <Icon name="mic" size={20} />
+                </button>
               {/if}
-              <div class="df-ctrl-divider"></div>
-              <IconBtn icon="snapshot" label="snap" onclick={downloadSnapshot} size={34} />
-            </div>
-            <div class="df-controls-right">
-              <Mono size={10} color="var(--text-3)" letterSpacing={0.4}>
-                {#if streamName}<span class="df-id-strong">{streamName}</span>{/if}{videoCodec
-                  ? ` · ${videoCodec}`
-                  : ''}{resolution ? ` · ${resolution}` : ''}
-              </Mono>
-              <IconBtn icon="fullscreen" label="full" onclick={toggleFullscreen} size={34} />
-            </div>
+              <span class="grow"></span>
+              <button type="button" class="dk-livebtn" onclick={downloadSnapshot}>
+                <Icon name="snapshot" size={20} />
+                <span>Snapshot</span>
+              </button>
+              <button type="button" class="dk-livebtn" onclick={toggleFullscreen}>
+                <Icon name="fullscreen" size={20} />
+                <span>Fullscreen</span>
+              </button>
+            {:else}
+              <button type="button" class="dk-livebtn" onclick={onBack}>
+                <Icon name="back" size={20} />
+                <span>{ui.cameras}</span>
+              </button>
+            {/if}
           </div>
         </div>
       </div>
 
       {#if camerasStore.cameras.length > 1}
-        <div class="df-filmstrip-wrap">
-          <div class="df-filmstrip-header">
-            <Mono size={10} color="var(--text-2)" letterSpacing={0.6} uppercase>
-              {ui.cameras}
-            </Mono>
-          </div>
-          <div class="df-filmstrip">
+        <div class="dk-filmstrip-wrap">
+          <div class="dk-sec-label">{ui.otherCamerasLabel}</div>
+          <div class="dk-filmstrip">
             {#each camerasStore.cameras as c (c.id)}
-              {#if c.id === camera?.id}
-                <div class="df-film df-film-current" class:offline={!c.online} aria-current="page">
-                  <div class="df-film-frame">
-                    <img
-                      src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
-                      alt={c.name}
-                      class="df-film-img"
-                      loading="lazy"
-                    />
-                    <div class="df-film-dot">
-                      <OnlineDot online={c.online} size={4} />
-                    </div>
+              {@const current = c.id === camera?.id}
+              {#if current}
+                <div class="dk-film on" class:off={!c.online} aria-current="page">
+                  <div class="thumb">
+                    {#if c.online}
+                      <div class="cam">
+                        <img
+                          src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
+                          alt={c.name}
+                          class="film-img"
+                          loading="lazy"
+                        />
+                      </div>
+                    {:else}
+                      <div class="cam offline">
+                        <span class="off-ico" aria-hidden="true"
+                          ><Icon name="warning" size={18} /></span
+                        >
+                      </div>
+                    {/if}
                   </div>
-                  <span class="df-film-name">{c.name}</span>
+                  <div class="flbl">
+                    <OnlineDot online={c.online} size={5} />
+                    <span class="flbl-name">{c.name}</span>
+                  </div>
                 </div>
               {:else}
                 <a
                   href={`/cam/${c.id}`}
-                  class="df-film"
-                  class:offline={!c.online}
+                  class="dk-film"
+                  class:off={!c.online}
                   onclick={(e) => switchCam(e, c.id)}
                 >
-                  <div class="df-film-frame">
-                    <img
-                      src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
-                      alt={c.name}
-                      class="df-film-img"
-                      loading="lazy"
-                    />
-                    <div class="df-film-dot">
-                      <OnlineDot online={c.online} size={4} />
-                    </div>
+                  <div class="thumb">
+                    {#if c.online}
+                      <div class="cam">
+                        <img
+                          src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
+                          alt={c.name}
+                          class="film-img"
+                          loading="lazy"
+                        />
+                      </div>
+                    {:else}
+                      <div class="cam offline">
+                        <span class="off-ico" aria-hidden="true"
+                          ><Icon name="warning" size={18} /></span
+                        >
+                      </div>
+                    {/if}
                   </div>
-                  <span class="df-film-name">{c.name}</span>
+                  <div class="flbl">
+                    <OnlineDot online={c.online} size={5} />
+                    <span class="flbl-name">{c.name}</span>
+                  </div>
                 </a>
               {/if}
             {/each}
@@ -324,40 +335,39 @@
       {/if}
     </div>
 
-    <aside class="df-sidebar">
-      <div class="df-sidebar-section">
-        <div class="df-sidebar-header">
-          <Mono size={10} color="var(--text-2)" letterSpacing={0.6} uppercase>
-            {ui.recentEvents}
-          </Mono>
-          <Mono size={10} color="var(--text-3)">{recentEvents.length}</Mono>
+    <aside class="dk-live-side">
+      <div class="dk-panel">
+        <div class="dk-panel-h">
+          <span class="ttl">{ui.recentEvents}{camera?.name ? ` · ${camera.name}` : ''}</span>
+          <a href="/events" class="lnk">{ui.viewAll}</a>
         </div>
-        {#if recentEvents.length === 0}
-          <div class="df-events-empty">
-            <Mono size={11} color="var(--text-3)">{ui.noRecentEvents}</Mono>
-          </div>
-        {:else}
-          {#each recentEvents as ev, i (ev.id)}
-            <button
-              type="button"
-              class="df-event-row"
-              class:active={i === 0}
-              onclick={() => (modalEvent = ev)}
-            >
-              <div class="df-event-left">
-                <Mono size={10} color="var(--text-3)">
-                  {eventTimestamp(ev.started_at)}
-                </Mono>
-                <span class="df-event-label" class:active-label={i === 0}>
-                  {eventKindLabels[ev.kind] ?? ev.kind}
-                </span>
-              </div>
-              <Mono size={10} color="var(--text-3)">
-                {ev.score !== null ? ev.score.toFixed(2) : '—'}
-              </Mono>
-            </button>
-          {/each}
-        {/if}
+        <div class="dk-panel-body">
+          {#if recentEvents.length === 0}
+            <div class="dk-events-empty">
+              <Mono size={11} color="var(--text-3)">{ui.noRecentEvents}</Mono>
+            </div>
+          {:else}
+            {#each recentEvents as ev, i (ev.id)}
+              <button
+                type="button"
+                class="dk-evrow"
+                class:active={i === 0}
+                onclick={() => (modalEvent = ev)}
+              >
+                <div class="meta">
+                  <div class="l1">
+                    <span>{eventKindLabels[ev.kind] ?? ev.kind}</span>
+                    <span class="mono">{eventTimestamp(ev.started_at)}</span>
+                  </div>
+                  <div class="l2">
+                    <span>{ui.score}</span>
+                    <span class="mono">{ev.score !== null ? ev.score.toFixed(2) : '—'}</span>
+                  </div>
+                </div>
+              </button>
+            {/each}
+          {/if}
+        </div>
       </div>
     </aside>
   </div>
@@ -377,70 +387,79 @@
     flex-direction: column;
   }
 
-  .df-topbar {
-    padding: 14px 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .df-topbar-left,
-  .df-topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .df-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--text-2);
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    font-family: inherit;
-  }
-  .df-back:hover {
-    color: var(--text);
-  }
-  .df-divider {
-    width: 1px;
-    height: 14px;
-    background: var(--border);
-  }
-  .df-cam-name {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.2px;
-  }
-  .df-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-
+  /* dk-live two-column layout */
   .df-body {
     flex: 1;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 348px;
+    gap: 22px;
+    padding: 22px 28px;
     min-height: 0;
   }
-  .df-video-col {
-    padding: 22px 22px 22px 28px;
+  .df-live-main {
     display: flex;
     flex-direction: column;
+    gap: 14px;
+    min-width: 0;
     min-height: 0;
   }
 
-  /* Sizing container for the player block. container-type:size lets the
-     player width below resolve against this box's width AND height via
-     cqw/cqh, so the 16:9 frame is computed deterministically instead of
-     relying on the browser's aspect-ratio-vs-max-height tiebreaker (which
-     was the prior bug — width:100% + max-height:100% violated the ratio
-     and stretched the picture horizontally on short windows). */
+  /* dk-crumb */
+  .dk-crumb {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: none;
+  }
+  .dk-back {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    border-radius: 11px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    font-family: inherit;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+  .dk-back:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+  .dk-crumb-t {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .dk-crumb-t .nm {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dk-crumb-t .pth {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-2);
+    margin-top: 3px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Player sizing — PRESERVE viewport-fit math (container queries on the
+     center wrapper feed cqw/cqh into the .df-player width formula). The
+     filmstrip below is a flex:none sibling so the math stays clean. */
   .df-player-center {
     flex: 1;
     min-height: 0;
@@ -450,15 +469,6 @@
     align-items: center;
     justify-content: center;
   }
-
-  /* The frame + controls move together as one block, so the controls
-     always sit directly under the video with no detached floating gap
-     at any window height. Width = min(available width, height-derived
-     16:9 width after reserving the controls bar + inter-element gap).
-     --controls-reserved covers the controls bar (12px+12px padding +
-     34px IconBtn + 2px border = 60px) plus the 12px gap below the frame;
-     bumped to 76px so the controls are never clipped at the minimum
-     usable window height. */
   .df-player {
     --controls-reserved: 76px;
     width: min(100cqw, calc((100cqh - var(--controls-reserved)) * 16 / 9));
@@ -466,19 +476,95 @@
     flex-direction: column;
     gap: 12px;
   }
-
-  /* Strict 16:9 box driven by .df-player's width — no width:100%, no
-     max-height. object-fit on .poster / .video-el stays `fill`
-     deliberately: the LQ sub stream is anamorphic on some cameras and
-     needs the unsquashed stretch into 16:9. */
   .df-video-frame {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 9;
-    border-radius: 12px;
+    /* dk-feed look: rounded, --feed bg, --border ring */
+    border-radius: var(--r);
     overflow: hidden;
-    background: #000;
-    box-shadow: inset 0 0 0 1px var(--border);
+    background: var(--feed);
+    border: 1px solid var(--border);
+  }
+
+  /* Overlays — dk-statspanel + dk-live-tag */
+  .dk-statspanel {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    min-width: 150px;
+    padding: 11px 14px;
+    border-radius: var(--r-sm);
+    background: rgba(8, 10, 12, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sp-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 22px;
+    white-space: nowrap;
+  }
+  .sp-k {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: rgba(255, 255, 255, 0.45);
+  }
+  .sp-v {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .dk-live-tag {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(8, 10, 12, 0.46);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: #fff;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+  }
+  .dk-live-tag .pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--online);
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--online) 50%, transparent);
+    animation: dk-pulse 2s infinite;
+  }
+  @keyframes dk-pulse {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--online) 50%, transparent);
+    }
+    70% {
+      box-shadow: 0 0 0 7px color-mix(in oklab, var(--online) 0%, transparent);
+    }
+    100% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, var(--online) 0%, transparent);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dk-live-tag .pulse {
+      animation: none;
+    }
   }
   .ts-chip {
     position: absolute;
@@ -488,215 +574,257 @@
     border-radius: 5px;
     background: rgba(0, 0, 0, 0.45);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
   }
 
-  /* Top-left stats overlay (replaces the bottom-right telemetry pill).
-     Translucent dark + blur, mono key/value rows. Gated by showTelemetry. */
-  .df-statspanel {
-    position: absolute;
-    top: 14px;
-    left: 16px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    display: grid;
-    grid-template-columns: auto auto;
-    gap: 3px 14px;
-    text-align: left;
+  /* dk-livebar */
+  .dk-livebar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
   }
-
-  /* Top-right LIVE tag with a pulsing dot. Static under reduce-motion. */
-  .df-live-tag {
-    position: absolute;
-    top: 14px;
-    right: 16px;
+  .dk-livebar .grow {
+    flex: 1 1 auto;
+  }
+  .dk-livebtn {
+    height: 46px;
+    min-width: 46px;
+    padding: 0 14px;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-  .df-live-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--online);
-    animation: df-live-pulse 1.6s ease-in-out infinite;
-  }
-  @keyframes df-live-pulse {
-    0% {
-      box-shadow: 0 0 0 0 color-mix(in oklab, var(--online) 60%, transparent);
-    }
-    70% {
-      box-shadow: 0 0 0 6px color-mix(in oklab, var(--online) 0%, transparent);
-    }
-    100% {
-      box-shadow: 0 0 0 0 color-mix(in oklab, var(--online) 0%, transparent);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .df-live-dot {
-      animation: none;
-    }
-  }
-
-  .df-controls {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
+    justify-content: center;
+    gap: 9px;
+    border-radius: 12px;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.015);
-  }
-  .df-controls-left,
-  .df-controls-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .df-ctrl-divider {
-    width: 1px;
-    height: 18px;
-    background: var(--border);
-    margin: 0 4px;
-  }
-  .df-id-strong {
+    background: var(--surface);
     color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    -webkit-appearance: none;
+    appearance: none;
+    transition:
+      background 0.16s ease,
+      color 0.16s ease,
+      border-color 0.16s ease;
+  }
+  .dk-livebtn:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+  .dk-livebtn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .dk-livebtn.primary {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
+  }
+  .dk-livebtn.primary :global(svg) {
+    fill: var(--accent);
+    stroke: var(--accent);
+  }
+  .dk-livebtn.active {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
   }
 
-  /* Bottom filmstrip: flex-none sibling so .df-player-center keeps flex:1
-     and the deterministic 16:9 sizing math is unchanged. */
-  .df-filmstrip-wrap {
-    flex: none;
-    margin-top: 16px;
-  }
-  .df-filmstrip-header {
-    margin-bottom: 8px;
-  }
-  .df-filmstrip {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .df-filmstrip::-webkit-scrollbar {
-    display: none;
-  }
-  .df-film {
-    flex: none;
-    width: 174px;
+  /* Filmstrip — dk-filmstrip-wrap / dk-filmstrip / dk-film */
+  .dk-filmstrip-wrap {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 11px;
+    margin-top: 2px;
+    flex: none;
+  }
+  .dk-sec-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .dk-filmstrip {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: thin;
+  }
+  .dk-film {
+    flex: 0 0 174px;
+    cursor: pointer;
     text-decoration: none;
     color: inherit;
-    cursor: pointer;
   }
-  .df-film.offline {
-    opacity: 0.55;
-  }
-  .df-film-current {
+  .dk-film.off {
     cursor: default;
   }
-  .df-film-frame {
+  .dk-film .thumb {
     position: relative;
-    width: 174px;
     aspect-ratio: 16 / 9;
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     overflow: hidden;
-    background: #0c0d0f;
-    box-shadow: inset 0 0 0 1px var(--border);
+    border: 1px solid var(--border);
+    background: var(--feed);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
   }
-  .df-film-current .df-film-frame {
+  .dk-film:hover .thumb {
+    border-color: var(--border-strong);
+  }
+  .dk-film.on .thumb {
+    border-color: transparent;
     box-shadow: 0 0 0 2px var(--accent);
   }
-  .df-film-img {
+  .dk-film .thumb .cam {
+    position: absolute;
+    inset: 0;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .dk-film .thumb .cam.offline {
+    border: none;
+    color: var(--warn);
+  }
+  .off-ico {
+    color: var(--warn);
+    display: inline-flex;
+  }
+  .film-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: block;
   }
-  .df-film-dot {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-  }
-  .df-film-name {
-    text-align: center;
-    font-size: 11px;
+  .dk-film .flbl {
+    font-size: 13px;
     color: var(--text-2);
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    justify-content: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .df-film-current .df-film-name {
+  .dk-film.on .flbl {
     color: var(--accent);
-    font-weight: 500;
+  }
+  .flbl-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .df-sidebar {
-    border-left: 1px solid var(--border);
-    padding: 22px 24px 22px 22px;
+  /* Events-only sidebar — dk-live-side / dk-panel */
+  .dk-live-side {
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    overflow: auto;
+    gap: 18px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
-  .df-sidebar-section {
+  .dk-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+    min-height: 0;
   }
-  .df-sidebar-header {
+  .dk-panel-h {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 12px;
-  }
-  .df-event-row {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 10px 8px;
-    margin: 0 -8px;
-    border: none;
-    border-left: 2px solid transparent;
-    border-radius: 6px;
-    background: transparent;
-    color: inherit;
-    font-family: inherit;
-    padding-left: 8px;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .dk-panel-h .ttl {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dk-panel-h .lnk {
+    font-size: 13px;
+    color: var(--accent);
     cursor: pointer;
-    text-align: left;
+    text-decoration: none;
+    flex: 0 0 auto;
   }
-  .df-event-row:hover {
-    background: rgba(255, 255, 255, 0.025);
+  .dk-panel-h .lnk:hover {
+    text-decoration: underline;
   }
-  .df-event-row.active {
-    background: color-mix(in oklab, var(--accent) 14%, transparent);
-    border-left-color: var(--accent);
-    padding-left: 12px;
+  .dk-panel-body {
+    padding: 8px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
   }
-  .df-events-empty {
-    padding: 10px 0;
+  .dk-events-empty {
+    padding: 10px 8px;
   }
-  .df-event-left {
+  .dk-evrow {
+    width: 100%;
     display: flex;
     align-items: center;
     gap: 12px;
+    padding: 9px 8px;
+    border: none;
+    border-radius: 11px;
+    background: transparent;
+    color: inherit;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.14s ease;
+  }
+  .dk-evrow:hover {
+    background: var(--surface-2);
+  }
+  .dk-evrow.active {
+    background: var(--accent-soft);
+  }
+  .dk-evrow .meta {
+    flex: 1 1 auto;
     min-width: 0;
   }
-  .df-event-label {
-    font-size: 12px;
-    color: var(--text);
-  }
-  .df-event-label.active-label {
+  .dk-evrow .meta .l1 {
+    font-size: 14px;
     font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .dk-evrow .meta .l1 .mono {
+    color: var(--text-2);
+    font-weight: 400;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+  }
+  .dk-evrow .meta .l2 {
+    font-size: 12.5px;
+    color: var(--text-2);
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 2px;
+  }
+  .dk-evrow .meta .l2 .mono {
+    color: var(--accent);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
   }
 </style>
