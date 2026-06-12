@@ -69,6 +69,7 @@ export type EventsResponse = {
 
 export type AppConfig = {
   frigate_ui_url: string
+  version: string
 }
 
 export type EventsQuery = {
