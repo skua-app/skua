@@ -52,6 +52,8 @@ export const ui = {
   refreshDiffRemoved: 'Removed',
   // settings > IA + appearance + per-camera editor (E6 sprint B)
   sectionAppearance: 'Appearance',
+  appearanceDescription:
+    'How the wall, tiles, and the “while you were away” digest look. Preferences sync across every device in the household.',
   sectionCameras: 'Cameras',
   sectionGroups: 'Groups',
   // settings > connection section (E7.1)
