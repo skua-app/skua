@@ -2,6 +2,7 @@ import { fetchConfig } from '$lib/api'
 
 class ConfigStore {
   frigateUIURL = $state('')
+  version = $state('')
   loaded = $state(false)
   #initStarted = false
 
@@ -11,6 +12,7 @@ class ConfigStore {
     try {
       const cfg = await fetchConfig()
       this.frigateUIURL = cfg.frigate_ui_url
+      this.version = cfg.version
     } catch {
       // Best-effort: deep-links degrade to no-op rather than blocking the app.
     } finally {
