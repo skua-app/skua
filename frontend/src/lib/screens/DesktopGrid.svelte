@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import CameraTile from '$lib/components/CameraTile.svelte'
-  import IconBtn from '$lib/components/IconBtn.svelte'
+  import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import Segmented from '$lib/components/Segmented.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
@@ -24,6 +24,30 @@
       ? camerasStore.cameras.filter((c) => c.groups.includes(prefsStore.gridFilter!))
       : camerasStore.cameras
   )
+  const allCameras = $derived(camerasStore.cameras)
+  const onlineCount = $derived(allCameras.filter((c) => c.online).length)
+  const offlineCount = $derived(allCameras.length - onlineCount)
+
+  const activeGroup = $derived(
+    prefsStore.gridFilter ? groupsStore.groups.find((g) => g.id === prefsStore.gridFilter) : null
+  )
+  function cameraCount(groupId: string): number {
+    return groupsStore.byId(groupId)?.camera_ids.length ?? 0
+  }
+
+  let filterOpen = $state(false)
+  function selectGroup(id: string | null) {
+    prefsStore.setGridFilter(id)
+    filterOpen = false
+  }
+  $effect(() => {
+    if (!filterOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') filterOpen = false
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 
   type GridItem =
     | { kind: 'label'; key: string; name: string }
@@ -82,35 +106,76 @@
 
 <div class="desktop-grid">
   <main class="dg-main">
-    <div class="dg-section-header">
-      <div class="dg-section-title">
-        <Mono size={13} weight={500} color="var(--text-2)" letterSpacing={0.3} uppercase>
-          {ui.cameras}
-        </Mono>
-        <Mono color="var(--text-3)" size={11}>· {cameras.length}</Mono>
+    <div class="dk-pagehead">
+      <div>
+        <div class="dk-h1">{ui.cameras}</div>
+        <div class="dk-sub">
+          <span class="gd" aria-hidden="true"></span>
+          {onlineCount}
+          {ui.online} · {offlineCount}
+          {ui.offline}
+        </div>
       </div>
-      <div class="dg-section-controls">
-        <div class="dg-filters">
+      <div class="dk-controls">
+        <div class="dk-drop">
           <button
             type="button"
-            class="filter-chip"
-            class:active={prefsStore.gridFilter === null}
-            onclick={() => prefsStore.setGridFilter(null)}
+            class="dk-dropbtn"
+            class:open={filterOpen}
+            aria-label={ui.groupFilterLabel}
+            aria-haspopup="listbox"
+            aria-expanded={filterOpen}
+            onclick={() => (filterOpen = !filterOpen)}
           >
-            {ui.filterAll}
+            <span class="db-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
+            <span class="ck" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
           </button>
-          {#each groupsStore.groups as g (g.id)}
+          {#if filterOpen}
             <button
               type="button"
-              class="filter-chip"
-              class:active={prefsStore.gridFilter === g.id}
-              onclick={() => prefsStore.setGridFilter(g.id)}
-            >
-              {g.name}
-            </button>
-          {/each}
+              class="dk-catch"
+              tabindex={-1}
+              aria-label={ui.close}
+              onclick={() => (filterOpen = false)}
+            ></button>
+            <ul class="dk-menu" role="listbox">
+              <li>
+                <button
+                  type="button"
+                  class="dk-opt"
+                  class:on={prefsStore.gridFilter === null}
+                  role="option"
+                  aria-selected={prefsStore.gridFilter === null}
+                  onclick={() => selectGroup(null)}
+                >
+                  <span class="ck" aria-hidden="true">
+                    {#if prefsStore.gridFilter === null}<Icon name="check" size={15} />{/if}
+                  </span>
+                  <span class="nm">{ui.filterAllCams}</span>
+                  <Mono size={11} color="inherit" class="ct">{allCameras.length}</Mono>
+                </button>
+              </li>
+              {#each groupsStore.groups as g (g.id)}
+                <li>
+                  <button
+                    type="button"
+                    class="dk-opt"
+                    class:on={prefsStore.gridFilter === g.id}
+                    role="option"
+                    aria-selected={prefsStore.gridFilter === g.id}
+                    onclick={() => selectGroup(g.id)}
+                  >
+                    <span class="ck" aria-hidden="true">
+                      {#if prefsStore.gridFilter === g.id}<Icon name="check" size={15} />{/if}
+                    </span>
+                    <span class="nm">{g.name}</span>
+                    <Mono size={11} color="inherit" class="ct">{cameraCount(g.id)}</Mono>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
         </div>
-        <div class="dg-divider"></div>
         <Segmented
           value={prefsStore.gridMode}
           options={gridModeOptions}
@@ -119,12 +184,6 @@
         <div class="dg-density" aria-label={ui.gridDensityLabel}>
           <Segmented value={density} options={densityOptions} onChange={setDensity} />
         </div>
-        <IconBtn
-          icon="refresh"
-          label={ui.refreshCameras}
-          size={32}
-          onclick={() => camerasStore.refresh()}
-        />
       </div>
     </div>
 
@@ -163,56 +222,180 @@
     flex: 1;
     padding: 24px 28px;
   }
-  .dg-section-header {
+
+  /* dk-pagehead — large title + online/offline sub on the left; controls right */
+  .dk-pagehead {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     justify-content: space-between;
-    margin-bottom: 18px;
-    gap: 16px;
+    gap: 18px;
+    margin-bottom: 20px;
   }
-  .dg-section-title {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
+  .dk-h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.6px;
+    line-height: 1.05;
+    color: var(--text);
   }
-  .dg-section-controls {
+  .dk-sub {
+    margin-top: 6px;
     display: flex;
     align-items: center;
-    gap: 14px;
-  }
-  .dg-filters {
-    display: flex;
-    gap: 6px;
-  }
-  .filter-chip {
-    padding: 4px 10px;
-    font-size: 11px;
-    color: var(--text-3);
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    font-family: inherit;
-    transition:
-      color 120ms,
-      border-color 120ms,
-      background 120ms;
-  }
-  .filter-chip:hover {
+    gap: 8px;
+    font-size: 14px;
     color: var(--text-2);
   }
-  .filter-chip.active {
-    color: var(--accent);
-    border-color: color-mix(in oklab, var(--accent) 50%, transparent);
-    background: color-mix(in oklab, var(--accent) 14%, transparent);
+  .dk-sub .gd {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--online);
+    display: inline-block;
   }
-  .dg-divider {
-    width: 1px;
-    height: 14px;
-    background: var(--border);
+  .dk-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
   }
   .dg-density {
     display: inline-flex;
+  }
+
+  /* dk-drop — group dropdown */
+  .dk-drop {
+    position: relative;
+  }
+  .dk-dropbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    height: 40px;
+    padding: 0 17px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease;
+  }
+  .dk-dropbtn:hover {
+    border-color: var(--border-strong);
+  }
+  .dk-dropbtn.open {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent);
+  }
+  .dk-dropbtn .db-label {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dk-dropbtn .ck {
+    color: var(--text-3);
+    display: inline-flex;
+    transition: transform 0.2s ease;
+  }
+  .dk-dropbtn.open .ck {
+    color: var(--accent);
+    transform: rotate(180deg);
+  }
+  .dk-dropbtn:active {
+    transform: translateY(1px);
+  }
+
+  .dk-catch {
+    position: fixed;
+    inset: 0;
+    z-index: 24;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: default;
+  }
+  .dk-menu {
+    list-style: none;
+    margin: 0;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 25;
+    width: 250px;
+    max-height: 340px;
+    overflow-y: auto;
+    background: var(--elev);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    padding: 6px;
+    animation: dkpop 0.15s ease;
+  }
+  @keyframes dkpop {
+    from {
+      transform: translateY(-6px);
+      opacity: 0;
+    }
+    to {
+      transform: none;
+      opacity: 1;
+    }
+  }
+  .dk-opt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 11px;
+    border: none;
+    background: transparent;
+    border-radius: 10px;
+    font-size: 14.5px;
+    font-family: inherit;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+  }
+  .dk-opt:hover {
+    background: var(--surface-2);
+  }
+  .dk-opt.on {
+    background: var(--accent-soft);
+  }
+  .dk-opt .ck {
+    width: 16px;
+    flex: 0 0 16px;
+    color: var(--accent);
+    display: inline-flex;
+  }
+  .dk-opt .nm {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dk-opt.on .nm {
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .dk-opt :global(.ct) {
+    flex: 0 0 auto;
+    color: var(--text-2);
+    background: var(--surface-2);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+  .dk-opt.on :global(.ct) {
+    color: var(--accent);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--accent-soft);
   }
 
   /* Calm desktop wall — auto-fill with tile min-width driven by density. */
