@@ -1,8 +1,11 @@
 <script lang="ts">
+  import { fade } from 'svelte/transition'
+  import { cubicOut } from 'svelte/easing'
   import { goto } from '$app/navigation'
   import type { GlanceMoment } from '$lib/api'
   import { eventThumbnailURL } from '$lib/api'
   import BottomSheet from '$lib/components/BottomSheet.svelte'
+  import Icon from '$lib/components/Icon.svelte'
   import MomentModal from '$lib/components/MomentModal.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import { glanceStore } from '$lib/stores/glance.svelte'
@@ -17,7 +20,7 @@
   // detections inside it.
   let modalMoment = $state<GlanceMoment | null>(null)
 
-  // One-minute tick so "5 min ago" doesn't drift while the sheet is open.
+  // One-minute tick so "5 min ago" doesn't drift while the surface is open.
   let now = $state(new Date())
   $effect(() => {
     if (!glanceStore.peekOpen) return
@@ -31,8 +34,6 @@
     return camerasStore.cameras.find((c) => c.id === camId)?.name ?? camId
   }
 
-  // kindsLine joins the moment's distinct kinds; the cluster count is
-  // surfaced separately as an accent chip next to the camera name.
   function kindsLine(moment: GlanceMoment): string {
     const parts = moment.kinds.map((k) => eventKindLabels[k] ?? k)
     return parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
@@ -43,27 +44,16 @@
     return tpl.replace('{n}', String(moment.event_count))
   }
 
-  // Row time reflects the NEWEST detection in the cluster, not the
-  // earliest. moment.events is newest-first; fall back to started_at
-  // when the cluster slice is unexpectedly empty.
   function newestTime(moment: GlanceMoment): string {
     const newest = moment.events[0]?.started_at ?? moment.started_at
     return relativeTime(newest, now)
   }
 
   function onRowClick(moment: GlanceMoment) {
-    // Opening a moment marks just that one seen on the server. The
-    // modal opens on top of the peek so the user can work through the
-    // list and switch between the detections inside the cluster.
     void glanceStore.markOneSeen(moment.representative_event_id)
     modalMoment = moment
   }
 
-  // openLiveFor produces the optional onOpenLive callback for the
-  // modal. A non-null return wires the action button up; undefined
-  // hides it entirely. Available only when the moment is still live
-  // AND the camera is currently online — an offline live moment has
-  // nothing playable behind the action.
   function openLiveFor(moment: GlanceMoment | null): (() => void) | undefined {
     if (!moment) return undefined
     if (!isMomentLive(moment)) return undefined
@@ -76,9 +66,6 @@
     }
   }
 
-  // A row is dimmed when the household has already marked its
-  // representative event seen. Dimmed rows remain clickable so users can
-  // re-watch what they've already looked at.
   function isDimmed(moment: GlanceMoment): boolean {
     return moment.seen
   }
@@ -87,21 +74,66 @@
     glanceStore.closePeek()
     goto('/events')
   }
+
+  // Responsive surface: mobile is the BottomSheet, desktop is the calm
+  // .dk-side right-docked panel. Same content rendered through {#snippet body()}.
+  let width = $state(0)
+  const isDesktop = $derived(width >= 900)
+
+  // Honour reduced-motion: the slide-in/scrim animations collapse to 0ms.
+  const reducedMotion = $derived(
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+  const panelMs = $derived(reducedMotion ? 0 : 320)
+  const scrimMs = $derived(reducedMotion ? 0 : 260)
+
+  // Body scroll lock + Escape while the desktop panel is open.
+  $effect(() => {
+    if (!isDesktop || !glanceStore.peekOpen) return
+    const prev = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        glanceStore.closePeek()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.documentElement.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  })
+
+  // Custom horizontal slide for the desktop panel — mirrors the prototype
+  // .dk-side dkSideIn/dkSideOut keyframes.
+  function slideInRight(_node: Element, { duration = 320 }: { duration?: number } = {}) {
+    return {
+      duration,
+      easing: cubicOut,
+      css: (t: number) => `transform: translateX(${(1 - t) * 100}%)`
+    }
+  }
+
+  const windowChip = $derived(
+    ui.glanceWindowChip.replace('{hours}', String(prefsStore.glanceWindowHours))
+  )
 </script>
 
-<BottomSheet
-  open={glanceStore.peekOpen}
-  onClose={() => glanceStore.closePeek()}
-  title={ui.glancePeekTitle}
->
+<svelte:window bind:innerWidth={width} />
+
+{#snippet body()}
   <div class="gp-header">
     <span class="gp-window-chip">
-      <Mono size={10} color="var(--text-3)" letterSpacing={0.3} uppercase>
-        {ui.glanceWindowChip.replace('{hours}', String(prefsStore.glanceWindowHours))}
-      </Mono>
+      <Mono size={10} color="var(--text-3)" letterSpacing={0.3} uppercase>{windowChip}</Mono>
     </span>
     {#if glanceStore.moments.length > 0}
-      <button type="button" class="gp-clear" onclick={() => void glanceStore.markAllSeen()}>
+      <button
+        type="button"
+        class="gp-clear"
+        onclick={() => void glanceStore.markAllSeen()}
+        disabled={glanceStore.unseenCount === 0}
+      >
         {ui.glanceMarkAllSeen}
       </button>
     {/if}
@@ -119,9 +151,12 @@
           <button
             type="button"
             class="gp-row"
-            class:dimmed={isDimmed(m)}
+            class:seen={isDimmed(m)}
             onclick={() => onRowClick(m)}
           >
+            <span class="dotcol" aria-hidden="true">
+              {#if !m.seen}<span class="unseen"></span>{/if}
+            </span>
             <div class="gp-thumb">
               <img
                 src={eventThumbnailURL(m.representative_event_id)}
@@ -132,23 +167,22 @@
               />
             </div>
             <div class="gp-body">
-              <div class="gp-row-line">
-                <div class="gp-cam-wrap">
-                  <span class="gp-cam">{camName(m.cam_id)}</span>
-                  {#if m.event_count >= 1}
-                    <span class="gp-count">
-                      <Mono size={10} color="var(--accent)" weight={600} letterSpacing={0.3}>
-                        {countChipText(m)}
-                      </Mono>
-                    </span>
-                  {/if}
-                </div>
+              <div class="gp-l1">
+                <span class="gp-cam">{camName(m.cam_id)}</span>
+                {#if m.event_count >= 1}
+                  <span class="gp-count">
+                    <Mono size={10} color="var(--accent)" weight={600} letterSpacing={0.3}>
+                      {countChipText(m)}
+                    </Mono>
+                  </span>
+                {/if}
               </div>
-              <div class="gp-row-line-2">
+              <div class="gp-l2">
                 <span class="gp-kinds">{kindsLine(m)}</span>
                 <Mono size={11} color="var(--text-3)">{newestTime(m)}</Mono>
               </div>
             </div>
+            <span class="gp-chev" aria-hidden="true"><Icon name="chevDown" size={20} /></span>
           </button>
         </li>
       {/each}
@@ -157,7 +191,51 @@
       <button type="button" class="gp-view-all" onclick={onViewAll}>{ui.glanceViewAll}</button>
     </div>
   {/if}
-</BottomSheet>
+{/snippet}
+
+{#if !isDesktop}
+  <BottomSheet
+    open={glanceStore.peekOpen}
+    onClose={() => glanceStore.closePeek()}
+    title={ui.glancePeekTitle}
+  >
+    {@render body()}
+  </BottomSheet>
+{:else if glanceStore.peekOpen}
+  <div
+    class="dk-scrim"
+    role="presentation"
+    onclick={() => glanceStore.closePeek()}
+    onkeydown={() => {}}
+    aria-hidden="true"
+    transition:fade={{ duration: scrimMs }}
+  ></div>
+  <div
+    class="dk-side"
+    role="dialog"
+    aria-modal="true"
+    aria-label={ui.glancePeekTitle}
+    transition:slideInRight={{ duration: panelMs }}
+  >
+    <div class="dk-side-head">
+      <div class="dk-side-titlebar">
+        <div>
+          <div class="dk-side-title">{ui.glancePeekTitle}</div>
+          <div class="dk-side-cap">{ui.glanceWindowLabel}</div>
+        </div>
+        <button
+          type="button"
+          class="dk-close"
+          aria-label={ui.close}
+          onclick={() => glanceStore.closePeek()}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+    </div>
+    {@render body()}
+  </div>
+{/if}
 
 {#if modalMoment}
   <MomentModal
@@ -170,22 +248,96 @@
 {/if}
 
 <style>
-  .gp-empty {
-    padding: 20px;
-    text-align: center;
-    color: var(--text-3);
-    font-size: 13px;
+  /* ============================================================
+     DESKTOP — right-docked panel (calm .dk-side / .dk-scrim)
+     ============================================================ */
+  .dk-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: var(--scrim);
   }
+  .dk-side {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 41;
+    width: 408px;
+    max-width: 92vw;
+    background: var(--surface);
+    border-left: 1px solid var(--border-strong);
+    box-shadow: -24px 0 60px -30px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .dk-side-head {
+    flex: 0 0 auto;
+    padding: 22px 22px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .dk-side-titlebar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .dk-side-title {
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    line-height: 1.1;
+    color: var(--text);
+  }
+  .dk-side-cap {
+    font-size: 13px;
+    color: var(--text-2);
+    margin-top: 4px;
+  }
+  .dk-close {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    margin-top: -2px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 22px;
+    line-height: 1;
+    transition: background 0.15s ease;
+  }
+  .dk-close:hover {
+    background: var(--border-strong);
+  }
+  .dk-close:active {
+    transform: scale(0.92);
+  }
+
+  /* ============================================================
+     SHARED content — header chip + Mark all + rows + footer
+     ============================================================ */
   .gp-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    padding: 8px 20px;
+    padding: 12px 20px;
+    flex: 0 0 auto;
   }
   .gp-window-chip {
     display: inline-flex;
     align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
   }
   .gp-clear {
     background: transparent;
@@ -193,7 +345,7 @@
     padding: 4px 6px;
     color: var(--accent);
     font-family: inherit;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     border-radius: 4px;
@@ -201,13 +353,24 @@
       color 120ms,
       background 120ms;
   }
-  .gp-clear:hover {
+  .gp-clear:hover:not(:disabled) {
     background: color-mix(in oklab, var(--accent) 12%, transparent);
+  }
+  .gp-clear:disabled {
+    color: var(--text-3);
+    cursor: not-allowed;
+  }
+  .gp-empty {
+    text-align: center;
+    color: var(--text-2);
+    font-size: 14px;
+    padding: 44px 0;
   }
   .gp-footer {
     display: flex;
     justify-content: center;
-    padding: 12px 20px 4px;
+    padding: 12px 20px 6px;
+    flex: 0 0 auto;
   }
   .gp-view-all {
     background: transparent;
@@ -228,95 +391,120 @@
   }
   .gp-list {
     list-style: none;
-    padding: 0;
+    padding: 4px 14px 22px;
     margin: 0;
     display: flex;
     flex-direction: column;
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
+  .gp-list::-webkit-scrollbar {
+    width: 0;
   }
   .gp-row {
-    display: grid;
-    grid-template-columns: 112px 1fr;
-    gap: 12px;
-    width: 100%;
+    display: flex;
     align-items: center;
-    padding: 10px 20px;
+    gap: 13px;
+    width: 100%;
+    padding: 12px 8px;
     background: transparent;
     border: none;
-    border-bottom: 1px solid var(--border);
+    border-radius: 12px;
     color: inherit;
     text-align: left;
     cursor: pointer;
     font-family: inherit;
-    transition: background 120ms;
+    transition: background 0.14s ease;
   }
   .gp-row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-2);
   }
-  .gp-row.dimmed {
-    opacity: 0.45;
+  .gp-row:active {
+    opacity: 0.65;
   }
-  .gp-row.dimmed:hover {
-    opacity: 0.7;
+  .gp-row.seen .gp-thumb,
+  .gp-row.seen .gp-body {
+    opacity: 0.56;
+  }
+  .dotcol {
+    flex: 0 0 8px;
+    width: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .unseen {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
   }
   .gp-thumb {
-    aspect-ratio: 16 / 9;
-    border-radius: 6px;
+    width: 88px;
+    height: 56px;
+    flex: 0 0 88px;
+    border-radius: var(--r-sm);
     overflow: hidden;
-    background: #0c0d0f;
+    background: var(--feed);
   }
   .gp-thumb img {
     width: 100%;
     height: 100%;
+    /* Still image: cover (NEVER fill). */
     object-fit: cover;
     display: block;
   }
   .gp-body {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    min-width: 0;
+    gap: 3px;
   }
-  .gp-row-line {
+  .gp-l1 {
     display: flex;
-    align-items: baseline;
+    align-items: center;
+    gap: 9px;
     min-width: 0;
   }
-  .gp-row-line-2 {
+  .gp-l2 {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 10px;
     min-width: 0;
-  }
-  .gp-cam-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
+    font-size: 12.5px;
+    color: var(--text-2);
   }
   .gp-cam {
-    font-size: 13px;
-    font-weight: 500;
+    font-size: 16px;
+    font-weight: 600;
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 0 1 auto;
+    min-width: 0;
   }
   .gp-count {
     display: inline-flex;
     align-items: center;
     padding: 2px 7px;
     border-radius: 999px;
-    background: color-mix(in oklab, var(--accent) 16%, transparent);
+    background: var(--accent-soft);
     text-transform: uppercase;
     flex-shrink: 0;
   }
   .gp-kinds {
-    font-size: 12px;
-    color: var(--text-2);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .gp-chev {
+    flex: 0 0 auto;
+    color: var(--text-3);
+    align-self: center;
+    display: inline-flex;
   }
 </style>

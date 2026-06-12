@@ -194,10 +194,11 @@
     justify-content: flex-end;
   }
   .bs-sheet {
-    background: #15171a;
+    background: var(--surface);
     border-top-left-radius: 16px;
     border-top-right-radius: 16px;
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--border-strong);
+    box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.4);
     padding: 6px 0 calc(env(safe-area-inset-bottom, 0px) + 12px);
     max-height: 60vh;
     display: flex;
@@ -221,9 +222,9 @@
     cursor: grabbing;
   }
   .bs-handle {
-    width: 36px;
-    height: 4px;
-    border-radius: 2px;
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
     background: var(--border-strong);
     margin: 6px auto 10px;
   }
@@ -276,25 +277,5 @@
     /* min-height: 0 unlocks the flex item so its scrollable child can
        actually overflow rather than expanding the parent past max-height. */
     min-height: 0;
-  }
-
-  /* Desktop: the full-bleed bottom sheet looks wrong on wide viewports,
-     so above the grid breakpoint (matches +layout.svelte's isDesktop ≥
-     900px) we centre the sheet horizontally and cap its width, turning
-     it into a floating card docked just above the bottom edge. The
-     slide-up + swipe-to-dismiss behaviour is preserved because
-     translateY-based animation and the pointer-drag logic operate on
-     the sheet's own bounds. */
-  @media (min-width: 900px) {
-    .bs-backdrop {
-      align-items: center;
-    }
-    .bs-sheet {
-      width: 100%;
-      max-width: 480px;
-      margin-bottom: 16px;
-      border: 1px solid var(--border);
-      border-radius: 16px;
-    }
   }
 </style>
