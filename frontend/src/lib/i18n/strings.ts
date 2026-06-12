@@ -56,6 +56,18 @@ export const ui = {
   sectionGroups: 'Groups',
   // settings > connection section (E7.1)
   sectionConnection: 'Connection',
+  // settings > about + master-detail nav
+  sectionAbout: 'About',
+  settingsGroupPersonalize: 'Personalize',
+  settingsGroupManage: 'Manage',
+  settingsGroupSystem: 'System',
+  settingsBack: 'Back to Settings',
+  aboutAppVersion: 'App version',
+  aboutUpstreamPending: 'Frigate and go2rtc versions aren’t surfaced yet.',
+  aboutLinkGithub: 'GitHub',
+  aboutLinkDocs: 'Documentation',
+  aboutLinkSecurity: 'Security policy',
+  aboutLinkLicense: 'License',
   connectionFrigateURLLabel: 'Frigate URL',
   connectionFrigateURLHint: 'Frigate’s internal API. Use port 5000, not the authed UI on 8971.',
   connectionGo2rtcURLLabel: 'go2rtc URL',
