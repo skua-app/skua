@@ -35,11 +35,6 @@
     }
   })
 
-  let host = $state('')
-  $effect(() => {
-    host = window.location.host
-  })
-
   const cameras = $derived(camerasStore.cameras)
   const onlineCount = $derived(cameras.filter((c) => c.online).length)
   const offlineCount = $derived(cameras.length - onlineCount)
@@ -182,7 +177,7 @@
           <span class="gd" aria-hidden="true"></span>
           {onlineCount}
           {ui.online} · {offlineCount}
-          {ui.offline}{host ? ` · ${host}` : ''}
+          {ui.offline}
         </span>
       </div>
       {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}

@@ -29,6 +29,7 @@
     videoCodec: string | null
     audioCodec: string | null
     resolution: string | null
+    fps: number | null
     togglePause: () => void
     toggleMute: () => void
     toggleQuality: () => void
@@ -54,6 +55,7 @@
     videoCodec,
     audioCodec,
     resolution,
+    fps,
     togglePause,
     toggleMute,
     toggleQuality,
@@ -196,6 +198,11 @@
                   >
                 </div>
                 <div class="sp-row">
+                  <span class="sp-k">FPS</span><span class="sp-v"
+                    >{fps !== null ? `${fps} fps` : '—'}</span
+                  >
+                </div>
+                <div class="sp-row">
                   <span class="sp-k">VID</span><span class="sp-v">{videoCodec ?? '—'}</span>
                 </div>
                 <div class="sp-row">
@@ -241,7 +248,7 @@
                 onclick={onShowTelemetry}
               >
                 <Icon name="activity" size={20} />
-                <span>{ui.telemetryLabel}</span>
+                <span>{ui.statsLabel}</span>
               </button>
               {#if camera?.capabilities.talk_back}
                 <button type="button" class="dk-livebtn" disabled aria-label="Talkback">
@@ -347,13 +354,8 @@
               <Mono size={11} color="var(--text-3)">{ui.noRecentEvents}</Mono>
             </div>
           {:else}
-            {#each recentEvents as ev, i (ev.id)}
-              <button
-                type="button"
-                class="dk-evrow"
-                class:active={i === 0}
-                onclick={() => (modalEvent = ev)}
-              >
+            {#each recentEvents as ev (ev.id)}
+              <button type="button" class="dk-evrow" onclick={() => (modalEvent = ev)}>
                 <div class="meta">
                   <div class="l1">
                     <span>{eventKindLabels[ev.kind] ?? ev.kind}</span>
@@ -793,9 +795,6 @@
   }
   .dk-evrow:hover {
     background: var(--surface-2);
-  }
-  .dk-evrow.active {
-    background: var(--accent-soft);
   }
   .dk-evrow .meta {
     flex: 1 1 auto;

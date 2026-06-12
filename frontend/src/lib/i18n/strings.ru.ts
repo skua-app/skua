@@ -140,7 +140,7 @@ export const ui = {
   errorSubtitle: 'Перезагрузите страницу, чтобы продолжить.',
   errorReload: 'Перезагрузить',
   menuLabel: 'Меню',
-  telemetryLabel: 'Телеметрия',
+  statsLabel: 'Статистика',
   otherCamerasLabel: 'Другие камеры',
   primaryNavLabel: 'Основная навигация',
   groupFilterLabel: 'Фильтр групп',
