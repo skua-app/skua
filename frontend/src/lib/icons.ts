@@ -58,6 +58,8 @@ export type IconName =
   | 'sliders'
   | 'info'
   | 'link'
+  | 'close'
+  | 'chevRight'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -188,5 +190,13 @@ export const ICONS: Record<IconName, IconDef> = {
       'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7',
       'M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7'
     ]
-  }
+  },
+  close: {
+    lines: [
+      { x1: 6, y1: 6, x2: 18, y2: 18 },
+      { x1: 18, y1: 6, x2: 6, y2: 18 }
+    ],
+    strokeWidth: 2.2
+  },
+  chevRight: { paths: 'M9 6l6 6-6 6', strokeWidth: 2 }
 }

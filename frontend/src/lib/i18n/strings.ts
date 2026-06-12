@@ -191,6 +191,11 @@ export const ui = {
   glanceEventsSection: 'Events',
   glanceEventOne: '{n} event',
   glanceEventMany: '{n} events',
+  glanceTitle: 'While you were away',
+  glanceWindowCaption: 'Last {hours}h',
+  glanceFilterAll: 'All',
+  glanceFilterUnseen: 'Unseen',
+  glanceAllCaughtUp: 'You’re all caught up',
   // moment / event modal
   openLive: 'Open live',
   liveTag: 'LIVE'

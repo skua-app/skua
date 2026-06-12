@@ -193,6 +193,11 @@ export const ui = {
   glanceEventsSection: 'События',
   glanceEventOne: '{n} событие',
   glanceEventMany: '{n} событий',
+  glanceTitle: 'Пока вас не было',
+  glanceWindowCaption: 'За последние {hours} ч',
+  glanceFilterAll: 'Все',
+  glanceFilterUnseen: 'Непросмотренные',
+  glanceAllCaughtUp: 'Всё просмотрено',
   // moment / event modal
   openLive: 'Открыть эфир',
   liveTag: 'ЭФИР'
