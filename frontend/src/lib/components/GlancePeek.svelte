@@ -4,10 +4,8 @@
   import { goto } from '$app/navigation'
   import type { GlanceMoment } from '$lib/api'
   import { eventThumbnailURL } from '$lib/api'
-  import BottomSheet from '$lib/components/BottomSheet.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import MomentModal from '$lib/components/MomentModal.svelte'
-  import Mono from '$lib/components/Mono.svelte'
   import { glanceStore } from '$lib/stores/glance.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
@@ -15,9 +13,11 @@
   import { isMomentLive } from '$lib/glance'
   import { relativeTime } from '$lib/util/time'
 
-  // Local-only modal state: a row tap opens MomentModal on top of the
-  // sheet so the user can review the cluster and switch between
-  // detections inside it.
+  // Local moment-filter state — prototype `MSTATE.filter`.
+  let filter = $state<'all' | 'unseen'>('all')
+
+  // Local-only modal: a row tap opens MomentModal on top of the surface so
+  // the user can review the cluster and switch between detections inside it.
   let modalMoment = $state<GlanceMoment | null>(null)
 
   // One-minute tick so "5 min ago" doesn't drift while the surface is open.
@@ -33,27 +33,22 @@
   function camName(camId: string): string {
     return camerasStore.cameras.find((c) => c.id === camId)?.name ?? camId
   }
-
   function kindsLine(moment: GlanceMoment): string {
     const parts = moment.kinds.map((k) => eventKindLabels[k] ?? k)
     return parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
   }
-
   function countChipText(moment: GlanceMoment): string {
     const tpl = moment.event_count === 1 ? ui.glanceEventOne : ui.glanceEventMany
     return tpl.replace('{n}', String(moment.event_count))
   }
-
   function newestTime(moment: GlanceMoment): string {
     const newest = moment.events[0]?.started_at ?? moment.started_at
     return relativeTime(newest, now)
   }
-
   function onRowClick(moment: GlanceMoment) {
     void glanceStore.markOneSeen(moment.representative_event_id)
     modalMoment = moment
   }
-
   function openLiveFor(moment: GlanceMoment | null): (() => void) | undefined {
     if (!moment) return undefined
     if (!isMomentLive(moment)) return undefined
@@ -66,28 +61,27 @@
     }
   }
 
-  function isDimmed(moment: GlanceMoment): boolean {
-    return moment.seen
-  }
+  // Filtered moment view per the prototype: All shows every moment (seen or
+  // not — dimmed when seen); Unseen drops already-seen rows entirely.
+  const visibleMoments = $derived(
+    filter === 'unseen' ? glanceStore.moments.filter((m) => !m.seen) : glanceStore.moments
+  )
+  const caption = $derived(
+    ui.glanceWindowCaption.replace('{hours}', String(prefsStore.glanceWindowHours))
+  )
 
-  function onViewAll() {
-    glanceStore.closePeek()
-    goto('/events')
-  }
-
-  // Responsive surface: mobile is the BottomSheet, desktop is the calm
-  // .dk-side right-docked panel. Same content rendered through {#snippet body()}.
+  // Responsive surface: mobile = detented bottom sheet; desktop = right panel.
   let width = $state(0)
   const isDesktop = $derived(width >= 900)
 
-  // Honour reduced-motion: the slide-in/scrim animations collapse to 0ms.
-  const reducedMotion = $derived(
+  // Reduced motion: collapse durations to 0ms and skip transitions imperatively.
+  const reducedMotion =
     typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  )
-  const panelMs = $derived(reducedMotion ? 0 : 320)
-  const scrimMs = $derived(reducedMotion ? 0 : 260)
 
-  // Body scroll lock + Escape while the desktop panel is open.
+  /* ===================== DESKTOP PANEL ===================== */
+  const panelMs = reducedMotion ? 0 : 320
+  const scrimMs = reducedMotion ? 0 : 260
+
   $effect(() => {
     if (!isDesktop || !glanceStore.peekOpen) return
     const prev = document.documentElement.style.overflow
@@ -105,8 +99,6 @@
     }
   })
 
-  // Custom horizontal slide for the desktop panel — mirrors the prototype
-  // .dk-side dkSideIn/dkSideOut keyframes.
   function slideInRight(_node: Element, { duration = 320 }: { duration?: number } = {}) {
     return {
       duration,
@@ -115,125 +107,316 @@
     }
   }
 
-  const windowChip = $derived(
-    ui.glanceWindowChip.replace('{hours}', String(prefsStore.glanceWindowHours))
-  )
+  /* ===================== MOBILE DETENTED SHEET ===================== */
+  // Imperative iOS-style detent controller. Mirrors calm/app.js: detents are
+  // translateY offsets (0 = full, height - 0.56*screenH = half, height - 280
+  // = peek). Open animates from translateY(100%) to the peek detent; dragging
+  // the head snaps to the nearest detent; dragging below peek + 70 dismisses.
+  let mobileMounted = $state(false)
+  let sheetEl: HTMLDivElement | undefined = $state()
+  let scrimEl: HTMLDivElement | undefined = $state()
+  let detents = $state<[number, number, number]>([0, 0, 0])
+  let detentIdx = $state(2)
+  let sheetHeight = $state(800)
+  let dragging = false
+  let dragStartY = 0
+  let dragStartT = 0
+  let curT = 0
+
+  function computeDetents() {
+    const screenH = window.visualViewport?.height ?? window.innerHeight
+    const full = Math.round(screenH * 0.92)
+    const peekVisible = 280
+    const halfVisible = Math.round(screenH * 0.56)
+    sheetHeight = full
+    detents = [0, full - halfVisible, full - peekVisible]
+  }
+  function setScrimForTranslate(t: number) {
+    if (!scrimEl) return
+    const frac = 1 - t / sheetHeight
+    scrimEl.style.opacity = (0.1 + frac * 0.28).toFixed(3)
+  }
+  function applyDetent(i: number, animate: boolean) {
+    if (!sheetEl) return
+    detentIdx = Math.max(0, Math.min(detents.length - 1, i))
+    const t = detents[detentIdx]!
+    sheetEl.style.transition = animate && !reducedMotion ? '' : 'none'
+    sheetEl.style.transform = `translateY(${t}px)`
+    sheetEl.dataset.detent = ['full', 'half', 'peek'][detentIdx]!
+    setScrimForTranslate(t)
+  }
+
+  // Mount/unmount the mobile sheet in response to glanceStore.peekOpen.
+  $effect(() => {
+    if (isDesktop) return
+    if (glanceStore.peekOpen && !mobileMounted) {
+      mobileMounted = true
+    } else if (!glanceStore.peekOpen && mobileMounted) {
+      animateClose()
+    }
+  })
+
+  // Initial pre-paint position + scheduled snap-in (per the prototype's
+  // setTimeout(20) pattern, which lets the first paint commit the off-screen
+  // transform before we transition to the peek detent).
+  $effect(() => {
+    if (!mobileMounted || !sheetEl) return
+    const sheet = sheetEl
+    const scrim = scrimEl
+    computeDetents()
+    sheet.style.height = sheetHeight + 'px'
+    sheet.style.transition = 'none'
+    sheet.style.transform = 'translateY(100%)'
+    if (scrim) scrim.style.opacity = '0'
+    // Force reflow so the next style change can transition.
+    void sheet.getBoundingClientRect()
+    const id = setTimeout(() => {
+      detentIdx = 2 // open to PEEK
+      applyDetent(2, true)
+    }, 20)
+    return () => clearTimeout(id)
+  })
+
+  function animateClose() {
+    if (!sheetEl) {
+      mobileMounted = false
+      return
+    }
+    sheetEl.style.transition = reducedMotion ? 'none' : 'transform .32s cubic-bezier(.4, 0, 1, 1)'
+    sheetEl.style.transform = `translateY(${sheetHeight}px)`
+    if (scrimEl) {
+      scrimEl.style.transition = reducedMotion ? 'none' : 'opacity .26s ease'
+      scrimEl.style.opacity = '0'
+    }
+    setTimeout(
+      () => {
+        mobileMounted = false
+      },
+      reducedMotion ? 0 : 320
+    )
+  }
+
+  // Body scroll lock + Escape while the mobile sheet is mounted.
+  $effect(() => {
+    if (!mobileMounted) return
+    const prev = document.documentElement.style.overflow
+    document.documentElement.style.overflow = 'hidden'
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        glanceStore.closePeek()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.documentElement.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  })
+
+  function onHeadPointerDown(e: PointerEvent) {
+    if (!sheetEl) return
+    // Let the close button's own click pass through without starting a drag.
+    if ((e.target as HTMLElement | null)?.closest('.sm-close')) return
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    const head = e.currentTarget as HTMLElement
+    head.setPointerCapture(e.pointerId)
+    dragging = true
+    dragStartY = e.clientY
+    dragStartT = detents[detentIdx]!
+    curT = dragStartT
+    sheetEl.style.transition = 'none'
+    e.preventDefault()
+  }
+  function onHeadPointerMove(e: PointerEvent) {
+    if (!dragging || !sheetEl) return
+    const dy = e.clientY - dragStartY
+    const peekT = detents[detents.length - 1]!
+    const max = peekT + 140
+    curT = Math.max(0, Math.min(max, dragStartT + dy))
+    sheetEl.style.transform = `translateY(${curT}px)`
+    setScrimForTranslate(curT)
+  }
+  function onHeadPointerUp(e: PointerEvent) {
+    if (!dragging) return
+    dragging = false
+    const head = e.currentTarget as HTMLElement
+    if (head.hasPointerCapture(e.pointerId)) head.releasePointerCapture(e.pointerId)
+    const peekT = detents[detents.length - 1]!
+    if (curT > peekT + 70) {
+      glanceStore.closePeek()
+      return
+    }
+    // Snap to nearest detent.
+    let best = 0
+    let bd = Infinity
+    detents.forEach((t, i) => {
+      const d = Math.abs(t - curT)
+      if (d < bd) {
+        bd = d
+        best = i
+      }
+    })
+    applyDetent(best, true)
+  }
+  function onHeadPointerCancel() {
+    if (!dragging) return
+    dragging = false
+    applyDetent(detentIdx, true)
+  }
 </script>
 
 <svelte:window bind:innerWidth={width} />
 
-{#snippet body()}
-  <div class="gp-header">
-    <span class="gp-window-chip">
-      <Mono size={10} color="var(--text-3)" letterSpacing={0.3} uppercase>{windowChip}</Mono>
-    </span>
-    {#if glanceStore.moments.length > 0}
-      <button
-        type="button"
-        class="gp-clear"
-        onclick={() => void glanceStore.markAllSeen()}
-        disabled={glanceStore.unseenCount === 0}
-      >
-        {ui.glanceMarkAllSeen}
-      </button>
-    {/if}
+{#snippet subBar()}
+  <div class="moment-filter" role="group" aria-label={ui.glanceTitle}>
+    <button
+      type="button"
+      class="mf-seg"
+      class:on={filter === 'all'}
+      onclick={() => (filter = 'all')}
+    >
+      {ui.glanceFilterAll}
+    </button>
+    <button
+      type="button"
+      class="mf-seg"
+      class:on={filter === 'unseen'}
+      onclick={() => (filter = 'unseen')}
+    >
+      {ui.glanceFilterUnseen}
+      {#if glanceStore.unseenCount > 0}
+        <span class="mf-num">{glanceStore.unseenCount}</span>
+      {/if}
+    </button>
   </div>
+  <button
+    type="button"
+    class="mark-seen"
+    disabled={glanceStore.unseenCount === 0}
+    onclick={() => void glanceStore.markAllSeen()}
+  >
+    {ui.glanceMarkAllSeen}
+  </button>
+{/snippet}
 
-  {#if glanceStore.moments.length === 0}
-    <div class="gp-empty">{ui.glancePeekEmpty}</div>
-    <div class="gp-footer">
-      <button type="button" class="gp-view-all" onclick={onViewAll}>{ui.glanceViewAll}</button>
-    </div>
+{#snippet rows()}
+  {#if visibleMoments.length === 0}
+    <div class="sheet-empty">{ui.glanceAllCaughtUp}</div>
   {:else}
-    <ul class="gp-list" role="list">
-      {#each glanceStore.moments as m (m.cam_id + m.started_at)}
-        <li>
-          <button
-            type="button"
-            class="gp-row"
-            class:seen={isDimmed(m)}
-            onclick={() => onRowClick(m)}
-          >
-            <span class="dotcol" aria-hidden="true">
-              {#if !m.seen}<span class="unseen"></span>{/if}
-            </span>
-            <div class="gp-thumb">
-              <img
-                src={eventThumbnailURL(m.representative_event_id)}
-                alt={camName(m.cam_id)}
-                loading="lazy"
-                width="112"
-                height="63"
-              />
-            </div>
-            <div class="gp-body">
-              <div class="gp-l1">
-                <span class="gp-cam">{camName(m.cam_id)}</span>
-                {#if m.event_count >= 1}
-                  <span class="gp-count">
-                    <Mono size={10} color="var(--accent)" weight={600} letterSpacing={0.3}>
-                      {countChipText(m)}
-                    </Mono>
-                  </span>
-                {/if}
-              </div>
-              <div class="gp-l2">
-                <span class="gp-kinds">{kindsLine(m)}</span>
-                <Mono size={11} color="var(--text-3)">{newestTime(m)}</Mono>
-              </div>
-            </div>
-            <span class="gp-chev" aria-hidden="true"><Icon name="chevDown" size={20} /></span>
-          </button>
-        </li>
-      {/each}
-    </ul>
-    <div class="gp-footer">
-      <button type="button" class="gp-view-all" onclick={onViewAll}>{ui.glanceViewAll}</button>
-    </div>
+    {#each visibleMoments as m (m.cam_id + m.started_at)}
+      <button type="button" class="moment" class:seen={m.seen} onclick={() => onRowClick(m)}>
+        <span class="m-dotcol" aria-hidden="true">
+          {#if !m.seen}<span class="m-unseen"></span>{/if}
+        </span>
+        <div class="m-thumb">
+          <img
+            src={eventThumbnailURL(m.representative_event_id)}
+            alt={camName(m.cam_id)}
+            loading="lazy"
+            width="112"
+            height="63"
+          />
+        </div>
+        <div class="m-meta">
+          <div class="m-l1">
+            <span class="m-name">{camName(m.cam_id)}</span>
+            <span class="m-ago">{newestTime(m)}</span>
+          </div>
+          <div class="m-l2">
+            <span class="m-count">{countChipText(m)}</span>
+            <span class="m-sep"> · {kindsLine(m)}</span>
+          </div>
+        </div>
+        <span class="m-chev" aria-hidden="true"><Icon name="chevRight" size={20} /></span>
+      </button>
+    {/each}
   {/if}
 {/snippet}
 
-{#if !isDesktop}
-  <BottomSheet
-    open={glanceStore.peekOpen}
-    onClose={() => glanceStore.closePeek()}
-    title={ui.glancePeekTitle}
-  >
-    {@render body()}
-  </BottomSheet>
-{:else if glanceStore.peekOpen}
+{#if isDesktop && glanceStore.peekOpen}
   <div
     class="dk-scrim"
     role="presentation"
-    onclick={() => glanceStore.closePeek()}
-    onkeydown={() => {}}
     aria-hidden="true"
+    onclick={() => glanceStore.closePeek()}
     transition:fade={{ duration: scrimMs }}
   ></div>
   <div
     class="dk-side"
     role="dialog"
     aria-modal="true"
-    aria-label={ui.glancePeekTitle}
+    aria-label={ui.glanceTitle}
     transition:slideInRight={{ duration: panelMs }}
   >
     <div class="dk-side-head">
       <div class="dk-side-titlebar">
-        <div>
-          <div class="dk-side-title">{ui.glancePeekTitle}</div>
-          <div class="dk-side-cap">{ui.glanceWindowLabel}</div>
+        <div class="dk-side-title-block">
+          <div class="dk-side-title">{ui.glanceTitle}</div>
+          <div class="dk-side-cap">{caption}</div>
         </div>
         <button
           type="button"
-          class="dk-close"
+          class="dk-mclose"
           aria-label={ui.close}
           onclick={() => glanceStore.closePeek()}
         >
-          <span aria-hidden="true">×</span>
+          <Icon name="close" size={18} />
+        </button>
+      </div>
+      <div class="dk-side-sub">
+        {@render subBar()}
+      </div>
+    </div>
+    <div class="dk-side-list">
+      {@render rows()}
+    </div>
+  </div>
+{:else if mobileMounted}
+  <div
+    class="scrim"
+    role="presentation"
+    aria-hidden="true"
+    bind:this={scrimEl}
+    onclick={() => glanceStore.closePeek()}
+  ></div>
+  <div
+    class="sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label={ui.glanceTitle}
+    bind:this={sheetEl}
+  >
+    <div
+      class="sheet-head"
+      role="presentation"
+      onpointerdown={onHeadPointerDown}
+      onpointermove={onHeadPointerMove}
+      onpointerup={onHeadPointerUp}
+      onpointercancel={onHeadPointerCancel}
+    >
+      <div class="grab" aria-hidden="true"></div>
+      <div class="sheet-titlebar">
+        <div class="sheet-title-block">
+          <span class="sheet-title">{ui.glanceTitle}</span>
+          <span class="sheet-caption">{caption}</span>
+        </div>
+        <button
+          type="button"
+          class="sm-close"
+          aria-label={ui.close}
+          onclick={() => glanceStore.closePeek()}
+        >
+          <Icon name="close" size={18} />
         </button>
       </div>
     </div>
-    {@render body()}
+    <div class="sheet-sub">
+      {@render subBar()}
+    </div>
+    <div class="sheet-list">
+      {@render rows()}
+    </div>
   </div>
 {/if}
 
@@ -249,7 +432,7 @@
 
 <style>
   /* ============================================================
-     DESKTOP — right-docked panel (calm .dk-side / .dk-scrim)
+     DESKTOP — calm .dk-side / .dk-scrim
      ============================================================ */
   .dk-scrim {
     position: fixed;
@@ -284,6 +467,12 @@
     justify-content: space-between;
     gap: 14px;
   }
+  .dk-side-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
   .dk-side-title {
     font-size: 21px;
     font-weight: 600;
@@ -294,9 +483,112 @@
   .dk-side-cap {
     font-size: 13px;
     color: var(--text-2);
-    margin-top: 4px;
   }
-  .dk-close {
+  .dk-mclose {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    margin-top: -2px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+  .dk-mclose:hover {
+    background: var(--border-strong);
+  }
+  .dk-side-sub {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .dk-side-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 8px 14px 22px;
+  }
+
+  /* ============================================================
+     MOBILE — calm .scrim / .sheet (iOS-style detents)
+     ============================================================ */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: var(--scrim);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 101;
+    background: var(--surface);
+    border-top: 1px solid var(--border-strong);
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
+    box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+    overflow: hidden;
+    will-change: transform;
+  }
+  .sheet-head {
+    flex: 0 0 auto;
+    padding: 11px 18px 14px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .sheet-head:active {
+    cursor: grabbing;
+  }
+  .grab {
+    width: 40px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border-strong);
+    margin: 0 auto 16px;
+  }
+  .sheet-titlebar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .sheet-title-block {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+  .sheet-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    line-height: 1.1;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sheet-caption {
+    font-size: 13px;
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+  .sm-close {
     width: 40px;
     height: 40px;
     flex: 0 0 auto;
@@ -309,199 +601,231 @@
     color: var(--text);
     cursor: pointer;
     font-family: inherit;
-    font-size: 22px;
-    line-height: 1;
     transition: background 0.15s ease;
   }
-  .dk-close:hover {
+  .sm-close:active {
+    transform: scale(0.92);
     background: var(--border-strong);
   }
-  .dk-close:active {
-    transform: scale(0.92);
+  .sheet-sub {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 18px 13px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .sheet-list {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    padding: 4px 20px 20px;
+  }
+  .sheet-list::-webkit-scrollbar {
+    width: 0;
   }
 
   /* ============================================================
-     SHARED content — header chip + Mark all + rows + footer
+     SHARED — sub-bar, rows, empty
      ============================================================ */
-  .gp-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 20px;
-    flex: 0 0 auto;
-  }
-  .gp-window-chip {
+  .moment-filter {
     display: inline-flex;
-    align-items: center;
-    padding: 4px 8px;
-    border-radius: 999px;
     background: var(--surface-2);
     border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 2px;
   }
-  .gp-clear {
+  .mf-seg {
+    -webkit-appearance: none;
+    appearance: none;
     background: transparent;
     border: none;
-    padding: 4px 6px;
-    color: var(--accent);
+    color: var(--text-2);
     font-family: inherit;
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 500;
+    padding: 7px 15px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     cursor: pointer;
-    border-radius: 4px;
     transition:
-      color 120ms,
-      background 120ms;
+      color 0.18s ease,
+      background 0.18s ease;
   }
-  .gp-clear:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent) 12%, transparent);
+  .mf-seg.on {
+    color: var(--accent);
   }
-  .gp-clear:disabled {
+  .mf-seg:active {
+    transform: translateY(1px);
+  }
+  .mf-num {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text-3);
+  }
+  .mf-seg.on .mf-num {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .mark-seen {
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 4px;
+    min-height: 38px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .mark-seen:hover:not(:disabled) {
+    text-decoration: underline;
+  }
+  .mark-seen:active:not(:disabled) {
+    opacity: 0.55;
+  }
+  .mark-seen:disabled {
     color: var(--text-3);
     cursor: not-allowed;
   }
-  .gp-empty {
+
+  .sheet-empty {
     text-align: center;
     color: var(--text-2);
     font-size: 14px;
     padding: 44px 0;
   }
-  .gp-footer {
-    display: flex;
-    justify-content: center;
-    padding: 12px 20px 6px;
-    flex: 0 0 auto;
-  }
-  .gp-view-all {
-    background: transparent;
-    border: none;
-    padding: 6px 10px;
-    color: var(--accent);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    border-radius: 6px;
-    transition:
-      color 120ms,
-      background 120ms;
-  }
-  .gp-view-all:hover {
-    background: color-mix(in oklab, var(--accent) 12%, transparent);
-  }
-  .gp-list {
-    list-style: none;
-    padding: 4px 14px 22px;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    overflow-y: auto;
-  }
-  .gp-list::-webkit-scrollbar {
-    width: 0;
-  }
-  .gp-row {
+
+  .moment {
     display: flex;
     align-items: center;
-    gap: 13px;
+    gap: 12px;
     width: 100%;
-    padding: 12px 8px;
+    padding: 13px 0;
     background: transparent;
     border: none;
-    border-radius: 12px;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
     color: inherit;
     text-align: left;
     cursor: pointer;
     font-family: inherit;
     transition: background 0.14s ease;
   }
-  .gp-row:hover {
+  .dk-side-list .moment {
+    padding: 12px 8px;
+    border-bottom: none;
+    border-radius: 12px;
+  }
+  .dk-side-list .moment:hover {
     background: var(--surface-2);
   }
-  .gp-row:active {
+  .moment:active {
     opacity: 0.65;
   }
-  .gp-row.seen .gp-thumb,
-  .gp-row.seen .gp-body {
-    opacity: 0.56;
+  .moment.seen .m-thumb,
+  .moment.seen .m-meta {
+    opacity: 0.6;
   }
-  .dotcol {
+  .m-dotcol {
     flex: 0 0 8px;
     width: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  .unseen {
+  .m-unseen {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: var(--accent);
   }
-  .gp-thumb {
-    width: 88px;
-    height: 56px;
-    flex: 0 0 88px;
+  .m-thumb {
+    width: 84px;
+    height: 58px;
+    flex: 0 0 84px;
     border-radius: var(--r-sm);
     overflow: hidden;
     background: var(--feed);
   }
-  .gp-thumb img {
+  .dk-side-list .m-thumb {
+    width: 88px;
+    height: 56px;
+    flex: 0 0 88px;
+  }
+  .m-thumb img {
     width: 100%;
     height: 100%;
-    /* Still image: cover (NEVER fill). */
+    /* Still thumbnail: cover (NEVER fill). */
     object-fit: cover;
     display: block;
   }
-  .gp-body {
+  .m-meta {
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 3px;
   }
-  .gp-l1 {
+  .m-l1 {
     display: flex;
-    align-items: center;
-    gap: 9px;
-    min-width: 0;
-  }
-  .gp-l2 {
-    display: flex;
-    justify-content: space-between;
     align-items: baseline;
-    gap: 10px;
-    min-width: 0;
-    font-size: 12.5px;
-    color: var(--text-2);
+    gap: 9px;
   }
-  .gp-cam {
-    font-size: 16px;
+  .m-name {
+    font-size: 17px;
     font-weight: 600;
     color: var(--text);
+    line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     flex: 0 1 auto;
     min-width: 0;
   }
-  .gp-count {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 7px;
-    border-radius: 999px;
-    background: var(--accent-soft);
-    text-transform: uppercase;
-    flex-shrink: 0;
+  .dk-side-list .m-name {
+    font-size: 16px;
   }
-  .gp-kinds {
-    min-width: 0;
+  .m-ago {
+    font-size: 13px;
+    color: var(--text-2);
+    line-height: 1.2;
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+  .dk-side-list .m-ago {
+    font-size: 12.5px;
+  }
+  .m-l2 {
+    font-size: 13px;
+    color: var(--text-2);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    min-width: 0;
   }
-  .gp-chev {
+  .dk-side-list .m-l2 {
+    font-size: 12.5px;
+  }
+  .m-count {
+    color: var(--text-2);
+    font-weight: 500;
+  }
+  .m-chev {
     flex: 0 0 auto;
     color: var(--text-3);
     align-self: center;
