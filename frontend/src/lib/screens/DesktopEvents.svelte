@@ -2,7 +2,7 @@
   import type { Camera, EventItem, EventKind, Group } from '$lib/api'
   import EmptyState from '$lib/components/EmptyState.svelte'
   import EventCardWide from '$lib/components/EventCardWide.svelte'
-  import Mono from '$lib/components/Mono.svelte'
+  import { camerasStore } from '$lib/stores/cameras.svelte'
   import { ui, eventKindLabels } from '$lib/i18n/strings'
   import type { EventDay } from '$lib/util/time'
 
@@ -46,8 +46,7 @@
     loadMore
   }: Props = $props()
 
-  // Tick once per minute so "Today" / "Yesterday" stay correct when a day
-  // rolls over while the page is open.
+  // Tick once a minute so day labels stay correct around midnight.
   let now = $state(new Date())
   $effect(() => {
     const t = setInterval(() => {
@@ -61,7 +60,6 @@
     month: 'short',
     day: 'numeric'
   })
-
   function dayLabel(date: Date): string {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const diffDays = Math.round((today.getTime() - date.getTime()) / 86_400_000)
@@ -70,6 +68,9 @@
     return dateFmt.format(date)
   }
 
+  const cameras = $derived(camerasStore.cameras)
+  const onlineCount = $derived(cameras.filter((c) => c.online).length)
+  const offlineCount = $derived(cameras.length - onlineCount)
   const totalItems = $derived(eventDays.reduce((sum, d) => sum + d.items.length, 0))
 
   let sentinel: HTMLDivElement | null = $state(null)
@@ -89,28 +90,34 @@
   })
 </script>
 
-<div class="dk-events">
-  <h1 class="dk-title">{ui.eventsTitle}</h1>
+<div class="dk-page wide">
+  <div class="dk-pagehead">
+    <div>
+      <div class="dk-h1">{ui.eventsTitle}</div>
+      <div class="dk-sub">
+        <span class="gd" aria-hidden="true"></span>
+        {onlineCount}
+        {ui.online} · {offlineCount}
+        {ui.offline}
+      </div>
+    </div>
+  </div>
 
   <div class="dk-filterbar">
     {#if groups.length > 0}
       <div class="dk-filterrow">
-        <span class="dk-filterrow-label">
-          <Mono size={10} color="var(--text-3)" letterSpacing={0.8} uppercase
-            >{ui.filterLabelGroup}</Mono
-          >
-        </span>
+        <span class="lbl">{ui.filterLabelGroup}</span>
         <div class="dk-chips" role="group" aria-label={ui.groupAria}>
           <button
             type="button"
-            class="dk-chip"
+            class="pill"
             class:active={activeGroupId === null}
             onclick={() => onSelectGroup(null)}>{ui.filterAll}</button
           >
           {#each groups as g (g.id)}
             <button
               type="button"
-              class="dk-chip"
+              class="pill"
               class:active={activeGroupId === g.id}
               onclick={() => onSelectGroup(g.id)}>{g.name}</button
             >
@@ -120,22 +127,18 @@
     {/if}
 
     <div class="dk-filterrow">
-      <span class="dk-filterrow-label">
-        <Mono size={10} color="var(--text-3)" letterSpacing={0.8} uppercase
-          >{ui.filterLabelCamera}</Mono
-        >
-      </span>
+      <span class="lbl">{ui.filterLabelCamera}</span>
       <div class="dk-chips" role="group" aria-label={ui.cameraAria}>
         <button
           type="button"
-          class="dk-chip"
+          class="pill"
           class:active={activeCams.size === 0}
           onclick={onResetCams}>{ui.filterAll}</button
         >
         {#each visibleCameras as cam (cam.id)}
           <button
             type="button"
-            class="dk-chip"
+            class="pill"
             class:active={activeCams.has(cam.id)}
             onclick={() => onToggleCam(cam.id)}>{cam.name}</button
           >
@@ -144,22 +147,18 @@
     </div>
 
     <div class="dk-filterrow">
-      <span class="dk-filterrow-label">
-        <Mono size={10} color="var(--text-3)" letterSpacing={0.8} uppercase
-          >{ui.filterLabelType}</Mono
-        >
-      </span>
+      <span class="lbl">{ui.filterLabelType}</span>
       <div class="dk-chips" role="group" aria-label={ui.kindAria}>
         <button
           type="button"
-          class="dk-chip"
+          class="pill"
           class:active={activeKinds.size === 0}
           onclick={onResetKinds}>{ui.filterAll}</button
         >
         {#each kindOrder as k}
           <button
             type="button"
-            class="dk-chip"
+            class="pill"
             class:active={activeKinds.has(k)}
             onclick={() => onToggleKind(k)}>{eventKindLabels[k]}</button
           >
@@ -179,10 +178,8 @@
     <div class="dk-evgrid">
       {#each eventDays as day (day.key)}
         <div class="dk-daydiv">
-          <Mono size={11} color="var(--text-3)" letterSpacing={1.2} uppercase
-            >{dayLabel(day.date)}</Mono
-          >
-          <span class="dk-daydiv-rule" aria-hidden="true"></span>
+          <span class="dk-daydiv-text">{dayLabel(day.date)}</span>
+          <span class="ln" aria-hidden="true"></span>
         </div>
         {#each day.items as ev (ev.id)}
           <EventCardWide event={ev} onclick={() => onOpen(ev)} />
@@ -197,78 +194,133 @@
 </div>
 
 <style>
-  .dk-events {
+  .dk-page {
     padding: 24px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
   }
-  .dk-title {
+
+  /* dk-pagehead */
+  .dk-pagehead {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+  .dk-h1 {
     font-size: 28px;
     font-weight: 600;
     letter-spacing: -0.6px;
-    margin: 0 0 18px;
+    line-height: 1.05;
+    color: var(--text);
+  }
+  .dk-sub {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-2);
+  }
+  .dk-sub .gd {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--online);
+    display: inline-block;
   }
 
+  /* dk-filterbar */
   .dk-filterbar {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     margin-bottom: 22px;
   }
   .dk-filterrow {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
   }
-  .dk-filterrow-label {
-    width: 84px;
-    flex: none;
-    display: inline-flex;
-    align-items: center;
+  .dk-filterrow .lbl {
+    flex: 0 0 84px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-3);
   }
   .dk-chips {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
   }
-  .dk-chip {
-    padding: 5px 11px;
-    font-size: 12px;
-    color: var(--text-3);
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 6px;
+
+  /* calm .pill — shared with mobile but here within dk-chips */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 15px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-2);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
     cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
     font-family: inherit;
     transition:
       color 120ms,
       border-color 120ms,
       background 120ms;
   }
-  .dk-chip:hover {
-    color: var(--text-2);
+  .pill:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
   }
-  .dk-chip.active {
+  .pill.active {
+    background: var(--accent-soft);
+    border-color: transparent;
     color: var(--accent);
-    border-color: color-mix(in oklab, var(--accent) 50%, transparent);
-    background: color-mix(in oklab, var(--accent) 14%, transparent);
+  }
+  .pill:active {
+    transform: translateY(1px);
   }
 
+  /* dk-evgrid card grid */
   .dk-evgrid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
     gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
   }
+
+  /* dk-daydiv — full-width mono uppercase divider with line */
   .dk-daydiv {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-top: 6px;
+    padding: 18px 2px 0;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-3);
   }
   .dk-daydiv:first-child {
-    margin-top: 0;
+    padding-top: 0;
   }
-  .dk-daydiv-rule {
-    flex: 1;
+  .dk-daydiv-text {
+    flex: 0 0 auto;
+  }
+  .dk-daydiv .ln {
+    flex: 1 1 auto;
     height: 1px;
     background: var(--border);
   }
