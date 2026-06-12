@@ -55,6 +55,9 @@ export type IconName =
   | 'check'
   | 'cols1'
   | 'cols2'
+  | 'sliders'
+  | 'info'
+  | 'link'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -159,5 +162,31 @@ export const ICONS: Record<IconName, IconDef> = {
     ],
     fill: 'currentColor',
     stroke: 'none'
+  },
+  sliders: {
+    lines: [
+      { x1: 4, y1: 21, x2: 4, y2: 14 },
+      { x1: 4, y1: 10, x2: 4, y2: 3 },
+      { x1: 12, y1: 21, x2: 12, y2: 12 },
+      { x1: 12, y1: 8, x2: 12, y2: 3 },
+      { x1: 20, y1: 21, x2: 20, y2: 16 },
+      { x1: 20, y1: 12, x2: 20, y2: 3 },
+      { x1: 1, y1: 14, x2: 7, y2: 14 },
+      { x1: 9, y1: 8, x2: 15, y2: 8 },
+      { x1: 17, y1: 16, x2: 23, y2: 16 }
+    ]
+  },
+  info: {
+    circles: [{ cx: 12, cy: 12, r: 9 }],
+    lines: [
+      { x1: 12, y1: 11, x2: 12, y2: 16 },
+      { x1: 12, y1: 8, x2: 12.01, y2: 8 }
+    ]
+  },
+  link: {
+    paths: [
+      'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7',
+      'M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7'
+    ]
   }
 }

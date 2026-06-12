@@ -57,6 +57,18 @@ export const ui = {
   sectionGroups: 'Группы',
   // settings > connection section (E7.1)
   sectionConnection: 'Подключение',
+  // settings > about + master-detail nav
+  sectionAbout: 'О приложении',
+  settingsGroupPersonalize: 'Персонализация',
+  settingsGroupManage: 'Управление',
+  settingsGroupSystem: 'Система',
+  settingsBack: 'Назад',
+  aboutAppVersion: 'Версия приложения',
+  aboutUpstreamPending: 'Версии Frigate и go2rtc пока не отображаются.',
+  aboutLinkGithub: 'GitHub',
+  aboutLinkDocs: 'Документация',
+  aboutLinkSecurity: 'Политика безопасности',
+  aboutLinkLicense: 'Лицензия',
   connectionFrigateURLLabel: 'URL Frigate',
   connectionFrigateURLHint: 'Внутренний API Frigate. Порт 5000, не порт авторизованного UI 8971.',
   connectionGo2rtcURLLabel: 'URL go2rtc',
