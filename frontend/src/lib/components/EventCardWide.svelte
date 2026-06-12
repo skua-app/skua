@@ -5,7 +5,6 @@
   import { eventKindLabels } from '$lib/i18n/strings'
   import { relativeTime } from '$lib/util/time'
   import Icon from './Icon.svelte'
-  import Mono from './Mono.svelte'
 
   type Props = {
     event: EventItem
@@ -19,6 +18,7 @@
   )
   const kindLabel = $derived(eventKindLabels[event.kind] ?? event.kind)
 
+  // Tick once a minute so `5 min ago` stays current while the page is open.
   let now = $state(new Date())
   $effect(() => {
     const t = setInterval(() => {
@@ -29,8 +29,8 @@
   const relative = $derived(relativeTime(event.started_at, now))
 </script>
 
-<button type="button" class="ecw" {onclick}>
-  <div class="ecw-thumb">
+<button type="button" class="dk-evcard" {onclick}>
+  <div class="shot">
     <img
       src={eventSnapshotURL(event.id)}
       alt={`${camName} · ${kindLabel}`}
@@ -38,116 +38,153 @@
       width="320"
       height="180"
     />
-    <span class="ecw-kind">
-      <Mono size={9} color="rgba(255,255,255,0.92)" letterSpacing={0.8} weight={600} uppercase
-        >{kindLabel}</Mono
-      >
-    </span>
+    <span class="ktag">{kindLabel}</span>
     {#if event.score !== null}
-      <span class="ecw-score">
-        <Mono size={9} color="rgba(255,255,255,0.92)" weight={500}>{event.score.toFixed(2)}</Mono>
-      </span>
+      <span class="sc">{event.score.toFixed(2)}</span>
     {/if}
-    <span class="ecw-play" aria-hidden="true">
-      <Icon name="play" size={16} />
+    <span class="play" aria-hidden="true">
+      <Icon name="play" size={19} />
     </span>
   </div>
-  <div class="ecw-body">
-    <span class="ecw-cam">{camName}</span>
-    <Mono size={10} color="var(--text-3)">{relative}</Mono>
+  <div class="info">
+    <div class="info-l">
+      <div class="nm">{camName}</div>
+      <div class="rm">{kindLabel}</div>
+    </div>
+    <span class="when">{relative}</span>
   </div>
 </button>
 
 <style>
-  .ecw {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
+  /* calm .dk-evcard */
+  .dk-evcard {
+    display: block;
+    width: 100%;
     padding: 0;
-    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--r);
+    background: var(--surface);
+    color: inherit;
     text-align: left;
     cursor: pointer;
-    color: inherit;
     font-family: inherit;
     overflow: hidden;
     transition:
-      border-color 160ms,
-      transform 160ms,
-      box-shadow 160ms;
+      transform 0.16s ease,
+      box-shadow 0.2s ease,
+      border-color 0.16s ease;
   }
-  .ecw-thumb {
+  .shot {
     position: relative;
     aspect-ratio: 16 / 9;
+    background: var(--feed);
     overflow: hidden;
-    background: #0c0d0f;
   }
-  .ecw-thumb img {
+  .shot img {
     width: 100%;
     height: 100%;
+    /* Still snapshot: cover (NEVER fill). */
     object-fit: cover;
     display: block;
   }
-  .ecw-kind {
+  .ktag {
     position: absolute;
-    top: 8px;
-    left: 8px;
-    padding: 3px 7px;
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
-  }
-  .ecw-score {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    padding: 3px 7px;
-    border-radius: 4px;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
-  }
-  .ecw-play {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 36px;
-    height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
+    left: 11px;
+    top: 11px;
+    padding: 4px 9px;
+    border-radius: 7px;
+    background: rgba(8, 10, 12, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     color: #fff;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .sc {
+    position: absolute;
+    right: 11px;
+    top: 11px;
+    padding: 4px 8px;
+    border-radius: 7px;
+    background: rgba(8, 10, 12, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: rgba(10, 12, 14, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    display: grid;
+    place-items: center;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 160ms;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: opacity 0.16s ease;
+    color: #fff;
   }
-  .ecw-body {
+  .play :global(svg) {
+    fill: #fff;
+    stroke: none;
+    margin-left: 2px;
+  }
+  .info {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: baseline;
     gap: 10px;
-    padding: 10px 12px 12px;
+    padding: 10px 13px 12px;
+  }
+  .info-l {
     min-width: 0;
   }
-  .ecw-cam {
-    font-size: 13px;
-    font-weight: 500;
+  .nm {
+    font-size: 14px;
+    font-weight: 600;
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .rm {
+    font-size: 12px;
+    color: var(--text-2);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .when {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-2);
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
+
+  /* Hover affordance gated to pointer-fine; touchscreens get nothing. */
   @media (hover: hover) and (pointer: fine) {
-    .ecw:hover {
-      border-color: var(--border-strong);
+    .dk-evcard:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      border-color: var(--border-strong);
+      box-shadow: 0 16px 34px -22px rgba(0, 0, 0, 0.7);
     }
-    .ecw:hover .ecw-play {
+    .dk-evcard:hover .play {
       opacity: 1;
     }
   }

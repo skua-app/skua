@@ -194,11 +194,11 @@
             <div class="ev-meta">
               <div class="l1">
                 <span class="ev-cam">{camName(ev.cam_id)}</span>
-                <Mono size={11} color="var(--text-3)">{relativeTime(ev.started_at, now)}</Mono>
+                <Mono size={13} color="var(--text-2)">{relativeTime(ev.started_at, now)}</Mono>
               </div>
               <div class="l2">
                 <span class="ev-kind">{eventKindLabels[ev.kind] ?? ev.kind}</span>
-                <Mono size={11} color="var(--accent)" weight={500}
+                <Mono size={12} color="var(--accent)" weight={500}
                   >{ev.score !== null
                     ? ev.score.toFixed(2)
                     : formatDuration(ev.duration_seconds)}</Mono
@@ -220,74 +220,88 @@
   .ev-page {
     max-width: 720px;
     margin: 0 auto;
-    padding: 14px 16px calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding: 14px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
   }
   .chip-groups {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: 6px;
+    margin-bottom: 16px;
   }
   .chip-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
+    margin-top: 13px;
     min-width: 0;
+  }
+  .chip-group:first-child {
+    margin-top: 0;
   }
   .chip-label {
     padding: 0 2px;
     display: inline-flex;
   }
+  /* calm .chips — horizontally-scrolling pill row, scrollbar hidden */
   .chips {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     flex-wrap: nowrap;
     overflow-x: auto;
+    padding-bottom: 2px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
-    margin: 0 -16px;
-    padding: 0 16px;
   }
   .chips::-webkit-scrollbar {
-    display: none;
+    height: 0;
   }
+  /* calm .pill */
   .pill {
-    flex: none;
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--text-3);
-    background: transparent;
-    border: 1px solid var(--border);
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 15px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-2);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
     border-radius: 999px;
     cursor: pointer;
-    font-family: inherit;
+    user-select: none;
     white-space: nowrap;
+    font-family: inherit;
     transition:
       color 120ms,
       border-color 120ms,
       background 120ms;
   }
-  .pill:hover {
-    color: var(--text-2);
+  .pill:active {
+    transform: translateY(1px);
   }
   .pill.active {
+    background: var(--accent-soft);
+    border-color: transparent;
     color: var(--accent);
-    border-color: color-mix(in oklab, var(--accent) 50%, transparent);
-    background: color-mix(in oklab, var(--accent) 14%, transparent);
   }
+
   .ev-list {
     display: flex;
     flex-direction: column;
   }
+  /* calm .day-div */
   .day-div {
-    padding: 14px 0 8px;
+    padding-top: 6px;
+    padding-bottom: 4px;
   }
+  /* calm .ev */
   .ev {
     display: flex;
-    gap: 12px;
+    gap: 13px;
     align-items: center;
     width: 100%;
-    padding: 10px 0;
+    padding: 11px 0;
     border: none;
     border-bottom: 1px solid var(--border);
     background: transparent;
@@ -302,10 +316,10 @@
   .ev-thumb {
     width: 76px;
     height: 48px;
-    flex: none;
-    border-radius: 10px;
+    flex: 0 0 76px;
+    border-radius: var(--r-sm);
     overflow: hidden;
-    background: #0c0d0f;
+    background: var(--feed);
   }
   .ev-thumb img {
     width: 100%;
@@ -316,29 +330,41 @@
   .ev-meta {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    flex: 1;
+    gap: 2px;
+    flex: 1 1 auto;
     min-width: 0;
   }
-  .l1,
+  .l1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
   .l2 {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 10px;
+    gap: 8px;
     min-width: 0;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--text-2);
   }
   .ev-cam {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
   }
   .ev-kind {
-    font-size: 12px;
-    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
   }
   .ev-loading {
     text-align: center;
