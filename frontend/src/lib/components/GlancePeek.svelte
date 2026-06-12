@@ -421,13 +421,15 @@
 {/if}
 
 {#if modalMoment}
-  <MomentModal
-    moment={modalMoment}
-    onClose={() => {
-      modalMoment = null
-    }}
-    onOpenLive={openLiveFor(modalMoment)}
-  />
+  {#key modalMoment}
+    <MomentModal
+      moment={modalMoment}
+      onClose={() => {
+        modalMoment = null
+      }}
+      onOpenLive={openLiveFor(modalMoment)}
+    />
+  {/key}
 {/if}
 
 <style>

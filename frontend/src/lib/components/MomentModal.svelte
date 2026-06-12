@@ -337,7 +337,7 @@
     padding-right: max(20px, env(safe-area-inset-right));
     padding-bottom: max(20px, env(safe-area-inset-bottom));
     padding-left: max(20px, env(safe-area-inset-left));
-    z-index: 100;
+    z-index: 110;
   }
   .mm-card {
     width: min(560px, 100%);

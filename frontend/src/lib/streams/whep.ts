@@ -7,6 +7,7 @@ export type WhepHandle = {
     videoCodec: string | null
     audioCodec: string | null
     resolution: string | null
+    fps: number | null
   }
   close(): void
 }
@@ -44,7 +45,8 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
       bitrateKbps: null,
       videoCodec: null,
       audioCodec: null,
-      resolution: null
+      resolution: null,
+      fps: null
     },
     close() {
       cleanup()
@@ -122,6 +124,7 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
             if (closed) return
             let latencyMs: number | null = null
             let bitrateKbps: number | null = null
+            let fps: number | null = null
 
             report.forEach((s) => {
               if (
@@ -140,6 +143,10 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
                 }
                 prevBytes = bytes
                 prevBytesTime = now
+                const framesPerSecond = (s as { framesPerSecond?: number }).framesPerSecond
+                if (typeof framesPerSecond === 'number') {
+                  fps = Math.round(framesPerSecond)
+                }
               }
             })
 
@@ -168,7 +175,7 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
             const h = videoEl.videoHeight
             const resolution = w > 0 && h > 0 ? `${w}×${h}` : null
 
-            handle.stats = { latencyMs, bitrateKbps, videoCodec, audioCodec, resolution }
+            handle.stats = { latencyMs, bitrateKbps, videoCodec, audioCodec, resolution, fps }
             onStats(handle.stats)
           })
           .catch(() => {

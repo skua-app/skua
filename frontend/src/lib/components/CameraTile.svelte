@@ -113,7 +113,9 @@
 
   <div class="cam-name">
     <span class="cn-name">{camera.name}</span>
-    <span class="cn-sub">{camera.id}</span>
+    {#if nameStyle === 'below'}
+      <span class="cn-sub">{camera.id}</span>
+    {/if}
   </div>
 </button>
 

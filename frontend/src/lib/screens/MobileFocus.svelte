@@ -28,6 +28,7 @@
     videoCodec: string | null
     audioCodec: string | null
     resolution: string | null
+    fps: number | null
     togglePause: () => void
     toggleMute: () => void
     toggleQuality: () => void
@@ -52,6 +53,7 @@
     videoCodec,
     audioCodec,
     resolution,
+    fps,
     togglePause,
     toggleMute,
     toggleQuality,
@@ -184,6 +186,11 @@
             >
           </div>
           <div class="sp-row">
+            <span class="sp-k">FPS</span><span class="sp-v"
+              >{fps !== null ? `${fps} fps` : '—'}</span
+            >
+          </div>
+          <div class="sp-row">
             <span class="sp-k">VID</span><span class="sp-v">{videoCodec ?? '—'}</span>
           </div>
           <div class="sp-row">
@@ -225,7 +232,7 @@
         class="livebtn"
         class:active={showTelemetry}
         onclick={onShowTelemetry}
-        aria-label={ui.telemetryLabel}
+        aria-label={ui.statsLabel}
       >
         <Icon name="activity" size={20} />
       </button>

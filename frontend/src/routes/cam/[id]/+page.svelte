@@ -22,6 +22,7 @@
   let videoCodec = $state<string | null>(null)
   let audioCodec = $state<string | null>(null)
   let resolution = $state<string | null>(null)
+  let fps = $state<number | null>(null)
   let errorReason = $state<string | null>(null)
   let showTelemetry = $state(false)
   let isPaused = $state(false)
@@ -78,6 +79,7 @@
           videoCodec = stats.videoCodec
           audioCodec = stats.audioCodec
           resolution = stats.resolution
+          fps = stats.fps
         },
         onAudioDetected(has) {
           streamHasAudio = has
@@ -325,6 +327,7 @@
     {videoCodec}
     {audioCodec}
     {resolution}
+    {fps}
     {togglePause}
     {toggleMute}
     {toggleQuality}
@@ -352,6 +355,7 @@
     {videoCodec}
     {audioCodec}
     {resolution}
+    {fps}
     {togglePause}
     {toggleMute}
     {toggleQuality}

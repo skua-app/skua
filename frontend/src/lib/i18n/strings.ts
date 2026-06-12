@@ -138,7 +138,7 @@ export const ui = {
   errorSubtitle: 'Reload the page to continue.',
   errorReload: 'Reload',
   menuLabel: 'Menu',
-  telemetryLabel: 'Telemetry',
+  statsLabel: 'Stats',
   otherCamerasLabel: 'Other cameras',
   primaryNavLabel: 'Primary navigation',
   groupFilterLabel: 'Group filter',

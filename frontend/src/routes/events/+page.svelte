@@ -21,7 +21,7 @@
     animal: ['dog', 'cat', 'bird'],
     other: []
   }
-  const kindOrder: EventKind[] = ['person', 'vehicle', 'animal', 'other']
+  const kindOrder: EventKind[] = ['person', 'vehicle', 'animal']
 
   let activeCams = $state<Set<string>>(new Set())
   let activeKinds = $state<Set<EventKind>>(new Set())
