@@ -61,6 +61,9 @@ export type IconName =
   | 'close'
   | 'chevRight'
   | 'pip'
+  | 'sun'
+  | 'moon'
+  | 'themeAuto'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -205,5 +208,33 @@ export const ICONS: Record<IconName, IconDef> = {
       { x: 3, y: 5, width: 18, height: 14, rx: 2 },
       { x: 12, y: 11, width: 7, height: 5, rx: 1 }
     ]
+  },
+  // Center circle + eight rays. Ray endpoints are precomputed on a unit
+  // circle at 45° steps; the inner endpoint sits at r=6, the outer at r=9.
+  sun: {
+    circles: [{ cx: 12, cy: 12, r: 4 }],
+    lines: [
+      { x1: 12, y1: 3, x2: 12, y2: 5 },
+      { x1: 12, y1: 19, x2: 12, y2: 21 },
+      { x1: 3, y1: 12, x2: 5, y2: 12 },
+      { x1: 19, y1: 12, x2: 21, y2: 12 },
+      { x1: 5.64, y1: 5.64, x2: 7.05, y2: 7.05 },
+      { x1: 16.95, y1: 16.95, x2: 18.36, y2: 18.36 },
+      { x1: 5.64, y1: 18.36, x2: 7.05, y2: 16.95 },
+      { x1: 16.95, y1: 7.05, x2: 18.36, y2: 5.64 }
+    ]
+  },
+  moon: {
+    paths: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+    fill: 'currentColor',
+    stroke: 'none'
+  },
+  // Half-filled disc — appearance-toggle glyph. The circle primitive is
+  // stroked (it carries its own fill='none'), while the path renders the
+  // right-half disc filled with currentColor (def.fill cascades to paths).
+  themeAuto: {
+    paths: 'M12 3a9 9 0 0 1 0 18z',
+    circles: [{ cx: 12, cy: 12, r: 9 }],
+    fill: 'currentColor'
   }
 }

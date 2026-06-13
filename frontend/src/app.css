@@ -92,6 +92,48 @@
   --shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.6);
 }
 
+/* Light-mode token overrides.
+   Two entry points: explicit `.theme-light` (user-chosen) and
+   `.theme-auto` under a `prefers-color-scheme: light` media query (system).
+   --accent, --accent-soft, --on-accent, --offline, and shape tokens are
+   intentionally unchanged across themes. */
+:root.theme-light {
+  color-scheme: light;
+  --bg: #eef0ec;
+  --surface: #ffffff;
+  --surface-2: #f4f5f2;
+  --elev: #ffffff;
+  --border: rgba(20, 22, 26, 0.1);
+  --border-strong: rgba(20, 22, 26, 0.16);
+  --text: #171a1f;
+  --text-2: rgba(23, 26, 31, 0.58);
+  --text-3: rgba(23, 26, 31, 0.38);
+  --warn: #c66a3a;
+  --online: oklch(0.6 0.15 145);
+  --scrim: rgba(28, 30, 34, 0.4);
+  --feed: #dfe2dd;
+  --shadow: 0 14px 34px -18px rgba(20, 22, 26, 0.5);
+}
+@media (prefers-color-scheme: light) {
+  :root.theme-auto {
+    color-scheme: light;
+    --bg: #eef0ec;
+    --surface: #ffffff;
+    --surface-2: #f4f5f2;
+    --elev: #ffffff;
+    --border: rgba(20, 22, 26, 0.1);
+    --border-strong: rgba(20, 22, 26, 0.16);
+    --text: #171a1f;
+    --text-2: rgba(23, 26, 31, 0.58);
+    --text-3: rgba(23, 26, 31, 0.38);
+    --warn: #c66a3a;
+    --online: oklch(0.6 0.15 145);
+    --scrim: rgba(28, 30, 34, 0.4);
+    --feed: #dfe2dd;
+    --shadow: 0 14px 34px -18px rgba(20, 22, 26, 0.5);
+  }
+}
+
 html,
 body {
   height: 100%;

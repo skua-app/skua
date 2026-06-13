@@ -2,6 +2,7 @@
   import Segmented from '$lib/components/Segmented.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { glanceStore } from '$lib/stores/glance.svelte'
+  import { themeStore, type Theme } from '$lib/stores/theme.svelte'
   import { ui } from '$lib/i18n/strings'
   import { ACCENT_VALUES } from '$lib/api'
   import type {
@@ -13,6 +14,11 @@
     GlanceMaxMoments
   } from '$lib/api'
 
+  const themeOptions: { value: Theme; label: string }[] = [
+    { value: 'auto', label: ui.themeAuto },
+    { value: 'dark', label: ui.themeDark },
+    { value: 'light', label: ui.themeLight }
+  ]
   const gridModeOptions = [
     { value: 'hd' as const, label: 'HD' },
     { value: 'eco' as const, label: 'ECO' }
@@ -59,6 +65,22 @@
 <section id="appearance" class="settings-section dk-set-section">
   <h2 class="dk-set-h2">{ui.sectionAppearance}</h2>
   <p class="dk-set-desc">{ui.appearanceDescription}</p>
+
+  <div class="dk-card">
+    <div class="dk-setline">
+      <div class="sl-l">
+        <div class="t">{ui.themeLabel}</div>
+        <div class="d">{ui.themeDesc}</div>
+      </div>
+      <div class="sl-c">
+        <Segmented
+          value={themeStore.theme}
+          options={themeOptions}
+          onChange={(v) => themeStore.setTheme(v)}
+        />
+      </div>
+    </div>
+  </div>
 
   <div class="dk-card">
     <div class="dk-setline">

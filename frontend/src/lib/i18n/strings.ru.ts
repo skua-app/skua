@@ -214,7 +214,14 @@ export const ui = {
   glanceAllCaughtUp: 'Всё просмотрено',
   // moment / event modal
   openLive: 'Открыть эфир',
-  liveTag: 'ЭФИР'
+  liveTag: 'ЭФИР',
+  // theme (device-local)
+  themeLabel: 'Тема',
+  themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',
+  themeAuto: 'Авто',
+  themeDark: 'Тёмная',
+  themeLight: 'Светлая',
+  themeToggleLabel: 'Тема'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.

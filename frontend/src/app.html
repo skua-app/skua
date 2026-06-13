@@ -14,6 +14,21 @@
     <meta name="apple-mobile-web-app-title" content="Skua" />
     <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
 
+    <!-- No-flash theme bootstrap: apply theme class before first paint so a
+         light-mode user doesn't see a dark flash on reload. Mirrors the
+         themeStore's storage key and validation. -->
+    <script>
+      ;(function () {
+        try {
+          var t = localStorage.getItem('skua-theme')
+          if (t !== 'auto' && t !== 'dark' && t !== 'light') t = 'auto'
+          document.documentElement.classList.add('theme-' + t)
+        } catch (e) {
+          document.documentElement.classList.add('theme-auto')
+        }
+      })()
+    </script>
+
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
