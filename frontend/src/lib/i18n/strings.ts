@@ -213,7 +213,14 @@ export const ui = {
   glanceAllCaughtUp: 'You’re all caught up',
   // moment / event modal
   openLive: 'Open live',
-  liveTag: 'LIVE'
+  liveTag: 'LIVE',
+  // theme (device-local)
+  themeLabel: 'Theme',
+  themeDesc: 'Match the system, or lock to dark or light.',
+  themeAuto: 'Auto',
+  themeDark: 'Dark',
+  themeLight: 'Light',
+  themeToggleLabel: 'Theme'
 }
 
 // eventKindLabels covers the four EventKind values surfaced by the BFF.

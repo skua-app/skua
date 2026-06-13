@@ -7,6 +7,7 @@
   import { glanceStore } from '$lib/stores/glance.svelte'
   import { groupsStore } from '$lib/stores/groups.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
+  import { themeStore } from '$lib/stores/theme.svelte'
   import { ui } from '$lib/i18n/strings'
   import type { MobileColumns } from '$lib/api'
   import type { IconName } from '$lib/icons'
@@ -152,6 +153,21 @@
     </nav>
     <span class="spacer" aria-hidden="true"></span>
     <div class="dk-actions">
+      <button
+        type="button"
+        class="dk-iconbtn"
+        aria-label={ui.themeToggleLabel}
+        onclick={() => themeStore.cycle()}
+      >
+        <Icon
+          name={themeStore.theme === 'light'
+            ? 'sun'
+            : themeStore.theme === 'dark'
+              ? 'moon'
+              : 'themeAuto'}
+          size={20}
+        />
+      </button>
       {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
           type="button"
