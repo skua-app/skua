@@ -347,6 +347,14 @@
     margin: 0 0 20px;
     line-height: 1.5;
   }
+  /* Mobile drill-head already shows the section title, so the in-section
+     h2 would render the same string twice. Hide it below the master/detail
+     breakpoint; desktop is untouched. */
+  @media (max-width: 899.98px) {
+    .dk-set-h2 {
+      display: none;
+    }
+  }
 
   /* prototype .set-card */
   .set-card {
