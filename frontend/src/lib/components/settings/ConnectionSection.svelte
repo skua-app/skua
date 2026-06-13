@@ -377,7 +377,7 @@
     padding: 9px 11px;
     font-size: 13px;
     color: var(--text);
-    background: rgba(0, 0, 0, 0.22);
+    background: var(--input-bg);
     border: 1px solid var(--border);
     border-radius: var(--r-xs);
     font-family: inherit;
@@ -394,7 +394,7 @@
     padding: 9px 11px;
     font-size: 13px;
     color: var(--text-2);
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--input-bg-disabled);
     border: 1px solid var(--border);
     border-radius: var(--r-xs);
     font-family: 'JetBrains Mono', ui-monospace, monospace;

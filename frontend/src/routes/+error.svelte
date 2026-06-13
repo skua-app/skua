@@ -56,7 +56,7 @@
     word-break: break-word;
     padding: 8px 10px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--surface);
     border: 1px solid var(--border);
   }
   .error-btn {

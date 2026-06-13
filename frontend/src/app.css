@@ -70,6 +70,10 @@
   --border-strong: rgba(255, 255, 255, 0.14);
   --scrim: rgba(0, 0, 0, 0.55);
   --feed: #0e1013;
+  /* Form-field backgrounds — themed so settings inputs stay readable on light.
+     Dark values are equal to the literals they replaced (no visual change). */
+  --input-bg: rgba(0, 0, 0, 0.22);
+  --input-bg-disabled: rgba(0, 0, 0, 0.35);
 
   /* Text */
   --text: #f4f5f7;
@@ -113,6 +117,8 @@
   --scrim: rgba(28, 30, 34, 0.4);
   --feed: #dfe2dd;
   --shadow: 0 14px 34px -18px rgba(20, 22, 26, 0.5);
+  --input-bg: rgba(20, 22, 26, 0.05);
+  --input-bg-disabled: rgba(20, 22, 26, 0.09);
 }
 @media (prefers-color-scheme: light) {
   :root.theme-auto {
@@ -131,6 +137,8 @@
     --scrim: rgba(28, 30, 34, 0.4);
     --feed: #dfe2dd;
     --shadow: 0 14px 34px -18px rgba(20, 22, 26, 0.5);
+    --input-bg: rgba(20, 22, 26, 0.05);
+    --input-bg-disabled: rgba(20, 22, 26, 0.09);
   }
 }
 

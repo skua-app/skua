@@ -57,7 +57,7 @@
     flex-shrink: 0;
   }
   .icon-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(125, 125, 125, 0.1);
     color: var(--text);
   }
   .icon-btn.active {
