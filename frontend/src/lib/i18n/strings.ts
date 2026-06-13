@@ -56,10 +56,13 @@ export const ui = {
     'How the wall, tiles, and the “while you were away” digest look. Preferences sync across every device in the household.',
   sectionCameras: 'Cameras',
   sectionGroups: 'Groups',
+  groupsDescription:
+    'Organize cameras into groups for the wall filter and the events camera picker.',
   // settings > connection section (E7.1)
   sectionConnection: 'Connection',
   // settings > about + master-detail nav
   sectionAbout: 'About',
+  aboutDescription: 'A calmer front-end for Frigate.',
   aboutTagline: 'A calmer front-end for Frigate',
   settingsGroupPersonalize: 'Personalize',
   settingsGroupManage: 'Manage',

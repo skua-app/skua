@@ -64,7 +64,7 @@
     <p class="set-hint">{ui.streamsHint}</p>
   </header>
 
-  <div class="refresh-row">
+  <div class="set-rowbtn">
     <button type="button" class="set-btn primary" disabled={refreshing} onclick={doRefreshCameras}>
       {refreshing ? ui.refreshingCameras : ui.refreshCameras}
     </button>
@@ -101,7 +101,7 @@
     display: block;
   }
   .dk-set-section {
-    max-width: 720px;
+    max-width: 860px;
   }
   .section-header {
     margin-bottom: 12px;
@@ -125,19 +125,13 @@
     line-height: 1.45;
     margin: 0 0 12px;
   }
-  .refresh-row {
+  /* prototype .set-rowbtn — primary action button(s) above the cards */
+  .set-rowbtn {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
     gap: 8px;
-    margin-bottom: 18px;
-  }
-  @media (min-width: 600px) {
-    .refresh-row {
-      flex-direction: row;
-      align-items: center;
-      gap: 16px;
-    }
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 10px;
   }
   .set-msg {
     font-size: 12px;
@@ -158,10 +152,12 @@
     background: color-mix(in oklab, var(--warn) 10%, transparent);
     line-height: 1.4;
   }
+  /* prototype cameras layout — multi-column auto-fill grid */
   .cards {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+    margin-top: 6px;
   }
 
   /* prototype .set-btn */

@@ -7,7 +7,10 @@
   const version = $derived(configStore.version || 'dev')
 </script>
 
-<section id="about" class="settings-section">
+<section id="about" class="settings-section dk-set-section">
+  <h2 class="dk-set-h2">{ui.sectionAbout}</h2>
+  <p class="dk-set-desc">{ui.aboutDescription}</p>
+
   <div class="set-card ab-id">
     <span class="ab-mark" aria-hidden="true">
       <span class="logo-mark">
@@ -59,8 +62,23 @@
 
 <style>
   .settings-section {
-    display: flex;
-    flex-direction: column;
+    display: block;
+  }
+  .dk-set-section {
+    max-width: 720px;
+  }
+  .dk-set-h2 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+  .dk-set-desc {
+    font-size: 13.5px;
+    color: var(--text-2);
+    margin: 0 0 20px;
+    line-height: 1.5;
   }
 
   /* prototype .set-card + .set-card.ab-id */

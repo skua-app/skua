@@ -66,6 +66,7 @@
 <section id="groups" class="settings-section dk-set-section">
   <header class="section-header">
     <h2 class="dk-set-h2">{ui.sectionGroups}</h2>
+    <p class="dk-set-desc">{ui.groupsDescription}</p>
   </header>
 
   <div class="group-cards">
@@ -163,6 +164,12 @@
     letter-spacing: -0.3px;
     margin: 0 0 4px;
     color: var(--text);
+  }
+  .dk-set-desc {
+    font-size: 13.5px;
+    color: var(--text-2);
+    margin: 0 0 20px;
+    line-height: 1.5;
   }
   .group-cards {
     display: flex;
