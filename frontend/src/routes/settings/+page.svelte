@@ -136,8 +136,7 @@
   </div>
 {:else if mobileView === 'index'}
   <div class="m-index">
-    <h1 class="m-title">{ui.settings}</h1>
-    <div class="set-grouplabel">{ui.sectionAppearance}</div>
+    <div class="set-grouplabel first">{ui.sectionAppearance}</div>
     <MobileAppearance />
     {#each mobileNavGroups as g (g.label)}
       <div class="set-grouplabel">{g.label}</div>
@@ -284,13 +283,6 @@
     margin: 0 auto;
     padding: 6px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
   }
-  .m-title {
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.4px;
-    color: var(--text);
-    margin: 6px 4px 4px;
-  }
   .set-grouplabel {
     padding: 20px 4px 6px;
     font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -299,6 +291,11 @@
     letter-spacing: 1.5px;
     text-transform: uppercase;
     color: var(--text-3);
+  }
+  /* First grouplabel sits below the sticky AppHeader; trim its top padding
+     a little so it doesn't feel detached now that the in-page title is gone. */
+  .set-grouplabel.first {
+    padding-top: 12px;
   }
   .set-block {
     display: flex;
