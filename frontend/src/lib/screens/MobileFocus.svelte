@@ -10,6 +10,7 @@
   import OnlineDot from '$lib/components/OnlineDot.svelte'
   import Segmented from '$lib/components/Segmented.svelte'
   import EventModal from '$lib/components/EventModal.svelte'
+  import ZoomPane from '$lib/components/ZoomPane.svelte'
   import { eventsStreamStore } from '$lib/stores/events-stream.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
   import { eventTimestamp } from '$lib/util/time'
@@ -171,7 +172,9 @@
     </div>
 
     <div class="feedwrap">
-      {@render videoSnippet()}
+      <ZoomPane resetKey={camera?.id}>
+        {@render videoSnippet()}
+      </ZoomPane>
 
       {#if showTimestamp}
         <div class="ts-chip">

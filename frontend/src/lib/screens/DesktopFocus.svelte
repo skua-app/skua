@@ -9,6 +9,7 @@
   import OnlineDot from '$lib/components/OnlineDot.svelte'
   import Segmented from '$lib/components/Segmented.svelte'
   import EventModal from '$lib/components/EventModal.svelte'
+  import ZoomPane from '$lib/components/ZoomPane.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { eventsStreamStore } from '$lib/stores/events-stream.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
@@ -180,7 +181,9 @@
       </div>
 
       <div class="df-video-frame dk-feed">
-        {@render videoSnippet()}
+        <ZoomPane resetKey={camera?.id}>
+          {@render videoSnippet()}
+        </ZoomPane>
 
         {#if isLive}
           <div class="dk-live-tag">
