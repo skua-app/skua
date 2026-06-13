@@ -5,6 +5,7 @@
   import CamerasSection from '$lib/components/settings/CamerasSection.svelte'
   import ConnectionSection from '$lib/components/settings/ConnectionSection.svelte'
   import GroupsSection from '$lib/components/settings/GroupsSection.svelte'
+  import MobileAppearance from '$lib/components/settings/MobileAppearance.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { configStore } from '$lib/stores/config.svelte'
@@ -47,10 +48,22 @@
   // Desktop: which pane is rendered. Default to Appearance.
   let activeSection = $state<SectionId>('appearance')
 
-  // Mobile: 'index' shows the grouped row list; otherwise we're drilled into
-  // a section. State-driven only — no history pushes. Default to Appearance
-  // so phones land on the most-touched pane; Back returns to the index.
-  let mobileView = $state<'index' | SectionId>('appearance')
+  // Mobile drillable sections — Appearance is rendered inline on the mobile
+  // index, never as a drill-in. The remaining sections still drill from the
+  // grouped nav rows below the inline Appearance block.
+  type MobileDrillId = Exclude<SectionId, 'appearance'>
+  type MobileView = 'index' | MobileDrillId
+
+  // Mobile: 'index' shows the inline Appearance block plus the grouped row
+  // list; otherwise we're drilled into a section. State-driven only — no
+  // history pushes. Phones always land on the index.
+  let mobileView = $state<MobileView>('index')
+
+  // Mobile nav rows: same shape as desktop, minus the Appearance row (and
+  // therefore minus the now-empty Personalize group).
+  const mobileNavGroups = navGroups
+    .map((g) => ({ ...g, items: g.items.filter((it) => it.id !== 'appearance') }))
+    .filter((g) => g.items.length > 0)
 
   function sectionLabel(id: SectionId): string {
     for (const g of navGroups) for (const it of g.items) if (it.id === id) return it.label
@@ -124,12 +137,18 @@
 {:else if mobileView === 'index'}
   <div class="m-index">
     <h1 class="m-title">{ui.settings}</h1>
-    {#each navGroups as g (g.label)}
+    <div class="set-grouplabel">{ui.sectionAppearance}</div>
+    <MobileAppearance />
+    {#each mobileNavGroups as g (g.label)}
       <div class="set-grouplabel">{g.label}</div>
       <div class="set-block">
         {#each g.items as it (it.id)}
           {@const v = sectionValue(it.id)}
-          <button type="button" class="set-row" onclick={() => (mobileView = it.id)}>
+          <button
+            type="button"
+            class="set-row"
+            onclick={() => (mobileView = it.id as MobileDrillId)}
+          >
             <span class="ico" aria-hidden="true"><Icon name={it.icon} size={22} /></span>
             <span class="set-row-label">{it.label}</span>
             <span class="chev">
