@@ -157,6 +157,10 @@ body {
   /* `contain` (not `none`) blocks Android Chrome pull-to-refresh and the
      overscroll glow without disabling legitimate scrolling momentum. */
   overscroll-behavior-y: contain;
+  /* Native-feel PWA hardening: no iOS long-press Save/Copy callout on
+     videos/images, no grey tap-highlight flash on buttons. */
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
   font-family:
     'Geist',
     ui-sans-serif,
@@ -177,4 +181,24 @@ body {
      safe-area-inset-bottom stays here so short pages don't bottom-out
      against the home indicator. */
   padding-bottom: env(safe-area-inset-bottom);
+  /* No accidental text selection on UI chrome (re-enabled for inputs below).
+     `touch-action: manipulation` removes double-tap-to-zoom and the legacy
+     300ms tap delay while still allowing scroll/pan. */
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+/* Re-enable text selection inside fields where typing/editing happens. */
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Suppress the iOS image/video drag-and-save affordance. */
+img,
+video {
+  -webkit-user-drag: none;
 }
