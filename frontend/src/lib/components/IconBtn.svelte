@@ -63,12 +63,12 @@
   .icon-btn.active {
     border-color: color-mix(in oklab, var(--accent) 50%, transparent);
     background: color-mix(in oklab, var(--accent) 14%, transparent);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .icon-btn.accent {
     border-color: color-mix(in oklab, var(--accent) 50%, transparent);
     background: color-mix(in oklab, var(--accent) 14%, transparent);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .icon-btn:disabled {
     opacity: 0.4;

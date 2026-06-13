@@ -291,7 +291,7 @@
   .dk-dropbtn.open {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .dk-dropbtn .db-label {
     min-width: 0;
@@ -305,7 +305,7 @@
     transition: transform 0.2s ease;
   }
   .dk-dropbtn.open .ck {
-    color: var(--accent);
+    color: var(--accent-ink);
     transform: rotate(180deg);
   }
   .dk-dropbtn:active {
@@ -372,7 +372,7 @@
   .dk-opt .ck {
     width: 16px;
     flex: 0 0 16px;
-    color: var(--accent);
+    color: var(--accent-ink);
     display: inline-flex;
   }
   .dk-opt .nm {
@@ -382,7 +382,7 @@
     text-overflow: ellipsis;
   }
   .dk-opt.on .nm {
-    color: var(--accent);
+    color: var(--accent-ink);
     font-weight: 500;
   }
   .dk-opt :global(.ct) {
@@ -393,7 +393,7 @@
     padding: 2px 9px;
   }
   .dk-opt.on :global(.ct) {
-    color: var(--accent);
+    color: var(--accent-ink);
     background: transparent;
     box-shadow: inset 0 0 0 1px var(--accent-soft);
   }

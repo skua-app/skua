@@ -726,7 +726,7 @@
     transition: color 0.18s ease;
   }
   .mf-seg.on {
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .mf-seg:active {
     transform: translateY(1px);
@@ -743,7 +743,7 @@
   }
   .mf-seg.on .mf-num {
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .mark-seen {
     -webkit-appearance: none;
@@ -751,7 +751,7 @@
     font-family: inherit;
     background: transparent;
     border: none;
-    color: var(--accent);
+    color: var(--accent-ink);
     font-size: 14px;
     font-weight: 500;
     padding: 8px 4px;

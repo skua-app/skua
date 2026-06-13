@@ -524,7 +524,7 @@
     border-radius: 4px;
   }
   .mm-events-affordance.has-clip {
-    color: var(--accent);
+    color: var(--accent-ink);
     border-color: color-mix(in oklab, var(--accent) 40%, var(--border));
   }
 

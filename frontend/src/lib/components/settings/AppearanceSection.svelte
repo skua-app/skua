@@ -77,6 +77,7 @@
           value={themeStore.theme}
           options={themeOptions}
           onChange={(v) => themeStore.setTheme(v)}
+          tone="surface-2"
         />
       </div>
     </div>
@@ -93,6 +94,7 @@
           value={prefsStore.gridMode}
           options={gridModeOptions}
           onChange={(v) => prefsStore.setGridMode(v)}
+          tone="surface-2"
         />
       </div>
     </div>
@@ -107,6 +109,7 @@
           value={String(prefsStore.desktopColumns) as '2' | '3' | '4' | '5'}
           options={desktopColumnsOptions}
           onChange={(v) => prefsStore.setDesktopColumns(Number(v) as DesktopColumns)}
+          tone="surface-2"
         />
       </div>
     </div>
@@ -121,6 +124,7 @@
           value={String(prefsStore.mobileColumns) as '1' | '2'}
           options={mobileColumnsOptions}
           onChange={(v) => prefsStore.setMobileColumns(Number(v) as MobileColumns)}
+          tone="surface-2"
         />
       </div>
     </div>
@@ -137,6 +141,7 @@
           value={prefsStore.nameStyle}
           options={nameStyleOptions}
           onChange={(v) => prefsStore.setNameStyle(v)}
+          tone="surface-2"
         />
       </div>
     </div>
@@ -151,6 +156,7 @@
           value={prefsStore.showTimestamp ? 'on' : 'off'}
           options={showTimestampOptions}
           onChange={(v) => prefsStore.setShowTimestamp(v === 'on')}
+          tone="surface-2"
         />
       </div>
     </div>
@@ -196,6 +202,7 @@
             void prefsStore.setGlanceWindowHours(Number(v) as GlanceWindowHours)
             void glanceStore.load()
           }}
+          tone="surface-2"
         />
       </div>
     </div>
@@ -213,6 +220,7 @@
             void prefsStore.setGlanceMaxMoments(Number(v) as GlanceMaxMoments)
             void glanceStore.load()
           }}
+          tone="surface-2"
         />
       </div>
     </div>

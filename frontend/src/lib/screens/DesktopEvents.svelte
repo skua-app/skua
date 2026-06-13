@@ -286,7 +286,7 @@
   .pill.active {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .pill:active {
     transform: translateY(1px);

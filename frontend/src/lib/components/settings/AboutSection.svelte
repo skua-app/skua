@@ -103,7 +103,7 @@
     height: 46px;
     border-radius: 13px;
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-ink);
     display: grid;
     place-items: center;
     margin-bottom: 6px;
@@ -182,7 +182,7 @@
   .ab-link {
     padding: 12px 14px;
     font-size: 13px;
-    color: var(--accent);
+    color: var(--accent-ink);
     text-decoration: none;
     border-bottom: 1px solid var(--border);
     transition: background 0.14s ease;
