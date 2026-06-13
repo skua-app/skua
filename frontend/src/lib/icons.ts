@@ -60,6 +60,7 @@ export type IconName =
   | 'link'
   | 'close'
   | 'chevRight'
+  | 'pip'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -198,5 +199,11 @@ export const ICONS: Record<IconName, IconDef> = {
     ],
     strokeWidth: 2.2
   },
-  chevRight: { paths: 'M9 6l6 6-6 6', strokeWidth: 2 }
+  chevRight: { paths: 'M9 6l6 6-6 6', strokeWidth: 2 },
+  pip: {
+    rects: [
+      { x: 3, y: 5, width: 18, height: 14, rx: 2 },
+      { x: 12, y: 11, width: 7, height: 5, rx: 1 }
+    ]
+  }
 }

@@ -34,6 +34,9 @@
     toggleMute: () => void
     toggleQuality: () => void
     toggleFullscreen: () => void
+    togglePip: () => void
+    pipSupported: boolean
+    pipActive: boolean
     downloadSnapshot: () => void
     onShowTelemetry: () => void
     onBack: () => void
@@ -60,6 +63,9 @@
     toggleMute,
     toggleQuality,
     toggleFullscreen,
+    togglePip,
+    pipSupported,
+    pipActive,
     downloadSnapshot,
     onShowTelemetry,
     onBack,
@@ -256,6 +262,18 @@
             <Icon name="snapshot" size={20} />
             <span>Snapshot</span>
           </button>
+          {#if pipSupported}
+            <button
+              type="button"
+              class="dk-livebtn"
+              class:active={pipActive}
+              onclick={togglePip}
+              aria-label={ui.pipLabel}
+            >
+              <Icon name="pip" size={20} />
+              <span>{ui.pipLabel}</span>
+            </button>
+          {/if}
           <button type="button" class="dk-livebtn" onclick={toggleFullscreen}>
             <Icon name="fullscreen" size={20} />
             <span>Fullscreen</span>
