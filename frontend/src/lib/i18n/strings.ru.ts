@@ -53,6 +53,8 @@ export const ui = {
   refreshDiffRemoved: 'Удалено',
   // settings > IA + appearance + per-camera editor (E6 sprint B)
   sectionAppearance: 'Внешний вид',
+  appearanceDescription:
+    'Как выглядят стена, плитки и дайджест «пока вас не было». Настройки синхронизируются между всеми устройствами.',
   sectionCameras: 'Камеры',
   sectionGroups: 'Группы',
   // settings > connection section (E7.1)

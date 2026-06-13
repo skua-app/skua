@@ -61,51 +61,53 @@
   )
 </script>
 
-<article class="group-card">
+<article class="set-card group">
   {#if editing}
-    <div class="group-edit">
-      <label class="group-edit-label" for="group-name-{group.id}">{ui.groupNameLabel}</label>
+    <div class="set-field">
+      <label class="f-label" for="group-name-{group.id}">{ui.groupNameLabel}</label>
       <input
         id="group-name-{group.id}"
-        class="text-input"
+        class="set-input"
         type="text"
         bind:value={editingName}
         maxlength="60"
         disabled={busy}
       />
-      <div class="group-edit-cams">
-        {#each cameras as cam (cam.id)}
-          <label class="cam-row">
-            <input
-              type="checkbox"
-              checked={editingCams.has(cam.id)}
-              onchange={() => toggleCam(cam.id)}
-              disabled={busy}
-            />
-            <span class="cam-name">{cam.name}</span>
-          </label>
-        {/each}
-      </div>
-      {#if editError}
-        <div class="form-error">{editError}</div>
-      {/if}
-      <div class="group-edit-actions">
-        <button type="button" class="btn" onclick={cancelEdit} disabled={busy}>{ui.cancel}</button>
-        <button type="button" class="btn btn-primary" onclick={saveEdit} disabled={busy}>
-          {ui.save}
-        </button>
-      </div>
+    </div>
+    <div class="group-edit-cams">
+      {#each cameras as cam (cam.id)}
+        <label class="cam-row">
+          <input
+            type="checkbox"
+            checked={editingCams.has(cam.id)}
+            onchange={() => toggleCam(cam.id)}
+            disabled={busy}
+          />
+          <span class="cam-name">{cam.name}</span>
+        </label>
+      {/each}
+    </div>
+    {#if editError}
+      <div class="form-error">{editError}</div>
+    {/if}
+    <div class="set-actions">
+      <button type="button" class="set-btn" onclick={cancelEdit} disabled={busy}>
+        {ui.cancel}
+      </button>
+      <button type="button" class="set-btn primary" onclick={saveEdit} disabled={busy}>
+        {ui.save}
+      </button>
     </div>
   {:else}
-    <div class="group-card-head">
-      <span class="group-name">{group.name}</span>
-      <div class="group-card-actions">
-        <button type="button" class="btn btn-sm" onclick={startEdit} disabled={busy}>
+    <div class="g-head">
+      <span class="g-name">{group.name}</span>
+      <div class="g-acts">
+        <button type="button" class="set-btn sm" onclick={startEdit} disabled={busy}>
           {ui.edit}
         </button>
         <button
           type="button"
-          class="btn btn-sm btn-danger"
+          class="set-btn sm danger"
           onclick={() => onDelete(group.id)}
           disabled={busy}
         >
@@ -113,74 +115,82 @@
         </button>
       </div>
     </div>
-    <div class="group-card-body">
+    <div class="g-body">
       {#if summary === null}
-        <span class="group-cams-empty">{ui.groupNoCameras}</span>
+        <span class="g-empty">{ui.groupNoCameras}</span>
       {:else}
-        <span class="group-cams-label">{ui.groupCameras}</span>
-        <span class="group-cams">{summary}</span>
+        <span class="g-camlabel">{ui.groupCameras}</span>
+        <span class="g-cams">{summary}</span>
       {/if}
     </div>
   {/if}
 </article>
 
 <style>
-  .group-card {
+  /* prototype .set-card.group */
+  .set-card {
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 12px 14px;
+    border-radius: var(--r-sm);
     background: var(--surface);
-  }
-  .group-card-head {
+    padding: 14px;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
+    flex-direction: column;
+    gap: 11px;
+    margin-bottom: 10px;
   }
-  .group-name {
+  .set-card.group {
+    gap: 7px;
+  }
+  .g-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .g-name {
     font-size: 14px;
     font-weight: 600;
     color: var(--text);
   }
-  .group-card-actions {
+  .g-acts {
     display: flex;
     gap: 6px;
   }
-  .group-card-body {
+  .g-body {
     font-size: 12px;
     color: var(--text-2);
     line-height: 1.4;
   }
-  .group-cams-label {
+  .g-camlabel {
     color: var(--text-3);
     margin-right: 4px;
   }
-  .group-cams-empty {
+  .g-empty {
     color: var(--text-3);
     font-style: italic;
   }
-  .group-edit {
+
+  /* edit-mode */
+  .set-field {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 5px;
   }
-  .group-edit-label {
-    font-size: 11px;
+  .f-label {
+    font-size: 12px;
     color: var(--text-3);
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
   }
-  .text-input {
-    padding: 8px 10px;
+  .set-input {
+    width: 100%;
+    padding: 9px 11px;
     font-size: 13px;
     color: var(--text);
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.22);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r-xs);
     font-family: inherit;
   }
-  .text-input:focus {
+  .set-input:focus {
     outline: none;
     border-color: var(--border-strong);
   }
@@ -205,55 +215,60 @@
     accent-color: var(--accent);
     cursor: pointer;
   }
-  .group-edit-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 4px;
-  }
   .form-error {
     font-size: 12px;
-    color: oklch(0.68 0.16 25);
+    color: var(--warn);
   }
-  .btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--text);
-    background: transparent;
+
+  /* prototype .set-actions + .set-btn */
+  .set-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  .set-btn {
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
     border: 1px solid var(--border-strong);
-    border-radius: 6px;
-    font-family: inherit;
+    background: transparent;
+    color: var(--text);
     cursor: pointer;
-    transition:
-      background 120ms,
-      border-color 120ms,
-      color 120ms,
-      opacity 120ms;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.15s ease;
   }
-  .btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.04);
+  .set-btn:active {
+    transform: translateY(1px);
   }
-  .btn:disabled {
+  .set-btn:hover:not(:disabled) {
+    background: rgba(125, 125, 125, 0.07);
+  }
+  .set-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .btn-sm {
-    padding: 4px 10px;
-    font-size: 11px;
+  .set-btn.sm {
+    padding: 5px 11px;
+    font-size: 12px;
   }
-  .btn-primary {
-    color: var(--bg);
+  .set-btn.primary {
     background: var(--accent);
+    color: var(--on-accent);
     border-color: var(--accent);
   }
-  .btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent) 88%, white 12%);
+  .set-btn.primary:hover:not(:disabled) {
+    background: var(--accent);
+    filter: brightness(1.05);
   }
-  .btn-danger {
-    color: oklch(0.68 0.16 25);
-    border-color: color-mix(in oklab, oklch(0.68 0.16 25) 50%, transparent);
+  .set-btn.danger {
+    color: var(--warn);
+    border-color: color-mix(in oklab, var(--warn) 45%, transparent);
   }
-  .btn-danger:hover:not(:disabled) {
-    background: color-mix(in oklab, oklch(0.68 0.16 25) 10%, transparent);
+  .set-btn.danger:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--warn) 10%, transparent);
   }
 </style>

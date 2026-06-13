@@ -57,21 +57,21 @@
   }
 </script>
 
-<section id="cameras" class="settings-section">
+<section id="cameras" class="settings-section dk-set-section">
   <header class="section-header">
-    <h2 class="section-title">{ui.sectionCameras}</h2>
-    <p class="section-hint">{ui.refreshHint}</p>
-    <p class="section-hint section-hint-secondary">{ui.streamsHint}</p>
+    <h2 class="dk-set-h2">{ui.sectionCameras}</h2>
+    <p class="dk-set-desc">{ui.refreshHint}</p>
+    <p class="set-hint">{ui.streamsHint}</p>
   </header>
 
   <div class="refresh-row">
-    <button type="button" class="btn btn-primary" disabled={refreshing} onclick={doRefreshCameras}>
+    <button type="button" class="set-btn primary" disabled={refreshing} onclick={doRefreshCameras}>
       {refreshing ? ui.refreshingCameras : ui.refreshCameras}
     </button>
     {#if refreshStatus}
       <div
-        class="refresh-status"
-        class:refresh-status-error={refreshStatusKind === 'error'}
+        class="set-msg"
+        class:set-msg-error={refreshStatusKind === 'error'}
         role="status"
         aria-live="polite"
       >
@@ -100,22 +100,30 @@
   .settings-section {
     display: block;
   }
+  .dk-set-section {
+    max-width: 720px;
+  }
   .section-header {
     margin-bottom: 12px;
   }
-  .section-title {
-    font-size: 15px;
+  .dk-set-h2 {
+    font-size: 20px;
     font-weight: 600;
-    letter-spacing: -0.2px;
-    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+    margin: 0 0 4px;
+    color: var(--text);
   }
-  .section-hint {
+  .dk-set-desc {
+    font-size: 13.5px;
+    color: var(--text-2);
+    margin: 0 0 8px;
+    line-height: 1.5;
+  }
+  .set-hint {
     font-size: 12px;
     color: var(--text-3);
-    line-height: 1.4;
-  }
-  .section-hint-secondary {
-    margin-top: 4px;
+    line-height: 1.45;
+    margin: 0 0 12px;
   }
   .refresh-row {
     display: flex;
@@ -131,22 +139,23 @@
       gap: 16px;
     }
   }
-  .refresh-status {
+  .set-msg {
     font-size: 12px;
     color: var(--text-2);
+    padding: 4px;
     line-height: 1.4;
   }
-  .refresh-status-error {
-    color: oklch(0.68 0.16 25);
+  .set-msg-error {
+    color: var(--warn);
   }
   .streams-error {
     margin-bottom: 12px;
     padding: 10px 12px;
-    border: 1px solid color-mix(in oklab, oklch(0.68 0.16 25) 40%, transparent);
+    border: 1px solid color-mix(in oklab, var(--warn) 45%, transparent);
     border-radius: 8px;
     font-size: 12px;
-    color: oklch(0.68 0.16 25);
-    background: color-mix(in oklab, oklch(0.68 0.16 25) 8%, transparent);
+    color: var(--warn);
+    background: color-mix(in oklab, var(--warn) 10%, transparent);
     line-height: 1.4;
   }
   .cards {
@@ -154,35 +163,39 @@
     flex-direction: column;
     gap: 10px;
   }
-  .btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--text);
-    background: transparent;
+
+  /* prototype .set-btn */
+  .set-btn {
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
     border: 1px solid var(--border-strong);
-    border-radius: 6px;
-    font-family: inherit;
+    background: transparent;
+    color: var(--text);
     cursor: pointer;
-    transition:
-      background 120ms,
-      border-color 120ms,
-      color 120ms,
-      opacity 120ms;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.15s ease;
     flex-shrink: 0;
   }
-  .btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.04);
+  .set-btn:active {
+    transform: translateY(1px);
   }
-  .btn:disabled {
+  .set-btn:hover:not(:disabled) {
+    background: rgba(125, 125, 125, 0.07);
+  }
+  .set-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .btn-primary {
-    color: var(--bg);
+  .set-btn.primary {
     background: var(--accent);
+    color: var(--on-accent);
     border-color: var(--accent);
   }
-  .btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent) 88%, white 12%);
+  .set-btn.primary:hover:not(:disabled) {
+    background: var(--accent);
+    filter: brightness(1.05);
   }
 </style>
