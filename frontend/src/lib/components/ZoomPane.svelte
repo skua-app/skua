@@ -17,6 +17,10 @@
   let tx = $state(0)
   let ty = $state(0)
   let pinching = $state(false)
+  // True while a single-pointer pan gesture is active. We disable the
+  // .zp-inner transition during gestures so the image tracks the finger
+  // exactly instead of lagging through the 200ms transform ease.
+  let panning = $state(false)
   let reduceMotion = $state(false)
 
   // Frame size (in CSS px). Kept in sync via ResizeObserver so rotation /
@@ -130,6 +134,7 @@
       panStartY = loc.y
       initTx = tx
       initTy = ty
+      panning = true
       try {
         frameEl?.setPointerCapture(e.pointerId)
       } catch {
@@ -199,7 +204,9 @@
       panStartY = p!.y
       initTx = tx
       initTy = ty
+      panning = scale > 1
     }
+    if (pointers.size === 0) panning = false
   }
 
   function onWheel(e: WheelEvent) {
@@ -236,7 +243,9 @@
   // While we own the gesture (pinching or zoomed) the frame consumes
   // touches. Otherwise let single-touch reach native video controls.
   const touchAction = $derived(pinching || scale > 1 ? 'none' : 'auto')
-  const transitionStyle = $derived(reduceMotion ? 'none' : '')
+  // Animate eased transitions (reset / wheel / double-tap) but disable
+  // them during active gestures so the image tracks the finger 1:1.
+  const transitionStyle = $derived(reduceMotion || pinching || panning ? 'none' : '')
   const transform = $derived(`translate(${tx}px, ${ty}px) scale(${scale})`)
 </script>
 

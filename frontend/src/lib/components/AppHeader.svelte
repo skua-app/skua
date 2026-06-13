@@ -64,6 +64,11 @@
   )
 
   let filterOpen = $state(false)
+  // The mobile header carries backdrop-filter, which makes it the containing
+  // block for fixed descendants — a position:fixed catch element therefore
+  // only covers the header. Instead, bind the grpfilter container and close
+  // the menu on any pointerdown whose target falls outside it.
+  let grpfilterEl: HTMLDivElement | undefined = $state()
   function selectGroup(id: string | null) {
     prefsStore.setGridFilter(id)
     filterOpen = false
@@ -76,8 +81,21 @@
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') filterOpen = false
     }
+    function onPointer(e: PointerEvent) {
+      const t = e.target as Node | null
+      if (grpfilterEl && t && !grpfilterEl.contains(t)) filterOpen = false
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onPointer)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onPointer)
+    }
+  })
+  // Close on route change so the menu never lingers when switching sections.
+  $effect(() => {
+    void page.route.id
+    filterOpen = false
   })
 
   const gridModeOptions = [
@@ -214,7 +232,7 @@
 
     {#if showControlBar}
       <div class="control-bar">
-        <div class="grpfilter">
+        <div class="grpfilter" bind:this={grpfilterEl}>
           <button
             type="button"
             class="ctrl filter-btn"
@@ -228,13 +246,6 @@
             <span class="fb-chev" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
           </button>
           {#if filterOpen}
-            <button
-              type="button"
-              class="grp-catch"
-              tabindex={-1}
-              aria-label={ui.close}
-              onclick={() => (filterOpen = false)}
-            ></button>
             <ul class="grp-menu" role="listbox">
               <li>
                 <button
@@ -432,15 +443,6 @@
     transform: translateY(1px);
   }
 
-  .grp-catch {
-    position: fixed;
-    inset: 0;
-    z-index: 7;
-    background: transparent;
-    border: none;
-    padding: 0;
-    cursor: default;
-  }
   .grp-menu {
     list-style: none;
     margin: 0;
