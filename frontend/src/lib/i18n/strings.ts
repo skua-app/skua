@@ -60,6 +60,7 @@ export const ui = {
   sectionConnection: 'Connection',
   // settings > about + master-detail nav
   sectionAbout: 'About',
+  aboutTagline: 'A calmer front-end for Frigate',
   settingsGroupPersonalize: 'Personalize',
   settingsGroupManage: 'Manage',
   settingsGroupSystem: 'System',

@@ -61,6 +61,7 @@ export const ui = {
   sectionConnection: 'Подключение',
   // settings > about + master-detail nav
   sectionAbout: 'О приложении',
+  aboutTagline: 'Спокойный фронтенд для Frigate',
   settingsGroupPersonalize: 'Персонализация',
   settingsGroupManage: 'Управление',
   settingsGroupSystem: 'Система',

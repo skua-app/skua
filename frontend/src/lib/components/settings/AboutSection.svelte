@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Mono from '$lib/components/Mono.svelte'
   import { configStore } from '$lib/stores/config.svelte'
   import { ui } from '$lib/i18n/strings'
 
@@ -9,15 +8,21 @@
 </script>
 
 <section id="about" class="settings-section">
-  <header class="section-header">
-    <h2 class="section-title">{ui.sectionAbout}</h2>
-  </header>
+  <div class="set-card ab-id">
+    <span class="ab-mark" aria-hidden="true">
+      <span class="logo-mark">
+        <span class="bracket tl"></span>
+        <span class="bracket tr"></span>
+        <span class="bracket bl"></span>
+        <span class="bracket br"></span>
+      </span>
+    </span>
+    <div class="ab-name">Skua</div>
+    <div class="ab-tag">{ui.aboutTagline}</div>
+    <div class="ab-ver mono">v{version}</div>
+  </div>
 
-  <div class="ab-card">
-    <div class="ab-row">
-      <span class="ab-key">{ui.aboutAppVersion}</span>
-      <Mono color="var(--text)" size={12}>{version}</Mono>
-    </div>
+  <div class="set-card">
     <div class="ab-note">{ui.aboutUpstreamPending}</div>
   </div>
 
@@ -57,44 +62,97 @@
     display: flex;
     flex-direction: column;
   }
-  .section-header {
-    margin-bottom: 10px;
-  }
-  .section-title {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.2px;
-    margin: 0;
-  }
-  /* ab-card mirrors calm .set-card / .ab-id */
-  .ab-card {
+
+  /* prototype .set-card + .set-card.ab-id */
+  .set-card {
     border: 1px solid var(--border);
     border-radius: var(--r-sm);
     background: var(--surface);
     padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 11px;
+    margin-bottom: 10px;
   }
-  .ab-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
+  .ab-id {
+    align-items: center;
+    text-align: center;
+    gap: 7px;
+    padding: 24px 14px;
+  }
+  .ab-mark {
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: grid;
+    place-items: center;
+    margin-bottom: 6px;
+  }
+  .ab-name {
+    font-size: 21px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  .ab-tag {
     font-size: 13px;
+    line-height: 1.4;
     color: var(--text-2);
-    padding: 4px 0;
   }
-  .ab-key {
-    flex: 1 1 auto;
+  .ab-ver {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 4px;
+    line-height: 1.4;
   }
+
+  /* four-bracket logo, scaled up from AppHeader's 14px to 22px */
+  .logo-mark {
+    width: 22px;
+    height: 22px;
+    position: relative;
+    display: inline-block;
+  }
+  .bracket {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+  }
+  .logo-mark .tl {
+    top: 0;
+    left: 0;
+    border-top: 1.8px solid var(--accent);
+    border-left: 1.8px solid var(--accent);
+  }
+  .logo-mark .tr {
+    top: 0;
+    right: 0;
+    border-top: 1.8px solid var(--accent);
+    border-right: 1.8px solid var(--accent);
+  }
+  .logo-mark .bl {
+    bottom: 0;
+    left: 0;
+    border-bottom: 1.8px solid var(--accent);
+    border-left: 1.8px solid var(--accent);
+  }
+  .logo-mark .br {
+    bottom: 0;
+    right: 0;
+    border-bottom: 1.8px solid var(--accent);
+    border-right: 1.8px solid var(--accent);
+  }
+
   .ab-note {
     font-size: 12px;
     color: var(--text-3);
     line-height: 1.45;
-    padding: 2px 4px 0;
   }
-  /* footer-style link rows */
+
+  /* link rows */
   .ab-links {
     border: 1px solid var(--border);
     border-radius: var(--r-sm);

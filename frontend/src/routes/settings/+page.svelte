@@ -6,7 +6,10 @@
   import ConnectionSection from '$lib/components/settings/ConnectionSection.svelte'
   import GroupsSection from '$lib/components/settings/GroupsSection.svelte'
   import Icon from '$lib/components/Icon.svelte'
+  import { camerasStore } from '$lib/stores/cameras.svelte'
+  import { configStore } from '$lib/stores/config.svelte'
   import { go2rtcStreamsStore } from '$lib/stores/go2rtcStreams.svelte'
+  import { groupsStore } from '$lib/stores/groups.svelte'
   import { runtimeConfigStore } from '$lib/stores/runtimeConfig.svelte'
   import { streamOverridesStore } from '$lib/stores/streamOverrides.svelte'
   import { ui } from '$lib/i18n/strings'
@@ -51,6 +54,25 @@
   function sectionLabel(id: SectionId): string {
     for (const g of navGroups) for (const it of g.items) if (it.id === id) return it.label
     return ''
+  }
+
+  // Mobile-only trailing value per section (prototype .set-row .chev). Desktop
+  // nav stays text-only.
+  function sectionValue(id: SectionId): string | null {
+    if (id === 'cameras') return String(camerasStore.cameras.length)
+    if (id === 'groups') return String(groupsStore.groups.length)
+    if (id === 'connection') {
+      if (!runtimeConfigStore.loaded) return null
+      const raw = runtimeConfigStore.effective.frigate_url
+      if (!raw) return null
+      try {
+        return new URL(raw).host || null
+      } catch {
+        return null
+      }
+    }
+    if (id === 'about') return `v${configStore.version || 'dev'}`
+    return null
   }
 
   // /settings-only stores are lazy-inited here so non-settings sessions don't
@@ -109,10 +131,14 @@
       <div class="set-grouplabel">{g.label}</div>
       <div class="set-block">
         {#each g.items as it (it.id)}
+          {@const v = sectionValue(it.id)}
           <button type="button" class="set-row" onclick={() => (mobileView = it.id)}>
             <span class="ico" aria-hidden="true"><Icon name={it.icon} size={22} /></span>
             <span class="set-row-label">{it.label}</span>
-            <span class="chev" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
+            <span class="chev">
+              {#if v !== null}<span class="chev-val">{v}</span>{/if}
+              <Icon name="chevDown" size={16} />
+            </span>
           </button>
         {/each}
       </div>
@@ -267,8 +293,17 @@
     color: var(--text-3);
     display: inline-flex;
     align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+    white-space: nowrap;
     flex: 0 0 auto;
+  }
+  .set-row .chev :global(svg) {
     transform: rotate(-90deg);
+  }
+  .chev-val {
+    color: var(--text-2);
   }
 
   /* ============================================================
