@@ -158,92 +158,87 @@
   const canSave = $derived(runtimeConfigStore.locked.frigate_url || frigateDraft.trim().length > 0)
 </script>
 
-<section id="connection" class="settings-section">
+<section id="connection" class="settings-section dk-set-section">
   <header class="section-header">
-    <h2 class="section-title">{ui.sectionConnection}</h2>
+    <h2 class="dk-set-h2">{ui.sectionConnection}</h2>
+    <p class="dk-set-desc">{ui.connectionRestartPolicyNote}</p>
   </header>
 
   {#if runtimeConfigStore.loadError}
     <div class="form-error">{ui.connectionLoadError}</div>
   {/if}
 
-  <div class="card">
-    <div class="row">
-      <label class="row-label" for="connection-frigate">{ui.connectionFrigateURLLabel}</label>
-      <div class="row-control">
-        {#if runtimeConfigStore.locked.frigate_url}
-          <div class="locked-value">{runtimeConfigStore.effective.frigate_url}</div>
-        {:else}
-          <input
-            id="connection-frigate"
-            class="text-input"
-            type="url"
-            placeholder="http://frigate:5000"
-            value={frigateDraft}
-            oninput={onFrigateInput}
-            disabled={applying}
-            autocomplete="off"
-            spellcheck="false"
-          />
-        {/if}
+  <div class="set-card">
+    <div class="set-field">
+      <label class="f-label" for="connection-frigate">{ui.connectionFrigateURLLabel}</label>
+      {#if runtimeConfigStore.locked.frigate_url}
+        <div class="locked-value">{runtimeConfigStore.effective.frigate_url}</div>
+      {:else}
+        <input
+          id="connection-frigate"
+          class="set-input"
+          type="url"
+          placeholder="http://frigate:5000"
+          value={frigateDraft}
+          oninput={onFrigateInput}
+          disabled={applying}
+          autocomplete="off"
+          spellcheck="false"
+        />
+      {/if}
+      <div class="set-hint">
+        {runtimeConfigStore.locked.frigate_url
+          ? ui.connectionEnvLockedFrigate
+          : ui.connectionFrigateURLHint}
       </div>
-    </div>
-    <div class="hint">
-      {runtimeConfigStore.locked.frigate_url
-        ? ui.connectionEnvLockedFrigate
-        : ui.connectionFrigateURLHint}
     </div>
 
-    <div class="row">
-      <label class="row-label" for="connection-go2rtc">{ui.connectionGo2rtcURLLabel}</label>
-      <div class="row-control">
-        {#if runtimeConfigStore.locked.go2rtc_url}
-          <div class="locked-value">{runtimeConfigStore.effective.go2rtc_url || '—'}</div>
-        {:else}
-          <input
-            id="connection-go2rtc"
-            class="text-input"
-            type="url"
-            placeholder="http://frigate:1984"
-            value={go2rtcDraft}
-            oninput={onGo2rtcInput}
-            disabled={applying}
-            autocomplete="off"
-            spellcheck="false"
-          />
-        {/if}
+    <div class="set-field">
+      <label class="f-label" for="connection-go2rtc">{ui.connectionGo2rtcURLLabel}</label>
+      {#if runtimeConfigStore.locked.go2rtc_url}
+        <div class="locked-value">{runtimeConfigStore.effective.go2rtc_url || '—'}</div>
+      {:else}
+        <input
+          id="connection-go2rtc"
+          class="set-input"
+          type="url"
+          placeholder="http://frigate:1984"
+          value={go2rtcDraft}
+          oninput={onGo2rtcInput}
+          disabled={applying}
+          autocomplete="off"
+          spellcheck="false"
+        />
+      {/if}
+      <div class="set-hint">
+        {runtimeConfigStore.locked.go2rtc_url
+          ? ui.connectionEnvLockedGo2rtc
+          : ui.connectionGo2rtcURLHint}
       </div>
-    </div>
-    <div class="hint">
-      {runtimeConfigStore.locked.go2rtc_url
-        ? ui.connectionEnvLockedGo2rtc
-        : ui.connectionGo2rtcURLHint}
     </div>
 
-    <div class="row">
-      <label class="row-label" for="connection-ui">{ui.connectionFrigateUIURLLabel}</label>
-      <div class="row-control">
-        {#if runtimeConfigStore.locked.frigate_ui_url}
-          <div class="locked-value">{runtimeConfigStore.effective.frigate_ui_url}</div>
-        {:else}
-          <input
-            id="connection-ui"
-            class="text-input"
-            type="url"
-            placeholder="http://frigate:8971"
-            value={frigateUIDraft}
-            oninput={onFrigateUIInput}
-            disabled={applying}
-            autocomplete="off"
-            spellcheck="false"
-          />
-        {/if}
+    <div class="set-field">
+      <label class="f-label" for="connection-ui">{ui.connectionFrigateUIURLLabel}</label>
+      {#if runtimeConfigStore.locked.frigate_ui_url}
+        <div class="locked-value">{runtimeConfigStore.effective.frigate_ui_url}</div>
+      {:else}
+        <input
+          id="connection-ui"
+          class="set-input"
+          type="url"
+          placeholder="http://frigate:8971"
+          value={frigateUIDraft}
+          oninput={onFrigateUIInput}
+          disabled={applying}
+          autocomplete="off"
+          spellcheck="false"
+        />
+      {/if}
+      <div class="set-hint">
+        {runtimeConfigStore.locked.frigate_ui_url
+          ? ui.connectionEnvLockedFrigateUI
+          : ui.connectionFrigateUIURLHint}
       </div>
-    </div>
-    <div class="hint">
-      {runtimeConfigStore.locked.frigate_ui_url
-        ? ui.connectionEnvLockedFrigateUI
-        : ui.connectionFrigateUIURLHint}
     </div>
 
     {#if report}
@@ -282,10 +277,8 @@
       <div class="form-error">{saveError}</div>
     {/if}
     {#if savedAt !== null && !dirtyAfterSave && !applying}
-      <div class="save-hint">{ui.connectionSavedRestartHint}</div>
+      <div class="set-msg">{ui.connectionSavedRestartHint}</div>
     {/if}
-
-    <div class="policy-note">{ui.connectionRestartPolicyNote}</div>
 
     {#if applying}
       <div class="restart-status" aria-live="polite">
@@ -293,23 +286,23 @@
         <span>{ui.connectionRestartingNote}</span>
       </div>
       {#if applyFallbackVisible}
-        <div class="hint">{ui.connectionRestartFallback}</div>
+        <div class="set-hint">{ui.connectionRestartFallback}</div>
       {/if}
     {:else if confirmingApply}
       <div class="confirm">
         <p class="confirm-text">{ui.connectionConfirmApply}</p>
-        <div class="actions">
-          <button type="button" class="btn" onclick={cancelApply}>{ui.cancel}</button>
-          <button type="button" class="btn btn-danger" onclick={confirmApply}>
+        <div class="set-actions">
+          <button type="button" class="set-btn" onclick={cancelApply}>{ui.cancel}</button>
+          <button type="button" class="set-btn danger" onclick={confirmApply}>
             {ui.connectionApplyConfirm}
           </button>
         </div>
       </div>
     {:else}
-      <div class="actions">
+      <div class="set-actions">
         <button
           type="button"
-          class="btn"
+          class="set-btn"
           onclick={runTest}
           disabled={testing || saving || !canSave}
         >
@@ -317,13 +310,13 @@
         </button>
         <button
           type="button"
-          class="btn btn-primary"
+          class="set-btn primary"
           onclick={runSave}
           disabled={saving || testing || !canSave}
         >
           {saving ? ui.connectionSaving : ui.connectionSave}
         </button>
-        <button type="button" class="btn btn-danger" onclick={requestApply} disabled={!canApply}>
+        <button type="button" class="set-btn danger" onclick={requestApply} disabled={!canApply}>
           {ui.connectionApply}
         </button>
       </div>
@@ -335,93 +328,98 @@
   .settings-section {
     display: block;
   }
+  .dk-set-section {
+    max-width: 720px;
+  }
   .section-header {
     margin-bottom: 12px;
   }
-  .section-title {
-    font-size: 15px;
+  .dk-set-h2 {
+    font-size: 20px;
     font-weight: 600;
-    letter-spacing: -0.2px;
-    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+    margin: 0 0 4px;
+    color: var(--text);
   }
-  .card {
+  .dk-set-desc {
+    font-size: 13.5px;
+    color: var(--text-2);
+    margin: 0 0 20px;
+    line-height: 1.5;
+  }
+
+  /* prototype .set-card */
+  .set-card {
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
+    border-radius: var(--r-sm);
     background: var(--surface);
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 11px;
+    margin-bottom: 10px;
   }
-  .row {
+
+  /* prototype .set-field */
+  .set-field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
   }
-  .row-label {
+  .f-label {
     font-size: 12px;
     color: var(--text-3);
   }
-  .row-control {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    flex: 1;
-  }
-  .text-input {
+
+  /* prototype .set-input */
+  .set-input {
     width: 100%;
-    padding: 8px 10px;
+    padding: 9px 11px;
     font-size: 13px;
     color: var(--text);
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.22);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r-xs);
     font-family: inherit;
-    min-width: 0;
   }
-  .text-input:focus {
+  .set-input:focus {
     outline: none;
     border-color: var(--border-strong);
   }
-  .text-input:disabled {
+  .set-input:disabled {
     opacity: 0.6;
   }
   .locked-value {
-    flex: 1;
-    padding: 8px 10px;
+    width: 100%;
+    padding: 9px 11px;
     font-size: 13px;
     color: var(--text-2);
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r-xs);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     overflow-x: auto;
     white-space: nowrap;
   }
-  .hint {
+  .set-hint {
     font-size: 12px;
     color: var(--text-3);
-    margin-top: -6px;
     line-height: 1.45;
   }
-  .save-hint {
+  .set-msg {
     font-size: 12px;
     color: var(--text-2);
-  }
-  .policy-note {
-    font-size: 12px;
-    color: var(--text-2);
-    line-height: 1.45;
+    padding: 4px;
+    line-height: 1.4;
   }
   .form-error {
     font-size: 12px;
-    color: oklch(0.68 0.16 25);
+    color: var(--warn);
     line-height: 1.45;
   }
   .result {
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r-xs);
     padding: 10px 12px;
     font-size: 12px;
     color: var(--text-2);
@@ -442,10 +440,10 @@
     font-weight: 500;
   }
   .result-status.ok {
-    color: oklch(0.74 0.14 145);
+    color: var(--online);
   }
   .result-status.bad {
-    color: oklch(0.68 0.16 25);
+    color: var(--warn);
   }
   .result-status.skip {
     color: var(--text-3);
@@ -456,9 +454,9 @@
     font-size: 11px;
   }
   .confirm {
-    border: 1px solid color-mix(in oklab, oklch(0.68 0.16 25) 35%, var(--border));
-    background: color-mix(in oklab, oklch(0.68 0.16 25) 6%, transparent);
-    border-radius: 8px;
+    border: 1px solid color-mix(in oklab, var(--warn) 45%, var(--border));
+    background: color-mix(in oklab, var(--warn) 8%, transparent);
+    border-radius: var(--r-xs);
     padding: 12px;
     display: flex;
     flex-direction: column;
@@ -494,47 +492,52 @@
       transform: scale(1.1);
     }
   }
-  .actions {
+
+  /* prototype .set-actions + .set-btn */
+  .set-actions {
     display: flex;
-    justify-content: flex-end;
     gap: 8px;
+    justify-content: flex-end;
     flex-wrap: wrap;
+    margin-top: 2px;
   }
-  .btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--text);
-    background: transparent;
+  .set-btn {
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
     border: 1px solid var(--border-strong);
-    border-radius: 6px;
-    font-family: inherit;
+    background: transparent;
+    color: var(--text);
     cursor: pointer;
-    transition:
-      background 120ms,
-      border-color 120ms,
-      color 120ms,
-      opacity 120ms;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.15s ease;
   }
-  .btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.04);
+  .set-btn:active {
+    transform: translateY(1px);
   }
-  .btn:disabled {
+  .set-btn:hover:not(:disabled) {
+    background: rgba(125, 125, 125, 0.07);
+  }
+  .set-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .btn-primary {
-    color: var(--bg);
+  .set-btn.primary {
     background: var(--accent);
+    color: var(--on-accent);
     border-color: var(--accent);
   }
-  .btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent) 88%, white 12%);
+  .set-btn.primary:hover:not(:disabled) {
+    background: var(--accent);
+    filter: brightness(1.05);
   }
-  .btn-danger {
-    color: oklch(0.68 0.16 25);
-    border-color: color-mix(in oklab, oklch(0.68 0.16 25) 50%, transparent);
+  .set-btn.danger {
+    color: var(--warn);
+    border-color: color-mix(in oklab, var(--warn) 45%, transparent);
   }
-  .btn-danger:hover:not(:disabled) {
-    background: color-mix(in oklab, oklch(0.68 0.16 25) 10%, transparent);
+  .set-btn.danger:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--warn) 10%, transparent);
   }
 </style>
