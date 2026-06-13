@@ -148,15 +148,16 @@
   }
 
   /* ===================== MOBILE DETENTED SHEET ===================== */
-  // Imperative iOS-style detent controller. Mirrors calm/app.js: detents are
-  // translateY offsets (0 = full, height - 0.56*screenH = half, height - 280
-  // = peek). Open animates from translateY(100%) to the peek detent; dragging
-  // the head snaps to the nearest detent; dragging below peek + 70 dismisses.
+  // Imperative iOS-style detent controller. Mirrors calm/app.js but drops
+  // the middle stop: detents are translateY offsets (0 = full,
+  // height - 280 = peek). Open animates from translateY(100%) to the peek
+  // detent; dragging the head snaps to the nearer of full or peek; dragging
+  // below peek + 70 dismisses.
   let mobileMounted = $state(false)
   let sheetEl: HTMLDivElement | undefined = $state()
   let scrimEl: HTMLDivElement | undefined = $state()
-  let detents = $state<[number, number, number]>([0, 0, 0])
-  let detentIdx = $state(2)
+  let detents = $state<[number, number]>([0, 0])
+  let detentIdx = $state(1)
   let sheetHeight = $state(800)
   let dragging = false
   let dragStartY = 0
@@ -167,9 +168,8 @@
     const screenH = window.visualViewport?.height ?? window.innerHeight
     const full = Math.round(screenH * 0.92)
     const peekVisible = 280
-    const halfVisible = Math.round(screenH * 0.56)
     sheetHeight = full
-    detents = [0, full - halfVisible, full - peekVisible]
+    detents = [0, full - peekVisible]
   }
   function setScrimForTranslate(t: number) {
     if (!scrimEl) return
@@ -182,7 +182,7 @@
     const t = detents[detentIdx]!
     sheetEl.style.transition = animate && !reducedMotion ? '' : 'none'
     sheetEl.style.transform = `translateY(${t}px)`
-    sheetEl.dataset.detent = ['full', 'half', 'peek'][detentIdx]!
+    sheetEl.dataset.detent = ['full', 'peek'][detentIdx]!
     setScrimForTranslate(t)
   }
 
@@ -211,8 +211,8 @@
     // Force reflow so the next style change can transition.
     void sheet.getBoundingClientRect()
     const id = setTimeout(() => {
-      detentIdx = 2 // open to PEEK
-      applyDetent(2, true)
+      detentIdx = 1 // open to PEEK
+      applyDetent(1, true)
     }, 20)
     return () => clearTimeout(id)
   })
