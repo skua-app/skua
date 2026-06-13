@@ -614,16 +614,16 @@
   .dk-livebtn.primary {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .dk-livebtn.primary :global(svg) {
-    fill: var(--accent);
-    stroke: var(--accent);
+    fill: var(--accent-ink);
+    stroke: var(--accent-ink);
   }
   .dk-livebtn.active {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
 
   /* Filmstrip — dk-filmstrip-wrap / dk-filmstrip / dk-film */
@@ -707,7 +707,7 @@
     text-overflow: ellipsis;
   }
   .dk-film.on .flbl {
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .flbl-name {
     overflow: hidden;
@@ -748,7 +748,7 @@
   }
   .dk-panel-h .lnk {
     font-size: 13px;
-    color: var(--accent);
+    color: var(--accent-ink);
     cursor: pointer;
     text-decoration: none;
     flex: 0 0 auto;
@@ -807,7 +807,7 @@
     margin-top: 2px;
   }
   .dk-evrow .meta .l2 .mono {
-    color: var(--accent);
+    color: var(--accent-ink);
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
   }

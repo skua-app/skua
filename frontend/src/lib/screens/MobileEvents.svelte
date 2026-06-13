@@ -198,7 +198,7 @@
               </div>
               <div class="l2">
                 <span class="ev-kind">{eventKindLabels[ev.kind] ?? ev.kind}</span>
-                <Mono size={12} color="var(--accent)" weight={500}
+                <Mono size={12} color="var(--accent-ink)" weight={500}
                   >{ev.score !== null
                     ? ev.score.toFixed(2)
                     : formatDuration(ev.duration_seconds)}</Mono
@@ -283,7 +283,7 @@
   .pill.active {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
 
   .ev-list {

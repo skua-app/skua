@@ -498,16 +498,16 @@
   .livebtn.primary {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .livebtn.primary :global(svg) {
-    fill: var(--accent);
-    stroke: var(--accent);
+    fill: var(--accent-ink);
+    stroke: var(--accent-ink);
   }
   .livebtn.active {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
 
   /* Others rail — calm .hscroll .mini */
@@ -657,7 +657,7 @@
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 12px;
     font-weight: 400;
-    color: var(--accent);
+    color: var(--accent-ink);
     white-space: nowrap;
     flex: 0 0 auto;
   }

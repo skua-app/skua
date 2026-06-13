@@ -246,11 +246,11 @@
     background: var(--surface);
   }
   .dk-setitem.on {
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-soft);
   }
   .dk-setitem.on .val {
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .dk-setpane {
     min-width: 0;

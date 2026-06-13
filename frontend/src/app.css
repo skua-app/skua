@@ -83,6 +83,11 @@
   /* Semantic */
   --accent: oklch(0.78 0.1 200);
   --accent-soft: color-mix(in oklab, var(--accent) 15%, transparent);
+  /* Accent variant used for active TEXT and ICONS. In dark it equals
+     --accent (pixel-identical); light overrides darken it for contrast
+     against white surfaces. Solid fills (badges, bar fills, swatches,
+     the sliding thumb, logo brackets) keep raw --accent. */
+  --accent-ink: var(--accent);
   --on-accent: #04161a;
   --online: oklch(0.74 0.14 145);
   --offline: oklch(0.55 0.06 30);
@@ -119,6 +124,7 @@
   --shadow: 0 14px 34px -18px rgba(20, 22, 26, 0.5);
   --input-bg: rgba(20, 22, 26, 0.05);
   --input-bg-disabled: rgba(20, 22, 26, 0.09);
+  --accent-ink: color-mix(in oklab, var(--accent), #000 26%);
 }
 @media (prefers-color-scheme: light) {
   :root.theme-auto {
@@ -139,6 +145,7 @@
     --shadow: 0 14px 34px -18px rgba(20, 22, 26, 0.5);
     --input-bg: rgba(20, 22, 26, 0.05);
     --input-bg-disabled: rgba(20, 22, 26, 0.09);
+    --accent-ink: color-mix(in oklab, var(--accent), #000 26%);
   }
 }
 

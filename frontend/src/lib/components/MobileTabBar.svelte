@@ -62,7 +62,7 @@
     color: var(--text-2);
   }
   .ti.on {
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .lbl {
     letter-spacing: 0.1px;

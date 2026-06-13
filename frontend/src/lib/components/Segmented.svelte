@@ -7,9 +7,19 @@
     size?: 'sm' | 'md'
     // 'mono' = the calm `.qseg` look (mono font, smaller, surface-2 frame).
     variant?: 'standard' | 'mono'
+    // Track background. 'surface' is the wall HD/ECO default; 'surface-2'
+    // is used for settings switches so they stay visible against white cards.
+    tone?: 'surface' | 'surface-2'
   }
 
-  let { value, options, onChange, size = 'sm', variant = 'standard' }: Props = $props()
+  let {
+    value,
+    options,
+    onChange,
+    size = 'sm',
+    variant = 'standard',
+    tone = 'surface'
+  }: Props = $props()
 
   let container: HTMLDivElement | undefined = $state()
   let thumb: HTMLSpanElement | undefined = $state()
@@ -59,6 +69,7 @@
   class="seg ctrl"
   class:md={size === 'md'}
   class:mono={variant === 'mono'}
+  class:tone-surface-2={tone === 'surface-2'}
   bind:this={container}
 >
   <span class="seg-thumb" class:visible={measured} bind:this={thumb}></span>
@@ -126,7 +137,10 @@
     transition: color 0.2s ease;
   }
   .seg-opt.on {
-    color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .seg.tone-surface-2 {
+    background: var(--surface-2);
   }
   .seg-opt:not(:disabled):active {
     transform: translateY(1px);

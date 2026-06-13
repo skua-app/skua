@@ -422,10 +422,10 @@
   .filter-btn.open {
     background: var(--accent-soft);
     border-color: transparent;
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .filter-btn.open .fb-chev {
-    color: var(--accent);
+    color: var(--accent-ink);
     transform: rotate(180deg);
   }
   .filter-btn:active {
@@ -495,7 +495,7 @@
   .grp-opt .check {
     width: 16px;
     flex: 0 0 16px;
-    color: var(--accent);
+    color: var(--accent-ink);
     display: inline-flex;
   }
   .grp-opt .g-name {
@@ -505,7 +505,7 @@
     text-overflow: ellipsis;
   }
   .grp-opt.on .g-name {
-    color: var(--accent);
+    color: var(--accent-ink);
     font-weight: 500;
   }
   .grp-opt :global(.g-count) {
@@ -516,7 +516,7 @@
     padding: 2px 9px;
   }
   .grp-opt.on :global(.g-count) {
-    color: var(--accent);
+    color: var(--accent-ink);
     background: transparent;
     box-shadow: inset 0 0 0 1px var(--accent-soft);
   }
@@ -562,7 +562,7 @@
     transition: color 0.2s ease;
   }
   .gt-btn.on {
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .gt-btn:active {
     transform: translateY(1px);
@@ -641,7 +641,7 @@
     height: 34px;
     border-radius: 10px;
     background: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-ink);
     display: grid;
     place-items: center;
   }
@@ -717,7 +717,7 @@
     background: var(--surface);
   }
   .dk-tab.on {
-    color: var(--accent);
+    color: var(--accent-ink);
     background: var(--accent-soft);
   }
 
