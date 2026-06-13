@@ -645,7 +645,12 @@
     display: flex;
     gap: 12px;
     overflow-x: auto;
-    padding-bottom: 6px;
+    /* overflow-x: auto also clips on the cross axis, which cut the 2px
+       accent ring off the top of the active thumb. Pad on every edge and
+       offset the side padding so the strip still aligns with the content
+       above it. */
+    padding: 4px 3px 8px;
+    margin: 0 -3px;
     scrollbar-width: thin;
   }
   .dk-film {
