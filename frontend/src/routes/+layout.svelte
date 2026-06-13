@@ -3,6 +3,7 @@
   import { onMount } from 'svelte'
   import { page } from '$app/state'
   import AppHeader from '$lib/components/AppHeader.svelte'
+  import ConnectionOverlay from '$lib/components/ConnectionOverlay.svelte'
   import GlancePeek from '$lib/components/GlancePeek.svelte'
   import MobileTabBar from '$lib/components/MobileTabBar.svelte'
   import InstallPrompt from '$lib/components/InstallPrompt.svelte'
@@ -142,6 +143,7 @@
   {/if}
 
   <GlancePeek />
+  <ConnectionOverlay />
 </div>
 
 <InstallPrompt />
