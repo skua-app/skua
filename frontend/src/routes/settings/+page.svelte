@@ -48,8 +48,9 @@
   let activeSection = $state<SectionId>('appearance')
 
   // Mobile: 'index' shows the grouped row list; otherwise we're drilled into
-  // a section. State-driven only — no history pushes.
-  let mobileView = $state<'index' | SectionId>('index')
+  // a section. State-driven only — no history pushes. Default to Appearance
+  // so phones land on the most-touched pane; Back returns to the index.
+  let mobileView = $state<'index' | SectionId>('appearance')
 
   function sectionLabel(id: SectionId): string {
     for (const g of navGroups) for (const it of g.items) if (it.id === id) return it.label
@@ -61,16 +62,6 @@
   function sectionValue(id: SectionId): string | null {
     if (id === 'cameras') return String(camerasStore.cameras.length)
     if (id === 'groups') return String(groupsStore.groups.length)
-    if (id === 'connection') {
-      if (!runtimeConfigStore.loaded) return null
-      const raw = runtimeConfigStore.effective.frigate_url
-      if (!raw) return null
-      try {
-        return new URL(raw).host || null
-      } catch {
-        return null
-      }
-    }
     if (id === 'about') return `v${configStore.version || 'dev'}`
     return null
   }

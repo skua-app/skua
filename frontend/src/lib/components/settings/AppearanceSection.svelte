@@ -257,6 +257,27 @@
     flex: 0 0 auto;
   }
 
+  /* Narrow viewports — stack like prototype .set-line.stack so multi-option
+     segments (window, columns) don't overflow next to their label. */
+  @media (max-width: 640px) {
+    .dk-setline {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .dk-setline .sl-c {
+      width: 100%;
+    }
+    .dk-setline .sl-c :global(.seg) {
+      display: flex;
+      width: 100%;
+    }
+    .dk-setline .sl-c :global(.seg-opt) {
+      flex: 1 1 0;
+      justify-content: center;
+    }
+  }
+
   /* prototype .dk-acc-row — accent swatches in a row */
   .dk-acc-row {
     display: flex;
