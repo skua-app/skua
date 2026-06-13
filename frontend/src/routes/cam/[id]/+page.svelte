@@ -188,12 +188,15 @@
     if (!el) return
     const wk = el as WebkitVideo
     const isIPhone = typeof navigator !== 'undefined' && /iPhone/.test(navigator.userAgent)
+    // Recent iPhone Safari exposes both APIs but still can't PiP a live
+    // MediaStream, so gate the whole expression on !isIPhone — not just the
+    // WebKit clause. iPad UA reports Macintosh and keeps PiP support.
     pipSupported =
-      (document.pictureInPictureEnabled === true &&
+      !isIPhone &&
+      ((document.pictureInPictureEnabled === true &&
         typeof el.requestPictureInPicture === 'function') ||
-      (typeof wk.webkitSupportsPresentationMode === 'function' &&
-        wk.webkitSupportsPresentationMode('picture-in-picture') === true &&
-        !isIPhone)
+        (typeof wk.webkitSupportsPresentationMode === 'function' &&
+          wk.webkitSupportsPresentationMode('picture-in-picture') === true))
 
     const onEnter = () => {
       pipActive = true
