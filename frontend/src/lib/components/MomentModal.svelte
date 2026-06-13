@@ -502,7 +502,7 @@
     transition: background 120ms;
   }
   .mm-events-row:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-2);
   }
   .mm-events-row.active {
     background: var(--accent-soft);
