@@ -5,33 +5,12 @@
   import { themeStore, type Theme } from '$lib/stores/theme.svelte'
   import { ui } from '$lib/i18n/strings'
   import { ACCENT_VALUES } from '$lib/api'
-  import type {
-    Accent,
-    NameStyle,
-    DesktopColumns,
-    MobileColumns,
-    GlanceWindowHours,
-    GlanceMaxMoments
-  } from '$lib/api'
+  import type { Accent, NameStyle, GlanceWindowHours, GlanceMaxMoments } from '$lib/api'
 
   const themeOptions: { value: Theme; label: string }[] = [
     { value: 'auto', label: ui.themeAuto },
     { value: 'dark', label: ui.themeDark },
     { value: 'light', label: ui.themeLight }
-  ]
-  const gridModeOptions = [
-    { value: 'hd' as const, label: 'HD' },
-    { value: 'eco' as const, label: 'ECO' }
-  ]
-  const desktopColumnsOptions = [
-    { value: '2' as const, label: '2' },
-    { value: '3' as const, label: '3' },
-    { value: '4' as const, label: '4' },
-    { value: '5' as const, label: '5' }
-  ]
-  const mobileColumnsOptions = [
-    { value: '1' as const, label: '1' },
-    { value: '2' as const, label: '2' }
   ]
   const nameStyleOptions: { value: NameStyle; label: string }[] = [
     { value: 'below', label: ui.nameStyleBelow },
@@ -81,56 +60,7 @@
         />
       </div>
     </div>
-  </div>
 
-  <div class="dk-card">
-    <div class="dk-setline">
-      <div class="sl-l">
-        <div class="t">{ui.gridModeLabel}</div>
-        <div class="d">{ui.gridModeDesc}</div>
-      </div>
-      <div class="sl-c">
-        <Segmented
-          value={prefsStore.gridMode}
-          options={gridModeOptions}
-          onChange={(v) => prefsStore.setGridMode(v)}
-          tone="surface-2"
-        />
-      </div>
-    </div>
-
-    <div class="dk-setline">
-      <div class="sl-l">
-        <div class="t">{ui.desktopColumnsLabel}</div>
-        <div class="d">{ui.desktopColumnsDesc}</div>
-      </div>
-      <div class="sl-c">
-        <Segmented
-          value={String(prefsStore.desktopColumns) as '2' | '3' | '4' | '5'}
-          options={desktopColumnsOptions}
-          onChange={(v) => prefsStore.setDesktopColumns(Number(v) as DesktopColumns)}
-          tone="surface-2"
-        />
-      </div>
-    </div>
-
-    <div class="dk-setline">
-      <div class="sl-l">
-        <div class="t">{ui.mobileColumnsLabel}</div>
-        <div class="d">{ui.mobileColumnsDesc}</div>
-      </div>
-      <div class="sl-c">
-        <Segmented
-          value={String(prefsStore.mobileColumns) as '1' | '2'}
-          options={mobileColumnsOptions}
-          onChange={(v) => prefsStore.setMobileColumns(Number(v) as MobileColumns)}
-          tone="surface-2"
-        />
-      </div>
-    </div>
-  </div>
-
-  <div class="dk-card">
     <div class="dk-setline">
       <div class="sl-l">
         <div class="t">{ui.nameStyleLabel}</div>
