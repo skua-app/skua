@@ -150,6 +150,64 @@
     }
   }
 
+  // PiP control. Feature-detected against both the W3C and the WebKit
+  // presentation-mode APIs so desktop Chrome/Edge and macOS Safari both work;
+  // iOS Safari inline-video does not support PiP and pipSupported stays false.
+  type WebkitVideo = HTMLVideoElement & {
+    webkitSupportsPresentationMode?: (mode: string) => boolean
+    webkitSetPresentationMode?: (mode: string) => void
+    webkitPresentationMode?: string
+  }
+  let pipSupported = $state(false)
+  let pipActive = $state(false)
+
+  function togglePip() {
+    if (!videoEl) return
+    const wk = videoEl as WebkitVideo
+    try {
+      if (document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(() => {})
+      } else if (typeof videoEl.requestPictureInPicture === 'function') {
+        videoEl.requestPictureInPicture().catch(() => {})
+      } else if (typeof wk.webkitSetPresentationMode === 'function') {
+        const next =
+          wk.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture'
+        wk.webkitSetPresentationMode(next)
+      }
+    } catch {
+      // swallow: PiP rejection (user gesture, embedded blocked) is benign.
+    }
+  }
+
+  $effect(() => {
+    const el = videoEl
+    if (!el) return
+    const wk = el as WebkitVideo
+    pipSupported =
+      (document.pictureInPictureEnabled === true &&
+        typeof el.requestPictureInPicture === 'function') ||
+      (typeof wk.webkitSupportsPresentationMode === 'function' &&
+        wk.webkitSupportsPresentationMode('picture-in-picture') === true)
+
+    const onEnter = () => {
+      pipActive = true
+    }
+    const onLeave = () => {
+      pipActive = false
+    }
+    const onWkChange = () => {
+      pipActive = wk.webkitPresentationMode === 'picture-in-picture'
+    }
+    el.addEventListener('enterpictureinpicture', onEnter)
+    el.addEventListener('leavepictureinpicture', onLeave)
+    el.addEventListener('webkitpresentationmodechanged', onWkChange)
+    return () => {
+      el.removeEventListener('enterpictureinpicture', onEnter)
+      el.removeEventListener('leavepictureinpicture', onLeave)
+      el.removeEventListener('webkitpresentationmodechanged', onWkChange)
+    }
+  })
+
   // "Cameras" is a deterministic navigation to the grid, not a history pop.
   // window.history.length is unreliable in a restored standalone PWA session
   // (it can be > 1 with no in-app grid entry behind it — e.g. the iOS PWA
@@ -332,6 +390,9 @@
     {toggleMute}
     {toggleQuality}
     {toggleFullscreen}
+    {togglePip}
+    {pipSupported}
+    {pipActive}
     {downloadSnapshot}
     onShowTelemetry={() => {
       showTelemetry = !showTelemetry
@@ -360,6 +421,9 @@
     {toggleMute}
     {toggleQuality}
     {toggleFullscreen}
+    {togglePip}
+    {pipSupported}
+    {pipActive}
     {downloadSnapshot}
     onShowTelemetry={() => {
       showTelemetry = !showTelemetry

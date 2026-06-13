@@ -144,6 +144,7 @@ export const ui = {
   errorReload: 'Перезагрузить',
   menuLabel: 'Меню',
   statsLabel: 'Статистика',
+  pipLabel: 'Картинка в картинке',
   otherCamerasLabel: 'Другие камеры',
   primaryNavLabel: 'Основная навигация',
   groupFilterLabel: 'Фильтр групп',

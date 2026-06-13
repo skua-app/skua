@@ -142,6 +142,7 @@ export const ui = {
   errorReload: 'Reload',
   menuLabel: 'Menu',
   statsLabel: 'Stats',
+  pipLabel: 'Picture in picture',
   otherCamerasLabel: 'Other cameras',
   primaryNavLabel: 'Primary navigation',
   groupFilterLabel: 'Group filter',
