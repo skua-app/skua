@@ -63,9 +63,9 @@
   )
 </script>
 
-<section id="groups" class="settings-section">
+<section id="groups" class="settings-section dk-set-section">
   <header class="section-header">
-    <h2 class="section-title">{ui.sectionGroups}</h2>
+    <h2 class="dk-set-h2">{ui.sectionGroups}</h2>
   </header>
 
   <div class="group-cards">
@@ -81,9 +81,9 @@
   </div>
 
   {#if creating}
-    <div class="group-create">
+    <div class="set-card">
       <input
-        class="text-input"
+        class="set-input"
         type="text"
         placeholder={ui.newGroupPlaceholder}
         bind:value={newName}
@@ -93,13 +93,13 @@
       {#if createError}
         <div class="form-error">{createError}</div>
       {/if}
-      <div class="group-edit-actions">
-        <button type="button" class="btn" onclick={cancelCreate} disabled={busy}>
+      <div class="set-actions">
+        <button type="button" class="set-btn" onclick={cancelCreate} disabled={busy}>
           {ui.cancel}
         </button>
         <button
           type="button"
-          class="btn btn-primary"
+          class="set-btn primary"
           onclick={saveCreate}
           disabled={busy || newName.trim().length === 0}
         >
@@ -108,7 +108,7 @@
       </div>
     </div>
   {:else}
-    <button type="button" class="btn btn-add" onclick={startCreate} disabled={busy}>
+    <button type="button" class="set-btn add" onclick={startCreate} disabled={busy}>
       {ui.createGroup}
     </button>
   {/if}
@@ -130,11 +130,16 @@
       onkeydown={() => {}}
     >
       <p class="confirm-text">{confirmText}</p>
-      <div class="confirm-actions">
-        <button type="button" class="btn" onclick={() => (confirmDeleteId = null)} disabled={busy}>
+      <div class="set-actions">
+        <button
+          type="button"
+          class="set-btn"
+          onclick={() => (confirmDeleteId = null)}
+          disabled={busy}
+        >
           {ui.cancel}
         </button>
-        <button type="button" class="btn btn-danger" onclick={doConfirmDelete} disabled={busy}>
+        <button type="button" class="set-btn danger" onclick={doConfirmDelete} disabled={busy}>
           {ui.delete}
         </button>
       </div>
@@ -146,14 +151,18 @@
   .settings-section {
     display: block;
   }
+  .dk-set-section {
+    max-width: 720px;
+  }
   .section-header {
     margin-bottom: 12px;
   }
-  .section-title {
-    font-size: 15px;
+  .dk-set-h2 {
+    font-size: 20px;
     font-weight: 600;
-    letter-spacing: -0.2px;
-    margin-bottom: 6px;
+    letter-spacing: -0.3px;
+    margin: 0 0 4px;
+    color: var(--text);
   }
   .group-cards {
     display: flex;
@@ -161,86 +170,102 @@
     gap: 10px;
     margin-bottom: 12px;
   }
-  .group-create {
+
+  /* prototype .set-card */
+  .set-card {
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    border: 1px dashed var(--border);
-    border-radius: 10px;
-    padding: 12px 14px;
+    gap: 11px;
+    margin-bottom: 10px;
   }
-  .text-input {
-    padding: 8px 10px;
+
+  /* prototype .set-input */
+  .set-input {
+    width: 100%;
+    padding: 9px 11px;
     font-size: 13px;
     color: var(--text);
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.22);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r-xs);
     font-family: inherit;
   }
-  .text-input:focus {
+  .set-input:focus {
     outline: none;
     border-color: var(--border-strong);
   }
-  .group-edit-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 4px;
-  }
+
   .form-error {
     font-size: 12px;
-    color: oklch(0.68 0.16 25);
+    color: var(--warn);
   }
-  .btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--text);
-    background: transparent;
+
+  /* prototype .set-actions */
+  .set-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  /* prototype .set-btn */
+  .set-btn {
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
     border: 1px solid var(--border-strong);
-    border-radius: 6px;
-    font-family: inherit;
+    background: transparent;
+    color: var(--text);
     cursor: pointer;
-    transition:
-      background 120ms,
-      border-color 120ms,
-      color 120ms,
-      opacity 120ms;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.15s ease;
   }
-  .btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.04);
+  .set-btn:active {
+    transform: translateY(1px);
   }
-  .btn:disabled {
+  .set-btn:hover:not(:disabled) {
+    background: rgba(125, 125, 125, 0.07);
+  }
+  .set-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .btn-primary {
-    color: var(--bg);
+  .set-btn.primary {
     background: var(--accent);
+    color: var(--on-accent);
     border-color: var(--accent);
   }
-  .btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent) 88%, white 12%);
+  .set-btn.primary:hover:not(:disabled) {
+    background: var(--accent);
+    filter: brightness(1.05);
   }
-  .btn-danger {
-    color: oklch(0.68 0.16 25);
-    border-color: color-mix(in oklab, oklch(0.68 0.16 25) 50%, transparent);
+  .set-btn.danger {
+    color: var(--warn);
+    border-color: color-mix(in oklab, var(--warn) 45%, transparent);
   }
-  .btn-danger:hover:not(:disabled) {
-    background: color-mix(in oklab, oklch(0.68 0.16 25) 10%, transparent);
+  .set-btn.danger:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--warn) 10%, transparent);
   }
-  .btn-add {
+  .set-btn.add {
     width: 100%;
-    padding: 10px;
-    color: var(--text-2);
+    padding: 11px;
     border-style: dashed;
     border-color: var(--border);
+    color: var(--text-2);
   }
-  .btn-add:hover:not(:disabled) {
+  .set-btn.add:hover:not(:disabled) {
     color: var(--text);
     border-color: var(--border-strong);
   }
 
+  /* confirm-delete dialog — restyled with tokens */
   .confirm-backdrop {
     position: fixed;
     inset: 0;
@@ -252,7 +277,7 @@
     padding: 16px;
   }
   .confirm-dialog {
-    background: #15171a;
+    background: var(--elev);
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 18px;
@@ -264,10 +289,5 @@
     color: var(--text);
     margin-bottom: 16px;
     line-height: 1.45;
-  }
-  .confirm-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
   }
 </style>

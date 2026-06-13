@@ -88,18 +88,18 @@
   const wide = $derived(cardWidth >= 480)
 </script>
 
-<div class="card" class:wide bind:this={cardEl}>
-  <header class="card-head">
-    <span class="card-id">{camera.id}</span>
-    <span class="card-name">{camera.name}</span>
+<div class="set-card" class:wide bind:this={cardEl}>
+  <header class="sc-head">
+    <span class="sc-id">{camera.id}</span>
+    <span class="sc-name">{camera.name}</span>
   </header>
 
-  <div class="row">
-    <label class="row-label" for="name-{camera.id}">{ui.nameLabel}</label>
-    <div class="row-control name-control">
+  <div class="set-field row">
+    <label class="f-label" for="name-{camera.id}">{ui.nameLabel}</label>
+    <div class="f-inline row-control">
       <input
         id="name-{camera.id}"
-        class="text-input"
+        class="set-input"
         type="text"
         value={nameValue}
         oninput={onNameInput}
@@ -109,7 +109,7 @@
       />
       <button
         type="button"
-        class="btn btn-primary btn-sm"
+        class="set-btn sm primary"
         disabled={!nameDirty || nameBusy}
         onclick={saveName}
       >
@@ -121,12 +121,12 @@
     <div class="row-error">{nameError}</div>
   {/if}
 
-  <div class="row">
-    <label class="row-label" for="main-{camera.id}">{ui.streamMain}</label>
+  <div class="set-field row">
+    <label class="f-label" for="main-{camera.id}">{ui.streamMain}</label>
     <div class="row-control">
       <select
         id="main-{camera.id}"
-        class="select"
+        class="set-select"
         value={currentOverride.main}
         onchange={(e) => onStreamChange('main', e)}
         disabled={streamsDisabled || !streamsLoaded}
@@ -142,12 +142,12 @@
     </div>
   </div>
 
-  <div class="row">
-    <label class="row-label" for="sub-{camera.id}">{ui.streamSub}</label>
+  <div class="set-field row">
+    <label class="f-label" for="sub-{camera.id}">{ui.streamSub}</label>
     <div class="row-control">
       <select
         id="sub-{camera.id}"
-        class="select"
+        class="set-select"
         value={currentOverride.sub}
         onchange={(e) => onStreamChange('sub', e)}
         disabled={streamsDisabled || !streamsLoaded}
@@ -168,97 +168,107 @@
 </div>
 
 <style>
-  .card {
+  /* prototype .set-card */
+  .set-card {
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
+    border-radius: var(--r-sm);
     background: var(--surface);
+    padding: 14px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 11px;
+    margin-bottom: 10px;
   }
-  .card-head {
+  .sc-head {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 12px;
-    margin-bottom: 4px;
   }
-  .card-id {
+  .sc-id {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 11px;
     color: var(--text-3);
     letter-spacing: 0.3px;
   }
-  .card-name {
+  .sc-name {
     font-size: 14px;
     font-weight: 600;
     color: var(--text);
-    text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: right;
   }
 
-  .row {
+  /* prototype .set-field (narrow) — label above */
+  .set-field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
   }
-  .wide .row {
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-  }
-  .row-label {
+  .f-label {
     font-size: 12px;
     color: var(--text-3);
   }
-  .wide .row-label {
-    width: 100px;
-    flex: 0 0 100px;
+  .f-inline {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .f-inline .set-input {
+    flex: 1 1 auto;
   }
   .row-control {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
-    flex: 1;
-  }
-  .name-control {
-    display: flex;
-    gap: 8px;
-  }
-  .name-control .text-input {
-    flex: 1;
-    min-width: 0;
   }
 
-  .text-input,
-  .select {
-    padding: 8px 10px;
+  /* wide variant — label-left / control-right (.dk-setline-style) */
+  .wide .set-field.row {
+    flex-direction: row;
+    align-items: center;
+    gap: 18px;
+  }
+  .wide .f-label {
+    flex: 0 0 110px;
+    font-size: 13px;
+    color: var(--text-2);
+  }
+  .wide .row-control {
+    flex: 1 1 auto;
+  }
+
+  /* prototype .set-input / .set-select */
+  .set-input,
+  .set-select {
+    width: 100%;
+    padding: 9px 11px;
     font-size: 13px;
     color: var(--text);
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.22);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--r-xs);
     font-family: inherit;
     min-width: 0;
   }
-  .text-input:focus,
-  .select:focus {
+  .set-input:focus,
+  .set-select:focus {
     outline: none;
     border-color: var(--border-strong);
   }
-  .select {
+  .set-select {
     flex: 1;
+    -webkit-appearance: none;
     appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 7' width='12' height='7'><path fill='rgba(245,246,247,0.58)' d='M0 0l6 7 6-7z'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 7' width='12' height='7'><path fill='%23888' d='M0 0l6 7 6-7z'/></svg>");
     background-repeat: no-repeat;
-    background-position: right 10px center;
+    background-position: right 11px center;
     padding-right: 28px;
   }
-  .select:disabled {
+  .set-select:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
@@ -270,44 +280,47 @@
   }
   .row-error {
     font-size: 12px;
-    color: oklch(0.68 0.16 25);
+    color: var(--warn);
     line-height: 1.4;
-    margin-top: -2px;
+    margin-top: -4px;
   }
 
-  .btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    color: var(--text);
-    background: transparent;
+  /* prototype .set-btn */
+  .set-btn {
+    padding: 9px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
     border: 1px solid var(--border-strong);
-    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
     font-family: inherit;
     cursor: pointer;
-    transition:
-      background 120ms,
-      border-color 120ms,
-      color 120ms,
-      opacity 120ms;
+    white-space: nowrap;
+    transition: background 0.15s ease;
     flex-shrink: 0;
   }
-  .btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.04);
+  .set-btn:active {
+    transform: translateY(1px);
   }
-  .btn:disabled {
+  .set-btn:hover:not(:disabled) {
+    background: rgba(125, 125, 125, 0.07);
+  }
+  .set-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  .btn-sm {
-    padding: 4px 10px;
-    font-size: 11px;
+  .set-btn.sm {
+    padding: 5px 11px;
+    font-size: 12px;
   }
-  .btn-primary {
-    color: var(--bg);
+  .set-btn.primary {
     background: var(--accent);
+    color: var(--on-accent);
     border-color: var(--accent);
   }
-  .btn-primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent) 88%, white 12%);
+  .set-btn.primary:hover:not(:disabled) {
+    background: var(--accent);
+    filter: brightness(1.05);
   }
 </style>
