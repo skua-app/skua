@@ -25,6 +25,29 @@
     posterTick = Date.now()
   })
 
+  // Freeze-frame shown while the user has paused the live view. Captured
+  // off the <video> element at pause time and cleared on resume / reconnect
+  // / camera switch so a stale frame never lingers.
+  let pausedFrameUrl = $state<string | null>(null)
+  function captureFrame(): string | null {
+    if (!videoEl) return null
+    const w = videoEl.videoWidth
+    const h = videoEl.videoHeight
+    if (!w || !h) return null
+    try {
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return null
+      ctx.drawImage(videoEl, 0, 0, w, h)
+      return canvas.toDataURL('image/jpeg', 0.9)
+    } catch {
+      // CORS-tainted or otherwise un-encodable: fall through to poster.
+      return null
+    }
+  }
+
   let videoEl = $state<HTMLVideoElement | null>(null)
   let streamState = $state<WhepHandle['state']>('connecting')
   let latencyMs = $state<number | null>(null)
@@ -66,6 +89,10 @@
     streamState = 'connecting'
     isPaused = false
     videoPlaying = false
+    // Drop any freeze-frame from a previous pause so reconnect / retry /
+    // quality toggle / camera switch / foreground re-arm never re-shows
+    // a stale frame.
+    pausedFrameUrl = null
 
     const controller = new AbortController()
     abortController = controller
@@ -134,9 +161,13 @@
 
   function togglePause() {
     if (isPaused) {
+      pausedFrameUrl = null
       const cam = untrack(() => camerasStore.cameras.find((c) => c.id === camId) ?? null)
       if (cam) connect(cam)
     } else {
+      // Capture before disconnect — once the peer connection tears down the
+      // <video> element fires `emptied` and videoWidth drops to 0.
+      pausedFrameUrl = captureFrame()
       disconnect()
       isPaused = true
       streamState = 'closed'
@@ -358,6 +389,10 @@
     class:hidden={streamState === 'failed'}
   ></video>
 
+  {#if isPaused && pausedFrameUrl}
+    <img src={pausedFrameUrl} alt="" class="freeze" />
+  {/if}
+
   {#if !videoPlaying && streamState !== 'failed' && !isPaused}
     <div class="overlay-spinner">
       <div class="spinner-pill">
@@ -466,6 +501,18 @@
   }
   .poster.faded {
     opacity: 0;
+  }
+  /* Freeze-frame layer: stacked above the poster and the (now emptied)
+     <video>, so the user keeps seeing the exact frame at the moment of
+     pause until they resume. */
+  .freeze {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    pointer-events: none;
+    z-index: 1;
   }
   .video-el {
     position: absolute;
