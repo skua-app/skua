@@ -79,8 +79,42 @@ export type EventsQuery = {
   limit?: number
 }
 
+// Typed error surface for the read path. Lets the connection overlay pick
+// a user-facing message and lets callers retry intelligently rather than
+// guessing from a string.
+export type ApiErrorKind = 'offline' | 'timeout' | 'server' | 'unknown'
+export class ApiError extends Error {
+  kind: ApiErrorKind
+  status?: number
+  constructor(kind: ApiErrorKind, message: string, status?: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.kind = kind
+    this.status = status
+  }
+}
+
+const API_TIMEOUT_MS = 10_000
+
 async function apiFetch<T>(path: string): Promise<T> {
-  const res = await fetch(path)
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(path, { signal: ctrl.signal })
+  } catch (e) {
+    // AbortController firing surfaces as DOMException 'AbortError'. Any
+    // network/DNS/connection failure surfaces as a TypeError in fetch.
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new ApiError('timeout', `${path}: request timed out`)
+    }
+    if (e instanceof TypeError) {
+      throw new ApiError('offline', `${path}: network unreachable`)
+    }
+    throw new ApiError('unknown', `${path}: ${e instanceof Error ? e.message : String(e)}`)
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
     try {
@@ -91,7 +125,7 @@ async function apiFetch<T>(path: string): Promise<T> {
     } catch {
       // non-JSON or empty body: keep the status-text fallback
     }
-    throw new Error(`${path}: ${message}`)
+    throw new ApiError('server', `${path}: ${message}`, res.status)
   }
   return res.json() as Promise<T>
 }

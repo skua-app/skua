@@ -214,6 +214,14 @@ export const ui = {
   // moment / event modal
   openLive: 'Open live',
   liveTag: 'LIVE',
+  // server-reachability overlay
+  connTitle: "Can't reach your Skua server",
+  connOffline: 'Your device looks offline.',
+  connTimeout: "The server isn't responding.",
+  connServer: 'The server returned an error.',
+  connUnknown: 'Something went wrong reaching the server.',
+  connHint: "Check your VPN or that you're on the same network as the server.",
+  connBannerStale: "Can't reach the server — showing last known state",
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',

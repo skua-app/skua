@@ -215,6 +215,14 @@ export const ui = {
   // moment / event modal
   openLive: 'Открыть эфир',
   liveTag: 'ЭФИР',
+  // server-reachability overlay
+  connTitle: 'Не удаётся подключиться к серверу Skua',
+  connOffline: 'Похоже, устройство не в сети.',
+  connTimeout: 'Сервер не отвечает.',
+  connServer: 'Сервер вернул ошибку.',
+  connUnknown: 'Что-то пошло не так при подключении к серверу.',
+  connHint: 'Проверьте VPN и что вы в одной сети с сервером.',
+  connBannerStale: 'Нет связи с сервером — показано последнее состояние',
   // theme (device-local)
   themeLabel: 'Тема',
   themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',
