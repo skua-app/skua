@@ -151,8 +151,12 @@
   }
 
   // PiP control. Feature-detected against both the W3C and the WebKit
-  // presentation-mode APIs so desktop Chrome/Edge and macOS Safari both work;
-  // iOS Safari inline-video does not support PiP and pipSupported stays false.
+  // presentation-mode APIs so desktop Chrome/Edge, iPadOS Safari, and macOS
+  // Safari all work. iPhone reports webkitSupportsPresentationMode('picture-
+  // in-picture') === true but cannot PiP a live MediaStream — webkitSet-
+  // PresentationMode no-ops, leaving a dead button — so iPhone is excluded
+  // from the WebKit path. iPad UAs report as Macintosh, not iPhone, so they
+  // keep PiP support.
   type WebkitVideo = HTMLVideoElement & {
     webkitSupportsPresentationMode?: (mode: string) => boolean
     webkitSetPresentationMode?: (mode: string) => void
@@ -183,11 +187,13 @@
     const el = videoEl
     if (!el) return
     const wk = el as WebkitVideo
+    const isIPhone = typeof navigator !== 'undefined' && /iPhone/.test(navigator.userAgent)
     pipSupported =
       (document.pictureInPictureEnabled === true &&
         typeof el.requestPictureInPicture === 'function') ||
       (typeof wk.webkitSupportsPresentationMode === 'function' &&
-        wk.webkitSupportsPresentationMode('picture-in-picture') === true)
+        wk.webkitSupportsPresentationMode('picture-in-picture') === true &&
+        !isIPhone)
 
     const onEnter = () => {
       pipActive = true
