@@ -102,11 +102,15 @@
 
 {#if isDesktop}
   <div class="dk-page wide">
+    <div class="dk-pagehead">
+      <div class="dk-h1">{ui.settings}</div>
+    </div>
     <div class="dk-settings">
       <nav class="dk-setnav" aria-label={ui.settings}>
         {#each navGroups as g (g.label)}
           <div class="sn-group">{g.label}</div>
           {#each g.items as it (it.id)}
+            {@const v = sectionValue(it.id)}
             <button
               type="button"
               class="dk-setitem"
@@ -116,6 +120,7 @@
             >
               <Icon name={it.icon} size={19} />
               <span class="dk-setitem-label">{it.label}</span>
+              {#if v !== null}<span class="val">{v}</span>{/if}
             </button>
           {/each}
         {/each}
@@ -127,6 +132,7 @@
   </div>
 {:else if mobileView === 'index'}
   <div class="m-index">
+    <h1 class="m-title">{ui.settings}</h1>
     {#each navGroups as g (g.label)}
       <div class="set-grouplabel">{g.label}</div>
       <div class="set-block">
@@ -172,6 +178,20 @@
      ============================================================ */
   .dk-page {
     padding: 24px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
+  }
+  .dk-pagehead {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+  .dk-h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.6px;
+    line-height: 1.05;
+    color: var(--text);
   }
   .dk-settings {
     display: grid;
@@ -222,6 +242,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .dk-setitem .val {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    white-space: nowrap;
+    flex: 0 0 auto;
+  }
   .dk-setitem:hover {
     color: var(--text);
     background: var(--surface);
@@ -229,6 +257,9 @@
   .dk-setitem.on {
     color: var(--accent);
     background: var(--accent-soft);
+  }
+  .dk-setitem.on .val {
+    color: var(--accent);
   }
   .dk-setpane {
     min-width: 0;
@@ -242,6 +273,13 @@
     max-width: 720px;
     margin: 0 auto;
     padding: 6px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
+  }
+  .m-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+    color: var(--text);
+    margin: 6px 4px 4px;
   }
   .set-grouplabel {
     padding: 20px 4px 6px;
