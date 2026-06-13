@@ -9,6 +9,7 @@
   import { eventKindLabels, ui } from '$lib/i18n/strings'
   import { formatDuration, eventTimestamp } from '$lib/util/time'
   import Mono from '$lib/components/Mono.svelte'
+  import ZoomPane from '$lib/components/ZoomPane.svelte'
 
   type Props = {
     moment: GlanceMoment
@@ -203,24 +204,26 @@
     <div class="mm-title">{titleText}</div>
 
     <div class="mm-snap">
-      {#if selectedEvent.has_clip && !clipFailed}
-        <!-- svelte-ignore a11y_media_has_caption -->
-        <video
-          src={eventClipURL(selectedEvent.id)}
-          poster={eventSnapshotURL(selectedEvent.id)}
-          controls
-          playsinline
-          preload="metadata"
-          bind:this={videoEl}
-          onerror={() => (clipFailed = true)}
-        ></video>
-      {:else}
-        <img
-          src={eventSnapshotURL(selectedEvent.id)}
-          alt={`${camName} · ${kindLabel}`}
-          loading="lazy"
-        />
-      {/if}
+      <ZoomPane resetKey={selectedEvent.id}>
+        {#if selectedEvent.has_clip && !clipFailed}
+          <!-- svelte-ignore a11y_media_has_caption -->
+          <video
+            src={eventClipURL(selectedEvent.id)}
+            poster={eventSnapshotURL(selectedEvent.id)}
+            controls
+            playsinline
+            preload="metadata"
+            bind:this={videoEl}
+            onerror={() => (clipFailed = true)}
+          ></video>
+        {:else}
+          <img
+            src={eventSnapshotURL(selectedEvent.id)}
+            alt={`${camName} · ${kindLabel}`}
+            loading="lazy"
+          />
+        {/if}
+      </ZoomPane>
     </div>
 
     {#if selectedEvent.has_clip && clipFailed}
