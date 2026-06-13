@@ -15,6 +15,16 @@
   const camId = $derived(page.params.id)
   const camera = $derived(camerasStore.cameras.find((c) => c.id === camId) ?? null)
 
+  // Cache-buster for the poster <img>. The SW StaleWhileRevalidate rule
+  // (Part A) strips the query when keying its cache, so each visit returns
+  // the last cached tile immediately and revalidates to current. Resetting
+  // on camId change refreshes the poster when navigating between cameras.
+  let posterTick = $state(Date.now())
+  $effect(() => {
+    void camId
+    posterTick = Date.now()
+  })
+
   let videoEl = $state<HTMLVideoElement | null>(null)
   let streamState = $state<WhepHandle['state']>('connecting')
   let latencyMs = $state<number | null>(null)
@@ -332,7 +342,7 @@
 
 {#snippet videoSnippet()}
   <img
-    src="/api/cameras/{camId}/snapshot.jpg"
+    src="/api/cameras/{camId}/tile.jpg?t={posterTick}"
     alt=""
     loading="eager"
     class="poster"
