@@ -57,10 +57,12 @@ export const ui = {
     'Как выглядят стена, плитки и дайджест «пока вас не было». Настройки синхронизируются между всеми устройствами.',
   sectionCameras: 'Камеры',
   sectionGroups: 'Группы',
+  groupsDescription: 'Объедините камеры в группы для фильтра стены и выбора камер в событиях.',
   // settings > connection section (E7.1)
   sectionConnection: 'Подключение',
   // settings > about + master-detail nav
   sectionAbout: 'О приложении',
+  aboutDescription: 'Спокойный фронтенд для Frigate.',
   aboutTagline: 'Спокойный фронтенд для Frigate',
   settingsGroupPersonalize: 'Персонализация',
   settingsGroupManage: 'Управление',
