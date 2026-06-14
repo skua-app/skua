@@ -225,8 +225,9 @@ func main() {
 	// No Client.Timeout here: clip fetches must honour handleEventClip's 30s
 	// per-call context, not a 5s blanket cap (which would bound every Range
 	// request body read). List and FetchImage already set their own 5s
-	// contexts, so their effective bound is unchanged.
-	eventsClient := events.NewClient(cfg.FrigateURL, nil)
+	// contexts, so their effective bound is unchanged. Per-clip buffer cap
+	// is configurable via CLIP_MAX_MIB (default 256 MiB).
+	eventsClient := events.NewClient(cfg.FrigateURL, nil, cfg.ClipMaxBytes)
 
 	hub := sse.NewHub(logger)
 	wsURL, err := sse.DeriveWSURL(cfg.FrigateURL)

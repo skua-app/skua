@@ -36,10 +36,11 @@ func countingClipServer(t *testing.T, body []byte) (*httptest.Server, func() int
 // scenarios in process memory.
 func newTestClient(srvURL string, cache *clipCache) *Client {
 	return &Client{
-		baseURL:    strings.TrimRight(srvURL, "/"),
-		httpClient: &http.Client{},
-		clips:      cache,
-		inflight:   make(map[string]*clipInflight),
+		baseURL:      strings.TrimRight(srvURL, "/"),
+		httpClient:   &http.Client{},
+		clips:        cache,
+		maxClipBytes: defaultClipMaxBytes,
+		inflight:     make(map[string]*clipInflight),
 	}
 }
 
@@ -143,7 +144,7 @@ func TestList_BuildsParams(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	_, err := c.List(context.Background(), ListParams{
 		Cameras: []string{"cam5", "cam7"},
 		Labels:  []string{"person", "car"},
@@ -180,7 +181,7 @@ func TestList_CursorOnFullPage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	resp, err := c.List(context.Background(), ListParams{Limit: 2})
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -216,7 +217,7 @@ func TestServeClip_InlineWithRange(t *testing.T) {
 	srv := fakeFrigateClipServer(t, &gotPath, body)
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	req := httptest.NewRequest(http.MethodGet, "/api/events/evt-1/clip.mp4", nil)
 	rec := httptest.NewRecorder()
 	if err := c.ServeClip(context.Background(), "evt-1", rec, req, ""); err != nil {
@@ -256,7 +257,7 @@ func TestServeClip_DownloadDisposition(t *testing.T) {
 	srv := fakeFrigateClipServer(t, nil, []byte("body"))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	req := httptest.NewRequest(http.MethodGet, "/api/events/evt-2/clip.mp4?download=1", nil)
 	rec := httptest.NewRecorder()
 	if err := c.ServeClip(context.Background(), "evt-2", rec, req, "frigate-evt-2.mp4"); err != nil {
@@ -278,7 +279,7 @@ func TestServeClip_RangeRequest(t *testing.T) {
 	srv := fakeFrigateClipServer(t, nil, body)
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	req := httptest.NewRequest(http.MethodGet, "/api/events/evt-r/clip.mp4", nil)
 	req.Header.Set("Range", "bytes=0-1")
 	rec := httptest.NewRecorder()
@@ -306,7 +307,7 @@ func TestServeClip_UpstreamNotFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	req := httptest.NewRequest(http.MethodGet, "/api/events/missing/clip.mp4", nil)
 	rec := httptest.NewRecorder()
 	err := c.ServeClip(context.Background(), "missing", rec, req, "")
@@ -322,14 +323,16 @@ func TestServeClip_UpstreamNotFound(t *testing.T) {
 }
 
 func TestServeClip_BodyOverLimit(t *testing.T) {
-	// Stream slightly over the cap so we don't allocate a real 64 MiB buffer
-	// in the test process. The fake handler writes in 1 MiB chunks until the
-	// client either disconnects or the body cap is exceeded.
+	// Use a small explicit cap (4 MiB) so the test doesn't have to materialise
+	// the default 256 MiB cap in process memory. The fake handler writes 1
+	// MiB chunks until the client either disconnects or the body cap is
+	// exceeded.
+	const testCapBytes int64 = 4 << 20
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "video/mp4")
 		w.WriteHeader(http.StatusOK)
 		chunk := make([]byte, 1<<20)
-		for i := 0; i < int(clipMaxBytes>>20)+2; i++ {
+		for i := 0; i < int(testCapBytes>>20)+2; i++ {
 			if _, err := w.Write(chunk); err != nil {
 				return
 			}
@@ -337,7 +340,7 @@ func TestServeClip_BodyOverLimit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, testCapBytes)
 	req := httptest.NewRequest(http.MethodGet, "/api/events/big/clip.mp4", nil)
 	rec := httptest.NewRecorder()
 	err := c.ServeClip(context.Background(), "big", rec, req, "")
@@ -357,7 +360,7 @@ func TestServeClip_CacheHitSkipsUpstream(t *testing.T) {
 	srv, hits := countingClipServer(t, body)
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	for i := 0; i < 3; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/api/events/cache-1/clip.mp4", nil)
 		rec := httptest.NewRecorder()
@@ -381,7 +384,7 @@ func TestServeClip_CacheMissOnDifferentID(t *testing.T) {
 	srv, hits := countingClipServer(t, body)
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	for _, id := range []string{"a", "b", "c"} {
 		req := httptest.NewRequest(http.MethodGet, "/api/events/"+id+"/clip.mp4", nil)
 		rec := httptest.NewRecorder()
@@ -503,7 +506,7 @@ func TestServeClip_HEADReusesCachedBytes(t *testing.T) {
 	srv, hits := countingClipServer(t, body)
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 
 	headReq := httptest.NewRequest(http.MethodHead, "/api/events/h1/clip.mp4", nil)
 	headRec := httptest.NewRecorder()
@@ -562,7 +565,7 @@ func TestServeClip_SingleFlightCollapsesColdMiss(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 
 	type result struct {
 		body []byte
@@ -631,7 +634,7 @@ func TestServeClip_SingleFlightSurvivesFirstCallerCancel(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 
 	type result struct {
 		body []byte
@@ -748,7 +751,7 @@ func TestList_NoCursorOnShortPage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 	resp, err := c.List(context.Background(), ListParams{Limit: 5})
 	if err != nil {
 		t.Fatalf("List: %v", err)

@@ -34,7 +34,7 @@ func glanceRouterWith(t *testing.T, upstream http.Handler) (http.Handler, *glanc
 	t.Cleanup(frigateSrv.Close)
 
 	logger := applog.New("error", "text")
-	eventsClient := events.NewClient(frigateSrv.URL, &http.Client{})
+	eventsClient := events.NewClient(frigateSrv.URL, &http.Client{}, 0)
 	path := filepath.Join(t.TempDir(), "glance.json")
 	glanceStore, err := glance.New(path)
 	if err != nil {
