@@ -35,6 +35,7 @@
     toggleMute: () => void
     toggleQuality: () => void
     toggleFullscreen: () => void
+    isFullscreen: boolean
     togglePip: () => void
     pipSupported: boolean
     pipActive: boolean
@@ -64,6 +65,7 @@
     toggleMute,
     toggleQuality,
     toggleFullscreen,
+    isFullscreen,
     togglePip,
     pipSupported,
     pipActive,
@@ -278,7 +280,7 @@
             </button>
           {/if}
           <button type="button" class="dk-livebtn" onclick={toggleFullscreen}>
-            <Icon name="fullscreen" size={20} />
+            <Icon name={isFullscreen ? 'exitFull' : 'fullscreen'} size={20} />
             <span>Fullscreen</span>
           </button>
         {:else}

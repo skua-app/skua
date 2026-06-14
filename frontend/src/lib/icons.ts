@@ -84,8 +84,8 @@ export const ICONS: Record<IconName, IconDef> = {
       'M12 18v3'
     ]
   },
-  fullscreen: { paths: ['M4 9V4h5', 'M20 9V4h-5', 'M4 15v5h5', 'M20 15v5h-5'] },
-  exitFull: { paths: ['M9 4v5H4', 'M15 4v5h5', 'M9 20v-5H4', 'M15 20v-5h5'] },
+  fullscreen: { paths: ['M15 3h6v6', 'M21 3l-7 7', 'M9 21H3v-6', 'M3 21l7-7'] },
+  exitFull: { paths: ['M4 14h6v6', 'M10 14l-7 7', 'M20 10h-6V4', 'M14 10l7-7'] },
   snapshot: {
     paths: [
       'M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z',

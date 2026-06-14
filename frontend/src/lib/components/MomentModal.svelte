@@ -9,6 +9,7 @@
   import { eventKindLabels, ui } from '$lib/i18n/strings'
   import { formatDuration, eventTimestamp } from '$lib/util/time'
   import Mono from '$lib/components/Mono.svelte'
+  import Icon from '$lib/components/Icon.svelte'
   import ZoomPane from '$lib/components/ZoomPane.svelte'
 
   type Props = {
@@ -302,17 +303,30 @@
         {ui.close}
       </button>
       {#if selectedEvent.has_clip}
-        <a class="mm-btn mm-btn-secondary" href={eventClipURL(selectedEvent.id, true)} download>
-          {ui.downloadVideo}
+        <a
+          class="mm-btn mm-btn-secondary mm-btn-icon"
+          href={eventClipURL(selectedEvent.id, true)}
+          download
+          aria-label={ui.downloadVideo}
+          title={ui.downloadVideo}
+        >
+          <Icon name="download" size={20} />
         </a>
       {/if}
       {#if onOpenLive}
-        <button type="button" class="mm-btn mm-btn-secondary" onclick={onOpenLive}>
-          {ui.openLive}
+        <button
+          type="button"
+          class="mm-btn mm-btn-secondary mm-btn-icon"
+          onclick={onOpenLive}
+          aria-label={ui.openLive}
+          title={ui.openLive}
+        >
+          <Icon name="cams" size={20} />
         </button>
       {/if}
       {#if deepLink}
         <a class="mm-btn mm-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
+          <Icon name="link" size={16} />
           {ui.openInFrigate}
         </a>
       {/if}
@@ -567,6 +581,16 @@
   }
   .mm-btn-secondary:hover {
     background: var(--border-strong);
+  }
+  .mm-btn-icon {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    flex: 0 0 auto;
+    color: var(--text-2);
+  }
+  .mm-btn-icon:hover {
+    color: var(--text);
   }
   .mm-btn-primary {
     color: var(--on-accent);

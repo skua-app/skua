@@ -59,6 +59,7 @@
   let errorReason = $state<string | null>(null)
   let showTelemetry = $state(false)
   let isPaused = $state(false)
+  let isFullscreen = $state(false)
   let isMuted = $state(prefsStore.mutedByDefault)
   let streamQuality = $state<'main' | 'sub'>('main')
   // A camera only has an LQ option when Frigate exposes a Sub stream for it.
@@ -362,9 +363,24 @@
       if (cam) connect(cam)
     })
 
+    // Track fullscreen state so the livebar button can swap between the
+    // outward (enter) and inward (exit) diagonal-arrow glyphs. Covers the
+    // standard `fullscreenchange` event plus the WebKit prefixed event for
+    // iOS Safari's native video fullscreen path.
+    const onFsChange = () => {
+      isFullscreen = !!(
+        document.fullscreenElement ??
+        (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
+      )
+    }
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+
     return () => {
       offBg()
       offFg()
+      document.removeEventListener('fullscreenchange', onFsChange)
+      document.removeEventListener('webkitfullscreenchange', onFsChange)
     }
   })
 </script>
@@ -444,6 +460,7 @@
     {toggleMute}
     {toggleQuality}
     {toggleFullscreen}
+    {isFullscreen}
     {togglePip}
     {pipSupported}
     {pipActive}
@@ -475,6 +492,7 @@
     {toggleMute}
     {toggleQuality}
     {toggleFullscreen}
+    {isFullscreen}
     {togglePip}
     {pipSupported}
     {pipActive}
