@@ -107,7 +107,7 @@
 <div class="desktop-grid">
   <main class="dg-main">
     <div class="dk-pagehead">
-      <div>
+      <div class="dk-titlewrap">
         <div class="dk-h1">{ui.cameras}</div>
         <div class="dk-sub">
           <span class="gd" aria-hidden="true"></span>
@@ -231,6 +231,12 @@
     gap: 18px;
     margin-bottom: 20px;
   }
+  .dk-titlewrap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    min-width: 0;
+  }
   .dk-h1 {
     font-size: 28px;
     font-weight: 600;
@@ -239,7 +245,6 @@
     color: var(--text);
   }
   .dk-sub {
-    margin-top: 6px;
     display: flex;
     align-items: center;
     gap: 8px;

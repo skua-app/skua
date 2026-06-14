@@ -92,7 +92,7 @@
 
 <div class="dk-page wide">
   <div class="dk-pagehead">
-    <div class="dk-pagehead-title">
+    <div class="dk-titlewrap">
       <div class="dk-h1">{ui.eventsTitle}</div>
       <div class="dk-sub">
         <span class="gd" aria-hidden="true"></span>
@@ -201,12 +201,12 @@
   /* dk-pagehead */
   .dk-pagehead {
     display: flex;
-    align-items: baseline;
+    align-items: flex-end;
     justify-content: space-between;
     gap: 18px;
     margin-bottom: 20px;
   }
-  .dk-pagehead-title {
+  .dk-titlewrap {
     display: flex;
     align-items: baseline;
     gap: 12px;
