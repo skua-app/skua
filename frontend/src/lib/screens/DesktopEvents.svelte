@@ -92,7 +92,7 @@
 
 <div class="dk-page wide">
   <div class="dk-pagehead">
-    <div>
+    <div class="dk-titlewrap">
       <div class="dk-h1">{ui.eventsTitle}</div>
       <div class="dk-sub">
         <span class="gd" aria-hidden="true"></span>
@@ -206,6 +206,12 @@
     gap: 18px;
     margin-bottom: 20px;
   }
+  .dk-titlewrap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    min-width: 0;
+  }
   .dk-h1 {
     font-size: 28px;
     font-weight: 600;
@@ -214,7 +220,6 @@
     color: var(--text);
   }
   .dk-sub {
-    margin-top: 6px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -233,16 +238,16 @@
   .dk-filterbar {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    margin-bottom: 22px;
+    gap: 8px;
+    margin-bottom: 14px;
   }
   .dk-filterrow {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
   }
   .dk-filterrow .lbl {
-    flex: 0 0 84px;
+    flex: 0 0 64px;
     font-family: 'JetBrains Mono', ui-monospace, monospace;
     font-size: 10px;
     font-weight: 500;
@@ -263,8 +268,8 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 8px 15px;
-    font-size: 14px;
+    padding: 6px 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-2);
     background: var(--surface);

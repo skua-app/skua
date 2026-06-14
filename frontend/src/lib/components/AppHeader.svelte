@@ -59,6 +59,10 @@
   }
   const mobileTitle = $derived(titleByRoute[page.route.id ?? ''] ?? '')
   const showControlBar = $derived(page.route.id === '/')
+  // Settings has its own master/detail breadcrumb beneath the header and no
+  // wall context, so the camera-status caption is noise there. Cameras (/)
+  // and Events (/events) still get it inline next to the title.
+  const showStatus = $derived(page.route.id !== '/settings')
   const activeGroup = $derived(
     prefsStore.gridFilter ? groupsStore.groups.find((g) => g.id === prefsStore.gridFilter) : null
   )
@@ -207,12 +211,14 @@
     <div class="head-row">
       <div class="head-title">
         <span class="title-xl">{mobileTitle}</span>
-        <span class="head-caption">
-          <span class="gd" aria-hidden="true"></span>
-          {onlineCount}
-          {ui.online} · {offlineCount}
-          {ui.offline}
-        </span>
+        {#if showStatus}
+          <span class="head-caption">
+            <span class="gd" aria-hidden="true"></span>
+            {onlineCount}
+            {ui.online} · {offlineCount}
+            {ui.offline}
+          </span>
+        {/if}
       </div>
       {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
@@ -348,17 +354,22 @@
   }
   .head-title {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: nowrap;
+    gap: 10px;
     min-width: 0;
   }
   .title-xl {
+    flex: 0 0 auto;
     font-size: 22px;
     font-weight: 600;
     letter-spacing: -0.4px;
     color: var(--text);
   }
   .head-caption {
+    flex: 0 1 auto;
+    min-width: 0;
     font-size: 13px;
     color: var(--text-2);
     white-space: nowrap;
