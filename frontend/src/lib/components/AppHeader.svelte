@@ -348,17 +348,22 @@
   }
   .head-title {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: nowrap;
+    gap: 10px;
     min-width: 0;
   }
   .title-xl {
+    flex: 0 0 auto;
     font-size: 22px;
     font-weight: 600;
     letter-spacing: -0.4px;
     color: var(--text);
   }
   .head-caption {
+    flex: 0 1 auto;
+    min-width: 0;
     font-size: 13px;
     color: var(--text-2);
     white-space: nowrap;

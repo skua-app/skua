@@ -225,22 +225,20 @@
   .chip-groups {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-bottom: 16px;
+    gap: 8px;
+    margin-bottom: 12px;
   }
   .chip-group {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 13px;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
     min-width: 0;
   }
-  .chip-group:first-child {
-    margin-top: 0;
-  }
   .chip-label {
-    padding: 0 2px;
+    flex: 0 0 46px;
     display: inline-flex;
+    align-items: center;
   }
   /* calm .chips — horizontally-scrolling pill row, scrollbar hidden */
   .chips {
@@ -251,6 +249,8 @@
     padding-bottom: 2px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .chips::-webkit-scrollbar {
     height: 0;
@@ -261,8 +261,8 @@
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 8px 15px;
-    font-size: 14px;
+    padding: 6px 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-2);
     background: var(--surface);
