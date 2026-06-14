@@ -8,6 +8,7 @@
   import { eventKindLabels, ui } from '$lib/i18n/strings'
   import { formatDuration } from '$lib/util/time'
   import Mono from '$lib/components/Mono.svelte'
+  import Icon from '$lib/components/Icon.svelte'
 
   type Props = {
     event: EventItem
@@ -183,12 +184,19 @@
         {ui.close}
       </button>
       {#if event.has_clip}
-        <a class="em-btn em-btn-secondary" href={eventClipURL(event.id, true)} download>
-          {ui.downloadVideo}
+        <a
+          class="em-btn em-btn-secondary em-btn-icon"
+          href={eventClipURL(event.id, true)}
+          download
+          aria-label={ui.downloadVideo}
+          title={ui.downloadVideo}
+        >
+          <Icon name="download" size={20} />
         </a>
       {/if}
       {#if deepLink}
         <a class="em-btn em-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
+          <Icon name="link" size={16} />
           {ui.openInFrigate}
         </a>
       {/if}
@@ -316,6 +324,16 @@
   }
   .em-btn-secondary:hover {
     background: var(--border-strong);
+  }
+  .em-btn-icon {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    flex: 0 0 auto;
+    color: var(--text-2);
+  }
+  .em-btn-icon:hover {
+    color: var(--text);
   }
   .em-btn-primary {
     color: var(--on-accent);
