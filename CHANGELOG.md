@@ -16,199 +16,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.12.0] — 2026-06-14
 
-### Added
+Added
+- A refreshed interface across the whole app — grid, camera focus view, events, settings, and the "while you were away" sheet — on both phone and desktop, with a cleaner layout and clearer controls.
+- Light, dark, and auto themes. Auto follows your device's system setting. Your choice is remembered per device, so switching theme on your phone doesn't change it on other household devices.
+- Picture-in-picture button in the camera view on desktop and Android. (iPhone is excluded because Safari can't do picture-in-picture on a live stream.)
+- Pinch-to-zoom on the live camera and on event/moment clips: pinch on touch, scroll-wheel zoom on desktop, drag to pan, double-tap to reset.
+- Freeze-frame on pause: pausing the live view now holds the current frame instead of dropping back to an older thumbnail.
+- A "while you were away" digest. On opening the app you get a sheet of recent activity grouped into per-camera "moments" (nearby detections clustered together), with an unseen count on a header bell you can reopen any time. Opening a moment marks just that one as seen; "mark all seen" clears the rest. Just dismissing the sheet never marks anything seen. You can set how far back it looks (6–72 hours) and how many moments it shows, in Settings → Appearance.
+- The running app version is now shown in Settings → About.
 
-- Full UI redesign aligned to the Calm prototype. Touches every primary
-  surface: mobile chrome (header, tab bar, control bars), the camera tile
-  and grids (mobile control bar with filter label and density toggle,
-  desktop room-grouped wall with density and hover affordance), the focus
-  screens (mobile focus polish — offline-hide quality, top-left stats,
-  centered controls; desktop focus with filmstrip, events-only sidebar,
-  and stats overlay), the events screens (mobile scroll chip rows + day
-  dividers + compact rows, desktop card grid with filter rows and day
-  dividers), the event and moment modals, the glance sheet and the new
-  desktop glance panel, and `/settings` (master-detail with drill-in,
-  page title and desktop nav values, a new About section, prototype
-  cards / sliding segments / accent swatches across Appearance, Cameras,
-  Groups, Connection). Server APIs are unchanged.
-- Per-device light / dark / auto theme. The chosen mode is stored
-  per-browser in `localStorage` (`skua-theme`) — a deliberate, documented
-  exception to the otherwise server-backed, no-`localStorage` prefs
-  model, so a phone-only operator does not flip dark mode on every other
-  household device. Auto follows the OS-level `prefers-color-scheme`.
-  All chrome colors are driven by tokens; a new `--accent-ink` token
-  guarantees legible text on the active segmented control in light mode.
-- Picture-in-picture toggle in the focus livebar (desktop and Android).
-  The button is gated off on iPhone because Safari does not support PiP
-  on live `MediaStream` sources.
-- Digital pinch / scroll zoom on the focus camera feed and the inline
-  event / moment clip player. A new `ZoomPane` wrapper applies
-  CSS-transform zoom + pan via Pointer Events: two-finger pinch with
-  momentum on touch, wheel-zoom under the cursor on desktop, and
-  double-tap to reset. The source `<video>` is untouched, so WebRTC
-  stays at native resolution.
-- Freeze-frame pause on the focus screen. Tapping Pause now captures the
-  current `<video>` frame to a canvas and shows it in place of the
-  stream, instead of tearing down the peer connection and falling back
-  to the (sometimes seconds-old) cached tile poster. Resume rebuilds the
-  WHEP session as before.
-- Build-time app version surfaced through `GET /api/config` as
-  `app_version` (injected via Go `ldflags` at image build time). Dev
-  builds report `"dev"`; tagged releases report the version, used in the
-  new Settings → About panel.
-- Server-side moments grouping endpoint `GET /api/moments` that collapses
-  recent Frigate events into per-camera "moments" (time-clusters with a
-  5-minute gap). Read-only and stateless: no persistence, no seen-state,
-  not yet surfaced in the UI. Phase 1 of the glance feature.
-- Server-side household seen-state for the glance feature, modelled
-  as a SET of viewed event ids rather than a single `last_seen`
-  timestamp. `GET /api/glance` returns every recent "while you were
-  away" moment with a per-moment `seen` flag plus an `unseen_count`,
-  and `POST /api/glance/seen` (body `{event_ids, scope?}`) marks one
-  or more events as seen. The seen-set is keyed on each moment's
-  representative event id, so a moment flips to seen as soon as its
-  representative is marked. Backed by a dedicated state file at
-  `GLANCE_STATE_PATH` (default `/data/glance.json`) pruned to a
-  30-day retention window. The set is scope-keyed under a single
-  v1 scope ("household") shared by every client on the LAN-only
-  deployment; the `scope` field is reserved for a future per-user
-  split. Internal, not yet surfaced in the UI. Phase 2 of the
-  glance feature.
-- "While you were away" glance peek: on a cold start that lands on
-  the grid, a bottom sheet slides up listing unseen moments grouped
-  per camera. The peek stays open while you view individual clips —
-  the clip modal opens on top of the sheet, and closing it returns
-  to the sheet so you can keep working through the list. Opening a
-  moment marks just that one as seen on the server; a separate
-  mark-all-as-seen action clears the rest in one tap. Closing the
-  peek (close button, swipe-down, backdrop tap, or Escape) never
-  marks anything seen, so a glance and a dismiss don't quietly burn
-  the badge. A header bell with the unseen count reopens the peek
-  from any route; the bell persists in a muted grey state when
-  nothing is unseen so you can reopen the peek and re-watch what
-  you already looked at. Moments already in the household seen-set
-  are dimmed but stay clickable. On iOS resume the peek
-  resurfaces for genuinely new moments that arrived while the app
-  was backgrounded; moments the session has already surfaced stay
-  suppressed until you mark them seen. Completes the glance feature
-  (phases 1–3).
-- Configurable "while you were away" lookback for the glance peek:
-  a new `glance_window_hours` preference (6 / 12 / 24 / 48 / 72,
-  default 24) controls how far back GET `/api/glance` looks. The
-  setting is persisted in `prefs.json` and exposed in Settings →
-  Appearance. The endpoint accepts an `?hours=N` query parameter
-  (server-clamped to 1..168) so device clocks never matter.
-- Non-destructive mark-all-seen action for the glance peek and a
-  matching `POST /api/glance/seen-all` endpoint that advances a
-  household `seen_through` watermark on the glance store. Moments
-  whose newest event start sits at or before the watermark render
-  with `seen: true` in subsequent `GET /api/glance` responses
-  instead of being removed from the list, so the peek can still
-  surface them as "already seen" history without forcing a refetch
-  to confirm. Persisted alongside the seen-id set in `glance.json`
-  and survives restarts even when the seen set is empty.
-- Configurable cap on glance peek output: a new `glance_max_moments`
-  preference (10 / 20 / 30 / 50, default 20) controls how many
-  moments the peek shows. The setting is persisted in `prefs.json`,
-  exposed in Settings → Appearance, and forwarded to `GET /api/glance`
-  via a `?max=N` query parameter (server-clamped to 1..200) so device
-  clocks never matter. Each glance moment now also carries its full
-  cluster detection list (`events`, newest first), the foundation for
-  a reviewable moment modal where the player can switch between
-  individual detections inside the cluster.
-- Per-device away detection for the glance peek via
-  `POST /api/glance/heartbeat` and the new `AWAY_SESSION_GAP`
-  environment variable (default 30 minutes). The server identifies
-  the calling device through an httpOnly `skua_device` cookie minted
-  on first contact and reports `{ away: boolean }` based on the gap
-  between this beat and the previous one for the same device. The
-  SPA uses the verdict to decide whether to auto-surface the "while
-  you were away" sheet after an absence; the unseen badge count
-  continues to come from `GET /api/glance`. The store is in-memory,
-  so a server restart reports every device as away once.
+Fixed
+- Large event clips (long or high-quality recordings) now play instead of failing. The size limit is raised to 256 MB by default and can be changed with the CLIP_MAX_MIB setting.
+- The camera focus view now shows a recent frame immediately when you open it, instead of an older one, and switches cameras faster.
+- Various interface polish on phone: the selected camera in the focus filmstrip is no longer clipped, the camera filter closes cleanly, and zoom/pan gestures feel smoother.
+- The pop-up sheets keep their title and handle in place while the list scrolls, and can be closed with a button, a swipe down, tapping outside, or Escape.
 
-### Fixed
+Changed
+- The installed app (PWA) now opens instantly even offline and no longer shows a blank screen after an update — it refreshes itself to the latest version on next launch, and shows your camera grid's last images while reconnecting.
+- When the app can't reach your Skua server it now shows a clear, retryable message instead of hanging or going blank, and recovers on its own once the server is back.
+- The app feels more native on phones: page-zoom, accidental text selection, the iOS long-press menu, and tap highlights are turned off (text fields still let you select and edit).
+- The "while you were away" sheet now rests at two positions — peek at the bottom or full height — instead of three.
+- "Mark all seen" replaces the old "Clear": seen moments stay in the list marked as seen instead of disappearing, so you can still review them.
 
-- Focus screen poster on quick revisits now reuses the BFF's cached
-  `tile.jpg` endpoint with a per-visit cache-bust, instead of refetching
-  `snapshot.jpg` cold on every navigation. Faster paint, less Frigate
-  load on rapid camera switching.
-- Iconographic polish on the mobile focus screen — active filmstrip
-  ring is no longer clipped, the mobile group filter sheet closes
-  cleanly, and the ZoomPane gesture transition no longer fights the
-  Pointer Events cancel.
-- Event clips up to 256 MiB now play in the modal instead of failing
-  with 502. The per-clip in-memory buffer cap was hard-coded at 64 MiB,
-  which long or high-bitrate HEVC moments exceeded; the default is
-  raised to 256 MiB and is configurable via the new `CLIP_MAX_MIB`
-  environment variable (positive integer, MiB). The clip cache's byte
-  cap widens to the per-clip cap when needed so a single max-size clip
-  still fits.
-- The shared bottom sheet now keeps its drag handle and title pinned
-  while the content scrolls, instead of scrolling them off the top
-  with the list, and can be dismissed by an explicit close button or
-  by swiping the pinned header down (in addition to the backdrop tap
-  and Escape). Also improves the camera-group filter sheet, which
-  reuses the same component.
-
-### Changed
-
-- PWA offline / service-worker hardening. The installed PWA now opens
-  instantly offline (the SvelteKit shell is precached under `/` via an
-  explicit manifest entry with a per-build revision so each deploy
-  invalidates the old shell, and grid tiles are cached at runtime), and
-  never blank-screens after a deploy: service-worker registration moves
-  from `'prompt'` to `'autoUpdate'` with `skipWaiting + clientsClaim`,
-  paired with `registerSW({ immediate: true })` from `+layout.svelte`,
-  so the newest SW activates immediately on the next visit. All `/api`
-  read paths share a 10 s `AbortController` timeout, errors are
-  classified into `offline | timeout | server | unknown`, and a global
-  `ConnectionOverlay` renders a single recoverable card when the BFF is
-  unreachable. The cameras poller drops to a 5 s retry cadence (without
-  stacking timers) while down and returns to its 15 s baseline on
-  success.
-- Native-feel mobile hardening. The viewport meta locks page zoom
-  (`maximum-scale=1, user-scalable=no`); the body disables
-  `user-select`, the long-press iOS Save / Copy callout, the grey tap
-  highlight, and the legacy 300 ms double-tap-to-zoom delay. Inputs,
-  textareas, and `[contenteditable]` re-enable text selection; images
-  and videos disable `-webkit-user-drag`. Custom pinch-zoom on the
-  camera feed is implemented separately by the new `ZoomPane` (see
-  Added).
-- Mobile glance sheet rests at two detents — peek (bottom) and full
-  (top) — instead of three. Dragging the head snaps to whichever is
-  nearer; dragging below peek still dismisses; the scrim opacity still
-  tracks the drag. Desktop side panel, open / close animation, and
-  drag / dismiss thresholds are unchanged.
-- Glance peek "Mark all seen" replaces the previous "Clear" action.
-  Moments are marked seen in place instead of being removed from
-  the list: `POST /api/glance/seen-all` supersedes
-  `POST /api/glance/clear`, and a household `seen_through`
-  watermark supersedes the `cleared_at` watermark in
-  `glance.json`. The pre-rename `{"cleared_at": <unix>}` shape is
-  silently ignored on load — best-effort state, no automatic
-  migration; the worst case is one mark-all-seen lost across the
-  upgrade.
-- `GET /api/glance` now covers the requested `hours` window by walking
-  Frigate backwards through `/api/events` (page size 200, capped at
-  five pages = 1000 source events as a safety net) instead of pulling
-  a single fixed 20-event lookback. The user-visible limit shifts from
-  "source events fetched" to "moments shown": after grouping, the
-  moment list is truncated to the newest `max` (default 20,
-  configurable via the new `glance_max_moments` pref or the
-  `?max=N` query). On exceptionally busy installs the safety cap may
-  stop the loop before the full window is covered; full event history
-  continues to live behind `GET /api/events`.
-- Container restart-policy requirement for runtime reconfiguration is
-  now stated up front. The first-run wizard Save and Settings →
-  Connection Apply both restart Skua by exiting the process and rely
-  on the container restart policy (`restart: unless-stopped` or
-  `always`) to bring the BFF back; with no restart policy a Save or
-  Apply leaves Skua stopped. README Quick start and Configuration
-  sections call out the dependency explicitly, the Connection editor
-  shows a persistent note above the actions, and the setup wizard
-  shows the same line under its Save and start button. No runtime
-  change.
+Reconfiguration note
+- Saving the first-run setup or changing the connection in Settings restarts Skua by exiting the process, so the container needs a restart policy (restart: unless-stopped or always) to come back up. This is now called out in the setup screens and the README.
 
 ## [0.11.1] — 2026-06-03
 
