@@ -64,6 +64,8 @@ export type IconName =
   | 'sun'
   | 'moon'
   | 'themeAuto'
+  | 'grip'
+  | 'edit'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -236,5 +238,25 @@ export const ICONS: Record<IconName, IconDef> = {
     paths: 'M12 3a9 9 0 0 1 0 18z',
     circles: [{ cx: 12, cy: 12, r: 9 }],
     fill: 'currentColor'
+  },
+  // Two-by-three dot grid — the conventional drag-handle glyph. Dots are
+  // filled so the affordance reads clearly at small sizes (the row handle
+  // renders at ~18 px).
+  grip: {
+    circles: [
+      { cx: 9, cy: 6, r: 1.5, fill: 'currentColor', stroke: 'none' },
+      { cx: 15, cy: 6, r: 1.5, fill: 'currentColor', stroke: 'none' },
+      { cx: 9, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' },
+      { cx: 15, cy: 12, r: 1.5, fill: 'currentColor', stroke: 'none' },
+      { cx: 9, cy: 18, r: 1.5, fill: 'currentColor', stroke: 'none' },
+      { cx: 15, cy: 18, r: 1.5, fill: 'currentColor', stroke: 'none' }
+    ]
+  },
+  // Feather-style pencil/edit glyph.
+  edit: {
+    paths: [
+      'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7',
+      'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'
+    ]
   }
 }

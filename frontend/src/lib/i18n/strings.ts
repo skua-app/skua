@@ -145,6 +145,12 @@ export const ui = {
   cameraNameAria: 'Camera name',
   refreshHint:
     'Reload the camera list from Frigate. Use after adding or removing a camera in Frigate.',
+  // settings > cameras list + edit modal (v0.13.0)
+  reorderHint: 'Drag the handle to reorder. New cameras appear at the end.',
+  dragHandleAria: 'Drag to reorder',
+  editCameraAria: 'Edit camera',
+  editCameraTitle: 'Edit camera',
+  reorderSaveError: 'Could not save order. Reverting.',
   // moved out of components in L3
   errorTitle: 'Something went wrong',
   errorSubtitle: 'Reload the page to continue.',

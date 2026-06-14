@@ -476,6 +476,39 @@ export async function refreshCameras(): Promise<RefreshDiff> {
   return res.json() as Promise<RefreshDiff>
 }
 
+// Household-shared camera display order (v0.13.0). PUT replaces the saved
+// order with the supplied list; the server de-duplicates and silently
+// drops unknown ids. The response carries the effective saved order so
+// the caller doesn't need to re-fetch /api/camera-order to read it.
+export type CameraOrderResponse = {
+  order: string[]
+}
+
+export async function fetchCameraOrder(): Promise<string[]> {
+  const res = await apiFetch<CameraOrderResponse>('/api/camera-order')
+  return res.order ?? []
+}
+
+export async function setCameraOrder(order: string[]): Promise<string[]> {
+  const res = await fetch('/api/camera-order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order })
+  })
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`
+    try {
+      const body = (await res.json()) as { message?: string }
+      if (body.message) message = body.message
+    } catch {
+      // Ignore: keep the status fallback above.
+    }
+    throw new Error(message)
+  }
+  const body = (await res.json()) as CameraOrderResponse
+  return body.order ?? []
+}
+
 // Per-camera go2rtc stream overrides (E6). Applied server-side inside the
 // WHEP handler only — GET /api/cameras still surfaces Frigate-truth stream
 // names. An entry is present in the map only when at least one of main/sub
