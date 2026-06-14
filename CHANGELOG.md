@@ -14,8 +14,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-06-14
+
 ### Added
 
+- Full UI redesign aligned to the Calm prototype. Touches every primary
+  surface: mobile chrome (header, tab bar, control bars), the camera tile
+  and grids (mobile control bar with filter label and density toggle,
+  desktop room-grouped wall with density and hover affordance), the focus
+  screens (mobile focus polish — offline-hide quality, top-left stats,
+  centered controls; desktop focus with filmstrip, events-only sidebar,
+  and stats overlay), the events screens (mobile scroll chip rows + day
+  dividers + compact rows, desktop card grid with filter rows and day
+  dividers), the event and moment modals, the glance sheet and the new
+  desktop glance panel, and `/settings` (master-detail with drill-in,
+  page title and desktop nav values, a new About section, prototype
+  cards / sliding segments / accent swatches across Appearance, Cameras,
+  Groups, Connection). Server APIs are unchanged.
+- Per-device light / dark / auto theme. The chosen mode is stored
+  per-browser in `localStorage` (`skua-theme`) — a deliberate, documented
+  exception to the otherwise server-backed, no-`localStorage` prefs
+  model, so a phone-only operator does not flip dark mode on every other
+  household device. Auto follows the OS-level `prefers-color-scheme`.
+  All chrome colors are driven by tokens; a new `--accent-ink` token
+  guarantees legible text on the active segmented control in light mode.
+- Picture-in-picture toggle in the focus livebar (desktop and Android).
+  The button is gated off on iPhone because Safari does not support PiP
+  on live `MediaStream` sources.
+- Digital pinch / scroll zoom on the focus camera feed and the inline
+  event / moment clip player. A new `ZoomPane` wrapper applies
+  CSS-transform zoom + pan via Pointer Events: two-finger pinch with
+  momentum on touch, wheel-zoom under the cursor on desktop, and
+  double-tap to reset. The source `<video>` is untouched, so WebRTC
+  stays at native resolution.
+- Freeze-frame pause on the focus screen. Tapping Pause now captures the
+  current `<video>` frame to a canvas and shows it in place of the
+  stream, instead of tearing down the peer connection and falling back
+  to the (sometimes seconds-old) cached tile poster. Resume rebuilds the
+  WHEP session as before.
+- Build-time app version surfaced through `GET /api/config` as
+  `app_version` (injected via Go `ldflags` at image build time). Dev
+  builds report `"dev"`; tagged releases report the version, used in the
+  new Settings → About panel.
 - Server-side moments grouping endpoint `GET /api/moments` that collapses
   recent Frigate events into per-camera "moments" (time-clusters with a
   5-minute gap). Read-only and stateless: no persistence, no seen-state,
@@ -89,6 +129,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Focus screen poster on quick revisits now reuses the BFF's cached
+  `tile.jpg` endpoint with a per-visit cache-bust, instead of refetching
+  `snapshot.jpg` cold on every navigation. Faster paint, less Frigate
+  load on rapid camera switching.
+- Iconographic polish on the mobile focus screen — active filmstrip
+  ring is no longer clipped, the mobile group filter sheet closes
+  cleanly, and the ZoomPane gesture transition no longer fights the
+  Pointer Events cancel.
 - Event clips up to 256 MiB now play in the modal instead of failing
   with 502. The per-clip in-memory buffer cap was hard-coded at 64 MiB,
   which long or high-bitrate HEVC moments exceeded; the default is
@@ -105,6 +153,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- PWA offline / service-worker hardening. The installed PWA now opens
+  instantly offline (the SvelteKit shell is precached under `/` via an
+  explicit manifest entry with a per-build revision so each deploy
+  invalidates the old shell, and grid tiles are cached at runtime), and
+  never blank-screens after a deploy: service-worker registration moves
+  from `'prompt'` to `'autoUpdate'` with `skipWaiting + clientsClaim`,
+  paired with `registerSW({ immediate: true })` from `+layout.svelte`,
+  so the newest SW activates immediately on the next visit. All `/api`
+  read paths share a 10 s `AbortController` timeout, errors are
+  classified into `offline | timeout | server | unknown`, and a global
+  `ConnectionOverlay` renders a single recoverable card when the BFF is
+  unreachable. The cameras poller drops to a 5 s retry cadence (without
+  stacking timers) while down and returns to its 15 s baseline on
+  success.
+- Native-feel mobile hardening. The viewport meta locks page zoom
+  (`maximum-scale=1, user-scalable=no`); the body disables
+  `user-select`, the long-press iOS Save / Copy callout, the grey tap
+  highlight, and the legacy 300 ms double-tap-to-zoom delay. Inputs,
+  textareas, and `[contenteditable]` re-enable text selection; images
+  and videos disable `-webkit-user-drag`. Custom pinch-zoom on the
+  camera feed is implemented separately by the new `ZoomPane` (see
+  Added).
+- Mobile glance sheet rests at two detents — peek (bottom) and full
+  (top) — instead of three. Dragging the head snaps to whichever is
+  nearer; dragging below peek still dismisses; the scrim opacity still
+  tracks the drag. Desktop side panel, open / close animation, and
+  drag / dismiss thresholds are unchanged.
 - Glance peek "Mark all seen" replaces the previous "Clear" action.
   Moments are marked seen in place instead of being removed from
   the list: `POST /api/glance/seen-all` supersedes
@@ -680,7 +755,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/skua-app/skua/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/skua-app/skua/releases/tag/v0.11.1
 [0.11.0]: https://github.com/skua-app/skua/releases/tag/v0.11.0
 [0.10.0]: https://github.com/skua-app/skua/releases/tag/v0.10.0
