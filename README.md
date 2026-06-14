@@ -206,6 +206,7 @@ automatically — without one, Apply leaves Skua stopped.
 | `RUNTIME_CONFIG_PATH` | `/data/config.yaml` | No | Runtime config overlay written by the first-run wizard. Stores `frigate_url`, `frigate_ui_url`, `go2rtc_url`. Env vars above always win over this file. |
 | `GLANCE_STATE_PATH` | `/data/glance.json` | No | Household seen-state for the glance feature; JSON file holding the set of seen event ids plus a `seen_through` watermark shared across the household. Auto-created on the first `POST /api/glance/seen` or `POST /api/glance/seen-all`; missing or corrupt file means never-seen. |
 | `AWAY_SESSION_GAP` | `30m` | No | How long a device may be inactive before the glance sheet treats the next visit as a return ("while you were away"). The BFF tracks per-device activity in memory via `POST /api/glance/heartbeat`, keyed on an httpOnly `skua_device` cookie. |
+| `CLIP_MAX_MIB` | `256` | No | Maximum per-event clip buffer size in MiB. The BFF reads each event clip into memory to serve Range requests for iOS Safari's `<video>` element; clips larger than this return 502. Raise it if long high-bitrate moments fail to play, lower it to tighten the RAM ceiling. Must be a positive integer. |
 
 All `_PATH` variables are container-side paths. The default
 `./data:/data` volume mount in the Quick Start compose maps them all

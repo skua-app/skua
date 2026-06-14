@@ -89,6 +89,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Event clips up to 256 MiB now play in the modal instead of failing
+  with 502. The per-clip in-memory buffer cap was hard-coded at 64 MiB,
+  which long or high-bitrate HEVC moments exceeded; the default is
+  raised to 256 MiB and is configurable via the new `CLIP_MAX_MIB`
+  environment variable (positive integer, MiB). The clip cache's byte
+  cap widens to the per-clip cap when needed so a single max-size clip
+  still fits.
 - The shared bottom sheet now keeps its drag handle and title pinned
   while the content scrolls, instead of scrolling them off the top
   with the list, and can be dismissed by an explicit close button or

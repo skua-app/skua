@@ -15,11 +15,12 @@ constraints, all of which must hold or playback breaks.
    `Content-Length` and `Accept-Ranges: bytes`. Frigate 0.17's upstream
    `/api/events/<id>/clip.mp4` is chunked Transfer-Encoding and ignores
    Range — desktop browsers tolerate that; Safari does not. Fix: the
-   BFF reads the full clip into memory (cap 64 MiB; default 30 s clip
-   ≈ 13 MiB) and serves the buffer via `http.ServeContent`, which
-   adds proper Range/206/Content-Length headers against a
-   `bytes.NewReader`. If a clip ever exceeds 64 MiB the handler returns
-   502 with `"exceeds limit"` in the log.
+   BFF reads the full clip into memory (default cap 256 MiB,
+   configurable via `CLIP_MAX_MIB`; a default 30 s clip ≈ 13 MiB) and
+   serves the buffer via `http.ServeContent`, which adds proper
+   Range/206/Content-Length headers against a `bytes.NewReader`. If a
+   clip ever exceeds the configured cap the handler returns 502 with
+   `"exceeds limit"` in the log.
 
 2. **One upstream fetch per event, not per Range.** `<video>` typically
    issues 10–20 parallel Range subrequests per source. Without caching,
