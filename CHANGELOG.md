@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] — 2026-06-14
+
+Changed
+- The events filters now fit on tighter single-line rows on both phone and desktop, so more of the events list is visible on first paint.
+- The online/offline status now sits inline beside the page title on the mobile header and on the desktop Cameras and Events pages, instead of on its own second line. The status line is hidden on Settings.
+- The Download button in the event clip modal and the Open Live button in the moment modal are now compact icon buttons; the labelled "Open in Frigate" picks up a leading link icon.
+- The focus view's fullscreen toggle now uses conventional outward diagonal arrows for "enter fullscreen" and swaps to inward arrows when you're already in fullscreen.
+
 ## [0.12.0] — 2026-06-14
 
 Added
@@ -586,7 +594,8 @@ Reconfiguration note
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/skua-app/skua/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/skua-app/skua/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/skua-app/skua/releases/tag/v0.11.1
 [0.11.0]: https://github.com/skua-app/skua/releases/tag/v0.11.0
