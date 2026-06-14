@@ -36,6 +36,18 @@ Skua replaces only that workflow — WebRTC for the focus view,
 JPEG snapshots for the grid, inline HEVC clip playback for events — and
 ships as a single static binary under 9 MB.
 
+It also rolls recent Frigate detections into **moments**: nearby
+detections on the same camera (within a 5-minute gap) collapse into a
+single entry with a representative frame, so a long flat list of
+near-duplicate detections becomes a short list of "the cat came back
+twice this afternoon". On opening the app you get a "while you were
+away" sheet of unseen moments grouped per camera, with the unseen count
+on a header bell you can reopen anytime. Opening a moment marks just
+that one seen; a mark-all-seen action clears the rest; dismissing the
+sheet never marks anything seen. Seen-state is household-shared (no
+accounts). Lookback (6 to 72 hours) and the maximum moments shown live
+in **Settings → Appearance**.
+
 ## Features
 
 - Live single-camera focus view via WHEP (sub-500 ms latency).
@@ -43,15 +55,25 @@ ships as a single static binary under 9 MB.
   server-side resize for ECO).
 - Real-time events list with cam, kind, and group filters plus
   infinite scroll.
+- Detections rolled up into **moments** with a "while you were away"
+  digest on open and a header bell with the unseen count (household-shared
+  seen-state, lookback configurable from Settings).
 - Inline event clip playback that works on iOS Safari (HEVC
   `hev1`→`hvc1` retag plus a Range-aware LRU cache).
+- Pinch and scroll-wheel zoom on the live focus view and event clips.
+- Picture-in-Picture on desktop browsers and Android Chrome.
+- Pausing the live view or a clip freezes the last frame instead of
+  showing a black box.
+- Light / dark / auto theme, remembered per device.
 - Camera groups with an in-app editor (single-membership, YAML-backed).
 - Per-camera friendly names persisted server-side.
 - Per-camera go2rtc stream-source overrides editable from `/settings`.
 - Dynamic camera discovery from Frigate (refresh-on-demand with SSE
   `camera.added` / `camera.removed` events).
 - Audio: runtime-detected per camera, not from static config.
-- PWA install on iOS and Android home screens with an offline shell.
+- PWA install on iOS and Android home screens. The installed app opens
+  instantly offline (precached shell, runtime-cached grid tiles) and
+  shows a clear, retryable message when the server is unreachable.
 - Server-side persisted preferences (no `localStorage`, prefs sync
   across devices in the household).
 - Talk-back capability flag honoured per camera (UI gated on
@@ -382,12 +404,11 @@ image).
 
 ### Service worker not updating
 
-- Skua's service worker uses `registerType: 'prompt'` — a new SW
-  waits until every tab for the scope is closed before activating. On
-  iOS PWA, this means the update lands on the next cold launch from
-  the home-screen icon.
-- An "App updated" toast confirms the update was applied on the new
-  session.
+- Skua's service worker is auto-updating (`skipWaiting` +
+  `clientsClaim`). A new version activates on the next launch and the
+  page refreshes once so the new assets take effect. On iOS PWA this
+  means updates land on the next cold launch from the home-screen icon,
+  without waiting for every tab to close.
 
 ## Documentation
 
@@ -406,8 +427,9 @@ Go 1.25 BFF (chi router, `log/slog`, single static binary) plus a
 SvelteKit 2 + Svelte 5 (runes) + Tailwind 4 frontend embedded into the
 binary. WebRTC via WHEP through go2rtc, no media transcoding inside
 Skua. JPEG snapshot tiles resized server-side with
-`golang.org/x/image/draw`. PWA via `vite-plugin-pwa` (`generateSW`).
-Distroless runtime image around 9 MB.
+`golang.org/x/image/draw`. PWA via `vite-plugin-pwa` (`generateSW`,
+`autoUpdate`) — the service worker activates the newest version on the
+next launch. Distroless runtime image around 9 MB.
 
 ## Contributing
 
