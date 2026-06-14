@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type Config struct {
 	RuntimeConfigPath   string
 	GlanceStatePath     string
 	AwaySessionGap      time.Duration
+	ClipMaxBytes        int64
 
 	// Provenance flags — true when the corresponding URL came from a
 	// non-empty environment variable. The setup wizard renders env-sourced
@@ -65,6 +67,7 @@ func Load() (*Config, error) {
 		RuntimeConfigPath:   env("RUNTIME_CONFIG_PATH", "/data/config.yaml"),
 		GlanceStatePath:     env("GLANCE_STATE_PATH", "/data/glance.json"),
 		AwaySessionGap:      parseDuration("AWAY_SESSION_GAP", env("AWAY_SESSION_GAP", "30m"), &errs),
+		ClipMaxBytes:        int64(parsePositiveInt("CLIP_MAX_MIB", env("CLIP_MAX_MIB", "256"), &errs)) << 20,
 	}
 
 	frigateEnv := os.Getenv("FRIGATE_URL")
@@ -159,4 +162,21 @@ func parseDuration(key, raw string, errs *[]string) time.Duration {
 		return 0
 	}
 	return d
+}
+
+// parsePositiveInt parses raw as a base-10 integer and requires it to be > 0.
+// On failure it appends a readable diagnostic to errs and returns 0; the
+// caller's len(errs) gate then turns the bad value into a Load error rather
+// than silently substituting a fallback.
+func parsePositiveInt(key, raw string, errs *[]string) int {
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		*errs = append(*errs, fmt.Sprintf("%s must be a positive integer, got %q", key, raw))
+		return 0
+	}
+	if n <= 0 {
+		*errs = append(*errs, fmt.Sprintf("%s must be a positive integer, got %d", key, n))
+		return 0
+	}
+	return n
 }

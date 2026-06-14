@@ -251,7 +251,7 @@ func TestServeClip_RetagsHev1OnCacheMiss(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewClient(srv.URL, nil)
+	c := NewClient(srv.URL, nil, 0)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/events/hevc-1/clip.mp4", nil)
 	rec := httptest.NewRecorder()

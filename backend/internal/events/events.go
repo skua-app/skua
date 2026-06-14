@@ -36,11 +36,12 @@ import (
 	"time"
 )
 
-// clipMaxBytes caps the in-memory buffer size for a per-event clip. Frigate's
-// default 30-second clip at 3500kbps is ~13 MiB; 64 MiB gives comfortable
-// headroom for longer clips and prevents an unbounded RAM blowup if upstream
-// bitrate/duration drifts.
-const clipMaxBytes int64 = 64 << 20
+// defaultClipMaxBytes is the fallback per-clip in-memory buffer cap when the
+// caller passes a non-positive value to NewClient. Frigate's default 30-second
+// clip at 3500kbps is ~13 MiB; 256 MiB covers long high-bitrate HEVC moments
+// while still bounding RAM growth under cache pressure. Configurable per
+// installation via CLIP_MAX_MIB; see config.Config.ClipMaxBytes.
+const defaultClipMaxBytes int64 = 256 << 20
 
 // Kind is the normalised category the BFF exposes (Frigate's raw labels
 // vary by detector; the UI groups them into a stable, small set).
@@ -165,9 +166,10 @@ func firstNonNil(values ...*float64) *float64 {
 
 // Client talks to Frigate's /api/events endpoints.
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	clips      *clipCache
+	baseURL      string
+	httpClient   *http.Client
+	clips        *clipCache
+	maxClipBytes int64
 
 	// inflight collapses concurrent cold misses for the same event id into
 	// one upstream fetch. Keyed by event id; the value's done channel is
@@ -185,15 +187,27 @@ type clipInflight struct {
 	err  error
 }
 
-func NewClient(baseURL string, httpClient *http.Client) *Client {
+// NewClient builds a Client. maxClipBytes caps the in-memory buffer size for
+// a per-event clip; pass a non-positive value to fall back to
+// defaultClipMaxBytes. The clip cache's byte cap is widened to the per-clip
+// cap when needed so a single max-size clip still fits.
+func NewClient(baseURL string, httpClient *http.Client, maxClipBytes int64) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{}
 	}
+	if maxClipBytes <= 0 {
+		maxClipBytes = defaultClipMaxBytes
+	}
+	cacheBytes := int64(clipCacheMaxBytes)
+	if maxClipBytes > cacheBytes {
+		cacheBytes = maxClipBytes
+	}
 	return &Client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: httpClient,
-		clips:      newClipCache(clipCacheMaxEntries, clipCacheMaxBytes),
-		inflight:   make(map[string]*clipInflight),
+		baseURL:      strings.TrimRight(baseURL, "/"),
+		httpClient:   httpClient,
+		clips:        newClipCache(clipCacheMaxEntries, cacheBytes),
+		maxClipBytes: maxClipBytes,
+		inflight:     make(map[string]*clipInflight),
 	}
 }
 
@@ -300,8 +314,8 @@ func (c *Client) ServeClip(ctx context.Context, eventID string, w http.ResponseW
 		w.Header().Set("Content-Disposition", "inline")
 	}
 	// Clear the server's WriteTimeout for this response: a legitimate slow
-	// download of a clip up to clipMaxBytes (64 MiB) can outlive the default
-	// HTTPTimeout*2 window, and being killed mid-stream would truncate the
+	// download of a clip up to the configured per-clip cap can outlive the
+	// default HTTPTimeout*2 window, and being killed mid-stream would truncate the
 	// file. Same pattern used by the SSE handler. Best-effort: some
 	// ResponseWriters don't expose deadlines via the controller, in which
 	// case the error is ignored (events.Client has no logger field; adding
@@ -367,7 +381,7 @@ func (c *Client) fetchClipShared(ctx context.Context, eventID string) ([]byte, e
 }
 
 // fetchClip pulls the raw MP4 bytes for eventID from Frigate, capped at
-// clipMaxBytes. Returns the buffered bytes on success; the caller decides
+// c.maxClipBytes. Returns the buffered bytes on success; the caller decides
 // whether to cache them.
 func (c *Client) fetchClip(ctx context.Context, eventID string) ([]byte, error) {
 	reqURL := fmt.Sprintf("%s/api/events/%s/clip.mp4", c.baseURL, eventID)
@@ -385,12 +399,12 @@ func (c *Client) fetchClip(ctx context.Context, eventID string) ([]byte, error) 
 	}
 
 	// Read one byte past the cap so we can distinguish "fits" from "overflow".
-	buf, err := io.ReadAll(io.LimitReader(resp.Body, clipMaxBytes+1))
+	buf, err := io.ReadAll(io.LimitReader(resp.Body, c.maxClipBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read clip body: %w", err)
 	}
-	if int64(len(buf)) > clipMaxBytes {
-		return nil, fmt.Errorf("clip body exceeds %d-byte limit", clipMaxBytes)
+	if int64(len(buf)) > c.maxClipBytes {
+		return nil, fmt.Errorf("clip body exceeds %d-byte limit", c.maxClipBytes)
 	}
 
 	// Rewrite hev1 sample-entry tags to hvc1 so iOS Safari will decode the

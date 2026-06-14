@@ -23,7 +23,7 @@ func eventsRouterWith(t *testing.T, upstream http.Handler) (http.Handler, *httpt
 	t.Cleanup(frigateSrv.Close)
 
 	logger := applog.New("error", "text")
-	eventsClient := events.NewClient(frigateSrv.URL, &http.Client{})
+	eventsClient := events.NewClient(frigateSrv.URL, &http.Client{}, 0)
 	h := NewHandler(HandlerDeps{
 		Logger:       logger,
 		Events:       eventsClient,
