@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/skua-app/skua/internal/api"
+	"github.com/skua-app/skua/internal/cameraorder"
 	"github.com/skua-app/skua/internal/cameras"
 	"github.com/skua-app/skua/internal/capabilities"
 	"github.com/skua-app/skua/internal/config"
@@ -207,6 +208,16 @@ func main() {
 	}
 	logger.Info("stream overrides loaded", "path", cfg.StreamOverridesPath, "count", len(streamOverridesStore.All()))
 
+	cameraOrderStore, err := cameraorder.New(cfg.CameraOrderPath, func(id string) bool {
+		_, ok := camerasStore.Find(id)
+		return ok
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "camera order: %v\n", err)
+		os.Exit(1)
+	}
+	logger.Info("camera order loaded", "path", cfg.CameraOrderPath, "count", len(cameraOrderStore.All()))
+
 	// restart is closed by the /api/runtime-config/restart handler when the
 	// operator presses "Apply" in /settings. main's shutdown select watches
 	// both this and the SIGINT/SIGTERM quit channel; either branch funnels
@@ -282,6 +293,9 @@ func main() {
 			if err := streamOverridesStore.Forget(id); err != nil {
 				logger.Warn("stream overrides Forget failed", "cam_id", id, "error", err)
 			}
+			if err := cameraOrderStore.Forget(id); err != nil {
+				logger.Warn("camera order Forget failed", "cam_id", id, "error", err)
+			}
 		}
 	})
 
@@ -301,6 +315,7 @@ func main() {
 		Names:           namesStore,
 		Capabilities:    capabilitiesStore,
 		StreamOverrides: streamOverridesStore,
+		CameraOrder:     cameraOrderStore,
 		Glance:          glanceStore,
 		Session:         sessionStore,
 		Runtime: api.RuntimeConfigDeps{

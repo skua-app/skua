@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/skua-app/skua/internal/cameraorder"
 	"github.com/skua-app/skua/internal/cameras"
 	"github.com/skua-app/skua/internal/capabilities"
 	"github.com/skua-app/skua/internal/events"
@@ -210,6 +211,7 @@ type Handler struct {
 	names           *names.Store
 	capabilities    *capabilities.Store
 	streamOverrides *streamoverrides.Store
+	cameraOrder     *cameraorder.Store
 	glance          *glance.Store
 	session         *session.Store
 	runtime         RuntimeConfigDeps
@@ -237,6 +239,7 @@ type HandlerDeps struct {
 	Names           *names.Store
 	Capabilities    *capabilities.Store
 	StreamOverrides *streamoverrides.Store
+	CameraOrder     *cameraorder.Store
 	Glance          *glance.Store
 	Session         *session.Store
 	Runtime         RuntimeConfigDeps
@@ -259,6 +262,7 @@ func NewHandler(d HandlerDeps) *Handler {
 		names:           d.Names,
 		capabilities:    d.Capabilities,
 		streamOverrides: d.StreamOverrides,
+		cameraOrder:     d.CameraOrder,
 		glance:          d.Glance,
 		session:         d.Session,
 		runtime:         d.Runtime,
@@ -267,6 +271,25 @@ func NewHandler(d HandlerDeps) *Handler {
 
 func (h *Handler) handleCameras(w http.ResponseWriter, r *http.Request) {
 	cams := h.cameras.Snapshot()
+
+	// Apply the household-shared saved order: saved ids first in saved
+	// order, newly discovered (unordered) ids appended in registry order
+	// so a brand-new camera never vanishes from the list.
+	if h.cameraOrder != nil && len(cams) > 0 {
+		byID := make(map[string]cameras.CameraSpec, len(cams))
+		ids := make([]string, 0, len(cams))
+		for _, c := range cams {
+			byID[c.ID] = c
+			ids = append(ids, c.ID)
+		}
+		ordered := h.cameraOrder.Apply(ids)
+		next := make([]cameras.CameraSpec, 0, len(ordered))
+		for _, id := range ordered {
+			next = append(next, byID[id])
+		}
+		cams = next
+	}
+
 	resp := make([]cameraResponse, 0, len(cams))
 	for _, cam := range cams {
 		camGroups := []string{}
