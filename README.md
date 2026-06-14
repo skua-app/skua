@@ -63,13 +63,10 @@ ships as a single static binary under 9 MB.
 Mobile PWA, installed to the iOS home screen.
 
 <p align="center">
-  <img src="docs/screenshots/mobile-grid.jpg" alt="Skua camera grid — Cameras list with HD/ECO toggle and online status" width="280">
-  <img src="docs/screenshots/mobile-focus.jpg" alt="Skua single-camera focus view — WebRTC live stream with camera switcher" width="280">
-  <img src="docs/screenshots/mobile-events.jpg" alt="Skua events list — filterable by camera, group, and detection type" width="280">
-</p>
-<p align="center">
-  <img src="docs/screenshots/mobile-settings.jpg" alt="Skua settings — appearance and camera configuration" width="280">
-  <img src="docs/screenshots/mobile-event-modal.jpg" alt="Skua event detail — inline clip playback with download and Open in Frigate" width="280">
+<img height="480" alt="Skua camera grid — Cameras list with HD/ECO toggle and online status" src="https://github.com/user-attachments/assets/bdcc333c-4a78-4e24-928c-129ffd34baf6" />
+<img height="480" alt="Skua single-camera focus view — WebRTC live stream with camera switcher" src="https://github.com/user-attachments/assets/6d34c635-49fd-4d5c-b38a-04935f7b0a51" />
+<img height="480" alt="Skua event detail — inline clip playback with download and Open in Frigate" src="https://github.com/user-attachments/assets/8aa9cda1-e677-4eef-bc97-3236e516750a" />
+<img height="480" alt="Skua settings — appearance and camera configuration" src="https://github.com/user-attachments/assets/abf9c1b0-7a3b-4d63-acce-9efa6fc866eb" />
 </p>
 
 ## Requirements
