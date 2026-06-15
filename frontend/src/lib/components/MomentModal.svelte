@@ -2,7 +2,7 @@
   import { fade, fly } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import type { GlanceMoment } from '$lib/api'
-  import { eventSnapshotURL, momentPreviewURL } from '$lib/api'
+  import { eventSnapshotURL, momentClipURL } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { configStore } from '$lib/stores/config.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
@@ -24,10 +24,10 @@
   const cardDuration = reducedMotion ? 0 : 260
   const scrimDuration = reducedMotion ? 0 : 200
 
-  // A single failure flag for the moment-wide preview. Falls back to
+  // A single failure flag for the moment-wide clip. Falls back to
   // the thumb-event snapshot when present; otherwise the placeholder
   // background carries the moment.
-  let previewFailed = $state(false)
+  let clipFailed = $state(false)
 
   const camName = $derived(
     camerasStore.cameras.find((c) => c.id === moment.cam_id)?.name ?? moment.cam_id
@@ -122,16 +122,16 @@
 
     <div class="mm-snap">
       <ZoomPane resetKey={moment.id}>
-        {#if moment.thumb_event_id && !previewFailed}
+        {#if moment.thumb_event_id && !clipFailed}
           <!-- svelte-ignore a11y_media_has_caption -->
           <video
-            src={momentPreviewURL(moment.id)}
+            src={momentClipURL(moment.id)}
             poster={eventSnapshotURL(moment.thumb_event_id)}
             controls
             playsinline
             preload="metadata"
             bind:this={videoEl}
-            onerror={() => (previewFailed = true)}
+            onerror={() => (clipFailed = true)}
           ></video>
         {:else if moment.thumb_event_id}
           <img src={eventSnapshotURL(moment.thumb_event_id)} alt={camName} loading="lazy" />
@@ -141,7 +141,7 @@
       </ZoomPane>
     </div>
 
-    {#if moment.thumb_event_id && previewFailed}
+    {#if moment.thumb_event_id && clipFailed}
       <div class="mm-clip-fallback" role="status">
         <div class="mm-clip-fallback-heading">{ui.clipUnplayableHeading}</div>
         <div class="mm-clip-fallback-hint">{ui.clipUnplayableHint}</div>

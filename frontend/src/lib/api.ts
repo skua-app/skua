@@ -191,9 +191,18 @@ export function eventClipURL(id: string, download = false): string {
 // clip covering the whole review window, served inline with Range
 // passthrough. Distinct from eventClipURL: the moment preview is one
 // clip per review segment; the event clip is one clip per tracked
-// detection.
+// detection. Reserved for the Phase 3 scrubber/markers; the modal
+// itself plays the full-res clip via momentClipURL.
 export function momentPreviewURL(id: string): string {
   return `/api/glance/${encodeURIComponent(id)}/preview.mp4`
+}
+
+// momentClipURL returns the BFF route for a moment's full-resolution
+// time-range clip, served through the same buffered + iOS-friendly
+// retag pipeline as the per-event clip endpoint. Real-time playback
+// with audio; the modal default.
+export function momentClipURL(id: string): string {
+  return `/api/glance/${encodeURIComponent(id)}/clip.mp4`
 }
 
 // Moment mirrors backend/internal/events.Moment: one Frigate review
