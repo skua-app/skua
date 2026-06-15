@@ -146,6 +146,12 @@ export const ui = {
   cameraNameAria: 'Имя камеры',
   refreshHint:
     'Перечитать список камер из Frigate. Используйте после добавления или удаления камеры в Frigate.',
+  // settings > cameras list + edit modal (v0.13.0)
+  reorderHint: 'Перетащите ручку, чтобы изменить порядок. Новые камеры добавляются в конец.',
+  dragHandleAria: 'Перетащить для изменения порядка',
+  editCameraAria: 'Редактировать камеру',
+  editCameraTitle: 'Редактировать камеру',
+  reorderSaveError: 'Не удалось сохранить порядок. Возврат.',
   // moved out of components in L3
   errorTitle: 'Что-то пошло не так',
   errorSubtitle: 'Перезагрузите страницу, чтобы продолжить.',

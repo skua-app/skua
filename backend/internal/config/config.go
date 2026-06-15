@@ -28,6 +28,7 @@ type Config struct {
 	CamerasPath         string
 	CapabilitiesPath    string
 	StreamOverridesPath string
+	CameraOrderPath     string
 	RuntimeConfigPath   string
 	GlanceStatePath     string
 	AwaySessionGap      time.Duration
@@ -64,6 +65,7 @@ func Load() (*Config, error) {
 		CamerasPath:         env("CAMERAS_CONFIG_PATH", "/data/cameras.yaml"),
 		CapabilitiesPath:    env("CAPABILITIES_CONFIG_PATH", "/data/capabilities.yaml"),
 		StreamOverridesPath: env("STREAM_OVERRIDES_CONFIG_PATH", "/data/stream_overrides.yaml"),
+		CameraOrderPath:     env("CAMERA_ORDER_CONFIG_PATH", "/data/camera_order.yaml"),
 		RuntimeConfigPath:   env("RUNTIME_CONFIG_PATH", "/data/config.yaml"),
 		GlanceStatePath:     env("GLANCE_STATE_PATH", "/data/glance.json"),
 		AwaySessionGap:      parseDuration("AWAY_SESSION_GAP", env("AWAY_SESSION_GAP", "30m"), &errs),

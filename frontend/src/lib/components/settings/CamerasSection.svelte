@@ -1,15 +1,84 @@
 <script lang="ts">
-  import CameraCard from '$lib/components/settings/CameraCard.svelte'
-  import { RefreshApiError, refreshCameras } from '$lib/api'
+  import { untrack } from 'svelte'
+  import { dragHandle, dragHandleZone, SHADOW_ITEM_MARKER_PROPERTY_NAME } from 'svelte-dnd-action'
+  import type { Camera } from '$lib/api'
+  import { RefreshApiError, refreshCameras, setCameraOrder } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { groupsStore } from '$lib/stores/groups.svelte'
   import { go2rtcStreamsStore } from '$lib/stores/go2rtcStreams.svelte'
   import { ui } from '$lib/i18n/strings'
+  import Icon from '$lib/components/Icon.svelte'
+  import CameraEditModal from '$lib/components/settings/CameraEditModal.svelte'
+
+  type RowItem = Camera & { [SHADOW_ITEM_MARKER_PROPERTY_NAME]?: unknown }
 
   let refreshing = $state(false)
   let refreshStatus = $state<string | null>(null)
   let refreshStatusKind = $state<'success' | 'error' | null>(null)
   let refreshStatusTimer: ReturnType<typeof setTimeout> | null = null
+
+  // dnd-action's `items` array MUST be a stable reference between drags
+  // so the lib can identify rows by their `id` field. We mirror the
+  // store on every cameras update and overwrite on drop.
+  let items = $state<RowItem[]>([])
+  $effect(() => {
+    // Track the cameras array; untrack the assignment so this effect
+    // does NOT re-fire on its own write.
+    const next = camerasStore.cameras
+    untrack(() => {
+      items = next.map((c) => ({ ...c }))
+    })
+  })
+
+  let orderError = $state<string | null>(null)
+  let orderErrorTimer: ReturnType<typeof setTimeout> | null = null
+  function showOrderError() {
+    orderError = ui.reorderSaveError
+    if (orderErrorTimer !== null) clearTimeout(orderErrorTimer)
+    orderErrorTimer = setTimeout(() => {
+      orderError = null
+      orderErrorTimer = null
+    }, 4000)
+  }
+
+  // Editing one camera at a time: store the cam id so the modal mounts
+  // afresh per camera (Svelte's {#if editing} block tears the modal
+  // down on close, so the next open starts with clean draft state).
+  let editingId = $state<string | null>(null)
+  const editingCamera = $derived(
+    editingId === null ? null : (camerasStore.cameras.find((c) => c.id === editingId) ?? null)
+  )
+
+  // Honour reduced-motion the way svelte-dnd-action's recipes recommend:
+  // disable the lib's flip animation when the user has the OS-level
+  // preference enabled. Read once at module load — switching mid-session
+  // is rare and not worth a media-query listener.
+  const reducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const flipDurationMs = reducedMotion ? 0 : 180
+
+  type DndDetail = { items: RowItem[] }
+  type DndEvent = CustomEvent<DndDetail>
+
+  function onConsider(e: DndEvent) {
+    items = e.detail.items
+  }
+
+  async function onFinalize(e: DndEvent) {
+    items = e.detail.items
+    const orderedIds = items.map((c) => c.id)
+    // Optimistic: reflect the new order across the app immediately so the
+    // grid and any other consumer of `camerasStore.cameras` follow the drop
+    // without waiting on the round-trip.
+    camerasStore.applyLocalOrder(orderedIds)
+    try {
+      await setCameraOrder(orderedIds)
+    } catch {
+      showOrderError()
+      // Revert: pull authoritative order from the server.
+      await camerasStore.refresh()
+    }
+  }
 
   function clearRefreshStatusSoon() {
     if (refreshStatusTimer !== null) clearTimeout(refreshStatusTimer)
@@ -40,8 +109,6 @@
       const diff = await refreshCameras()
       refreshStatus = formatDiff(diff.added, diff.removed)
       refreshStatusKind = 'success'
-      // SSE camera.added / camera.removed round-trip too; refetch here for
-      // immediate UI consistency. Idempotent.
       camerasStore.refresh().catch(() => {})
       groupsStore.refresh().catch(() => {})
     } catch (err) {
@@ -61,6 +128,7 @@
   <header class="section-header">
     <h2 class="dk-set-h2">{ui.sectionCameras}</h2>
     <p class="dk-set-desc">{ui.refreshHint}</p>
+    <p class="set-hint">{ui.reorderHint}</p>
     <p class="set-hint">{ui.streamsHint}</p>
   </header>
 
@@ -80,28 +148,71 @@
     {/if}
   </div>
 
+  {#if orderError}
+    <div class="set-msg set-msg-error" role="status" aria-live="polite">{orderError}</div>
+  {/if}
+
   {#if go2rtcStreamsStore.error}
     <div class="streams-error" role="alert">{ui.streamsLoadError}</div>
   {/if}
 
-  <div class="cards">
-    {#each camerasStore.cameras as cam (cam.id)}
-      <CameraCard
-        camera={cam}
-        streams={go2rtcStreamsStore.streams}
-        streamsLoaded={go2rtcStreamsStore.loaded && go2rtcStreamsStore.error === null}
-        streamsDisabled={go2rtcStreamsStore.error !== null}
-      />
+  <ul
+    class="cam-list"
+    use:dragHandleZone={{
+      items,
+      flipDurationMs,
+      dropTargetStyle: {},
+      type: 'cameras'
+    }}
+    onconsider={onConsider}
+    onfinalize={onFinalize}
+  >
+    {#each items as cam (cam.id)}
+      <li class="cam-row" class:dragging={cam[SHADOW_ITEM_MARKER_PROPERTY_NAME]}>
+        <span
+          class="cam-handle"
+          use:dragHandle
+          aria-label={ui.dragHandleAria}
+          role="button"
+          tabindex="0"
+        >
+          <Icon name="grip" size={18} />
+        </span>
+        <img class="cam-thumb" src="/api/cameras/{cam.id}/tile.jpg" alt="" loading="lazy" />
+        <span class="cam-text">
+          <span class="cam-name">{cam.name}</span>
+          <span class="cam-id">{cam.id}</span>
+        </span>
+        <button
+          type="button"
+          class="cam-edit"
+          aria-label="{ui.editCameraAria} {cam.name}"
+          title={ui.editCameraAria}
+          onclick={() => (editingId = cam.id)}
+        >
+          <Icon name="edit" size={16} />
+        </button>
+      </li>
     {/each}
-  </div>
+  </ul>
 </section>
+
+{#if editingCamera}
+  <CameraEditModal
+    camera={editingCamera}
+    streams={go2rtcStreamsStore.streams}
+    streamsLoaded={go2rtcStreamsStore.loaded && go2rtcStreamsStore.error === null}
+    streamsDisabled={go2rtcStreamsStore.error !== null}
+    onClose={() => (editingId = null)}
+  />
+{/if}
 
 <style>
   .settings-section {
     display: block;
   }
   .dk-set-section {
-    max-width: 860px;
+    max-width: 720px;
   }
   .section-header {
     margin-bottom: 12px;
@@ -119,9 +230,6 @@
     margin: 0 0 8px;
     line-height: 1.5;
   }
-  /* Mobile drill-head already shows the section title, so the in-section
-     h2 would render the same string twice. Hide it below the master/detail
-     breakpoint; desktop is untouched. */
   @media (max-width: 899.98px) {
     .dk-set-h2 {
       display: none;
@@ -131,9 +239,11 @@
     font-size: 12px;
     color: var(--text-3);
     line-height: 1.45;
-    margin: 0 0 12px;
+    margin: 0 0 4px;
   }
-  /* prototype .set-rowbtn — primary action button(s) above the cards */
+  .set-hint:last-of-type {
+    margin-bottom: 12px;
+  }
   .set-rowbtn {
     display: flex;
     gap: 8px;
@@ -160,15 +270,110 @@
     background: color-mix(in oklab, var(--warn) 10%, transparent);
     line-height: 1.4;
   }
-  /* prototype cameras layout — multi-column auto-fill grid */
-  .cards {
+
+  .cam-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .cam-row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 14px;
-    margin-top: 6px;
+    grid-template-columns: auto 76px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px 10px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+  .cam-row.dragging {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow);
+  }
+  .cam-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 36px;
+    color: var(--text-3);
+    cursor: grab;
+    border-radius: 6px;
+    touch-action: none;
+  }
+  .cam-handle:hover,
+  .cam-handle:focus-visible {
+    color: var(--text);
+    background: rgba(125, 125, 125, 0.07);
+    outline: none;
+  }
+  .cam-handle:active {
+    cursor: grabbing;
+  }
+  .cam-thumb {
+    width: 76px;
+    height: 44px;
+    object-fit: cover;
+    background: var(--feed);
+    border-radius: 6px;
+    display: block;
+    border: 1px solid var(--border);
+  }
+  .cam-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .cam-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cam-id {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    letter-spacing: 0.3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cam-edit {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-2);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .cam-edit:hover {
+    color: var(--text);
+    background: rgba(125, 125, 125, 0.07);
+    border-color: var(--border-strong);
+  }
+  .cam-edit:active {
+    transform: translateY(1px);
   }
 
-  /* prototype .set-btn */
   .set-btn {
     padding: 9px 14px;
     font-size: 13px;

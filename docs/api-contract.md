@@ -22,6 +22,10 @@ config).
 // === E1/E2 (stable) ===
 
 // GET /api/cameras
+// The response is ordered: see "Camera order (v0.13.0)" below. cam_ids
+// present in the household-shared saved order appear first in that
+// order; cam_ids not yet in the saved order are appended in registry
+// order so newly discovered cameras never vanish.
 type Camera = {
   id: string
   name: string         // user-supplied override (see /api/camera-names) else the Frigate-sourced default from the camera registry (cameras.yaml)
@@ -595,4 +599,53 @@ type GlanceHeartbeatResponse = {
 // a different representative event id, that moment can re-surface
 // as unseen until the new representative id is also marked seen.
 // Acceptable for a small-household glance UI.
+
+// === Camera order (v0.13.0) ===
+//
+// Household-shared display order for the camera list. The order is the
+// user's preference layer; the API handler applies it on top of the
+// registry from internal/cameras when answering GET /api/cameras, so
+// the grid (mobile + desktop) and the Settings → Cameras list both
+// follow the saved order. Reordering is performed by the Settings →
+// Cameras drag-and-drop list and persisted via PUT /api/camera-order.
+//
+// Ordering guarantee for GET /api/cameras:
+//   - cam_ids present in the saved order appear first, in saved order.
+//   - cam_ids not yet present in the saved order are appended in the
+//     registry order so newly discovered cameras never vanish from
+//     the list (a fresh camera shows up at the end on next refresh).
+//   - cam_ids in the saved order that are absent from the registry
+//     are skipped — orphan cleanup on POST /api/cameras/refresh runs
+//     Forget(cam_id) alongside groups / camera_names / capabilities /
+//     stream_overrides.
+
+// Env: CAMERA_ORDER_CONFIG_PATH (default /data/camera_order.yaml).
+
+// GET /api/camera-order
+// → { order: string[] }
+//   Returns the effective saved order (after server-side dedup and
+//   filtering of any ids that are no longer in the registry). Empty
+//   array, never null, on a fresh store.
+
+// PUT /api/camera-order  body: { order: string[] }
+//   Replaces the saved order with the supplied list. Duplicates are
+//   de-duplicated server-side (first occurrence wins); unknown ids
+//   (not in the camera registry) are silently dropped — the contract
+//   is that the client sends its full desired order and the server
+//   validates and normalises. No partial-update mode and no per-id
+//   route. Cross-site guarded like other mutating /api routes.
+//   Returns: { order: string[] }  // the effective saved order
+//
+// Storage: YAML list under top-level key `order:`. File auto-created
+// on first non-empty write; missing file at startup is fine (empty
+// store). Malformed YAML on load → fail-fast. The on-disk file is
+// also filtered against the live registry on load so a stale snapshot
+// from before a refresh never re-introduces a ghost camera.
+//
+// Validation errors return 4xx/5xx with the standard { error, message }
+// envelope. Error codes are snake_case and stable:
+type CameraOrderErrorBody = {
+  error: 'invalid_body' | 'internal'
+  message: string  // English, ready to display
+}
 ```

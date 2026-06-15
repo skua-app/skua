@@ -53,6 +53,8 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Put("/camera-names/{cam_id}", h.handlePutCameraName)
 		r.Get("/stream-overrides", h.handleListStreamOverrides)
 		r.Put("/stream-overrides/{cam_id}", h.handlePutStreamOverride)
+		r.Get("/camera-order", h.handleGetCameraOrder)
+		r.Put("/camera-order", h.handlePutCameraOrder)
 		r.Get("/stream", hub.ServeHTTP)
 	})
 

@@ -61,6 +61,28 @@ class CamerasStore {
       this.#interval = null
     }
   }
+
+  // Reorders `cameras` in place to match the supplied id list. Used by
+  // the Settings → Cameras drag list to make the grid follow a drop
+  // instantly, before the PUT /api/camera-order round-trip resolves. Ids
+  // not present in the supplied list keep their relative position at the
+  // end so we never silently drop a camera if the caller is stale.
+  applyLocalOrder(orderedIds: string[]) {
+    const byID = new Map(this.cameras.map((c) => [c.id, c] as const))
+    const placed = new Set<string>()
+    const next: Camera[] = []
+    for (const id of orderedIds) {
+      const cam = byID.get(id)
+      if (cam && !placed.has(id)) {
+        next.push(cam)
+        placed.add(id)
+      }
+    }
+    for (const cam of this.cameras) {
+      if (!placed.has(cam.id)) next.push(cam)
+    }
+    this.cameras = next
+  }
 }
 
 export const camerasStore = new CamerasStore()

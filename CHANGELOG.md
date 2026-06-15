@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Added
+- Drag-to-reorder cameras. Settings → Cameras now lists every camera in one
+  column with a drag handle on the left; reorder by dragging the handle
+  and the new order persists immediately. The order is shared across the
+  household and is reflected in the grid (mobile and desktop) and in the
+  camera switcher on the focus view. Newly discovered cameras appear at
+  the end so they never silently vanish from the list.
+
+Changed
+- Settings → Cameras has been reworked from inline editor cards into a
+  single-column list. Editing a camera's friendly name and per-camera
+  main/sub stream overrides now lives in a focused modal opened from
+  that row's edit button.
+
 ## [0.12.1] — 2026-06-14
 
 Changed
