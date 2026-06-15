@@ -219,7 +219,8 @@
     <div class="livebar">
       <button
         type="button"
-        class="livebtn primary"
+        class="livebtn playpause"
+        class:active={isPaused}
         onclick={togglePause}
         aria-label={isPaused ? 'Play' : 'Pause'}
       >
@@ -500,14 +501,14 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
-  .livebtn.primary {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent-ink);
-  }
-  .livebtn.primary :global(svg) {
-    fill: var(--accent-ink);
-    stroke: var(--accent-ink);
+  /* Play/pause icon: pin both fill and stroke to the button's text
+     colour so the filled-triangle play glyph and the two-bar pause
+     glyph stay fully visible in both the neutral (--text) and active
+     (--accent-ink) states — independent of how individual glyphs in
+     icons.ts declare their fill/stroke. */
+  .livebtn.playpause :global(svg) {
+    fill: currentColor;
+    stroke: currentColor;
   }
   .livebtn.active {
     background: var(--accent-soft);
