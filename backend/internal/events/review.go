@@ -29,6 +29,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -37,6 +38,12 @@ import (
 	"strings"
 	"time"
 )
+
+// ErrReviewNotFound is returned by GetReview when the upstream responds
+// with 404. The glance preview handler distinguishes this from generic
+// upstream failures so it can surface a 404 not_found to the client
+// instead of 502 upstream_error.
+var ErrReviewNotFound = errors.New("review not found")
 
 // FrigateReviewItem matches the subset of Frigate's /api/review item we read.
 type FrigateReviewItem struct {
@@ -196,6 +203,63 @@ func ReviewItemToMoment(r FrigateReviewItem) Moment {
 		DetectionIDs: detections,
 		ThumbEventID: thumbID,
 	}
+}
+
+// GetReview fetches a single review segment by id from Frigate's
+// /api/review/{id} endpoint. Frigate returns a JSON object (not an
+// array) for the single-id form. A 404 upstream surfaces as
+// ErrReviewNotFound so the caller can distinguish "not in Frigate"
+// from a generic upstream failure.
+func (c *Client) GetReview(ctx context.Context, id string) (FrigateReviewItem, error) {
+	reqURL := c.baseURL + "/api/review/" + url.PathEscape(id)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return FrigateReviewItem{}, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return FrigateReviewItem{}, fmt.Errorf("frigate review: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNotFound {
+		return FrigateReviewItem{}, ErrReviewNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		return FrigateReviewItem{}, fmt.Errorf("frigate review returned %d", resp.StatusCode)
+	}
+	var item FrigateReviewItem
+	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
+		return FrigateReviewItem{}, fmt.Errorf("decode review: %w", err)
+	}
+	return item, nil
+}
+
+// OpenPreview issues a Frigate preview.mp4 request for the supplied
+// camera and [start, end] window (unix seconds, formatted with 6
+// decimal places to match Frigate's URL grammar). method is the
+// caller's HTTP method (typically GET or HEAD); rangeHeader, when
+// non-empty, is forwarded as the upstream Range header so byte-range
+// playback flows end-to-end. The returned *http.Response is the raw
+// upstream response — the caller owns Body and is responsible for
+// closing it. Any status code is returned to the caller; non-2xx is
+// not treated as an error here.
+func (c *Client) OpenPreview(ctx context.Context, method, camera string, start, end float64, rangeHeader string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/" + url.PathEscape(camera) +
+		"/start/" + strconv.FormatFloat(start, 'f', 6, 64) +
+		"/end/" + strconv.FormatFloat(end, 'f', 6, 64) +
+		"/preview.mp4"
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview: %w", err)
+	}
+	return resp, nil
 }
 
 // detectionTimestampPrefix parses the unix-seconds float prefix of a

@@ -500,6 +500,38 @@ type GlanceResponse = {
 }
 type GlanceMoment = Moment & { seen: boolean }
 
+// GET  /api/glance/{id}/preview.mp4
+// HEAD /api/glance/{id}/preview.mp4
+//   Resolves the Frigate review id `{id}` to the segment's
+//   [start_time, end_time] window, then reverse-proxies Frigate's
+//   /api/{camera}/start/{start}/end/{end}/preview.mp4 inline. The
+//   window is padded by 4 seconds on each side (start clamped to
+//   >= 0); an active segment with null end_time uses now as the
+//   upper bound before padding.
+//
+//   The BFF forwards the incoming Range header verbatim and passes
+//   the upstream status code, Content-Type, Content-Length,
+//   Content-Range, Accept-Ranges, and ETag through unchanged.
+//   Content-Disposition is rewritten to "inline" — Frigate sends
+//   "attachment", which would block in-page <video> playback.
+//   Cache-Control: private, max-age=86400.
+//
+//   The body is streamed, NOT buffered: preview MP4s from Frigate
+//   are already iOS-friendly and Range-native, so this path skips
+//   the buffer + hev1→hvc1 retag the full event clip pipeline
+//   needs. This is intentionally a separate, lighter path from
+//   GET /api/events/{id}/clip.mp4 — preview.mp4 is low-res
+//   scrub-quality video for the moment-detail card; full-res clips
+//   continue to live behind the event clip endpoint.
+//
+//   Errors:
+//     - invalid id format → 404 not_found
+//     - upstream review 404 → 404 not_found
+//     - upstream review timeout (ctx deadline) → 504 upstream_timeout
+//     - any other upstream / transport failure → 502 upstream_error
+//   Statuses from Frigate's preview endpoint (e.g. 416 Range Not
+//   Satisfiable) are passed through verbatim.
+
 // POST /api/glance/seen
 //   body: { event_ids: string[], scope?: string }
 //   Marks each id as seen in the requested scope, refreshing the

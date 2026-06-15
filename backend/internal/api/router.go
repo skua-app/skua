@@ -40,6 +40,8 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Post("/glance/seen", h.handleGlanceSeen)
 		r.Post("/glance/seen-all", h.handleGlanceSeenAll)
 		r.Post("/glance/heartbeat", h.handleGlanceHeartbeat)
+		r.Method(http.MethodGet, "/glance/{id}/preview.mp4", http.HandlerFunc(h.handleGlancePreview))
+		r.Method(http.MethodHead, "/glance/{id}/preview.mp4", http.HandlerFunc(h.handleGlancePreview))
 		r.Get("/events/{id}/thumbnail.jpg", h.handleEventThumbnail)
 		r.Get("/events/{id}/snapshot.jpg", h.handleEventSnapshot)
 		r.Method(http.MethodGet, "/events/{id}/clip.mp4", http.HandlerFunc(h.handleEventClip))

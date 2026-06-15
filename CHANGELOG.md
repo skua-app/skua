@@ -33,6 +33,14 @@ Changed
   ("alert" or "detection") and the segment's zones in addition to
   kinds and labels, so the digest reflects the same activity grouping
   Frigate itself shows.
+- The BFF can now serve a low-res scrub-quality preview clip for a
+  moment by review id at `GET /api/glance/{id}/preview.mp4`. It
+  resolves the review's [start, end] window (padded a few seconds on
+  each side) and reverse-proxies Frigate's `preview.mp4` for that
+  window inline, with HTTP Range and HEAD passthrough. This is a
+  separate, lighter playback path from the full-resolution event
+  clip endpoint and is intended for moment-detail playback in the
+  glance UI.
 
 Removed
 - GET /api/moments has been removed; the BFF no longer exposes a
