@@ -27,6 +27,21 @@ Changed
   single-column list. Editing a camera's friendly name and per-camera
   main/sub stream overrides now lives in a focused modal opened from
   that row's edit button.
+- The "while you were away" glance now uses Frigate's native review
+  segments instead of clustering raw events on the BFF. Each moment
+  now matches a single review segment and carries the severity
+  ("alert" or "detection") and the segment's zones in addition to
+  kinds and labels, so the digest reflects the same activity grouping
+  Frigate itself shows.
+
+Removed
+- GET /api/moments has been removed; the BFF no longer exposes a
+  separate "moments from events" endpoint. The glance feed remains
+  available at GET /api/glance and is now sourced from Frigate review
+  segments. The moment payload has also changed shape: representative
+  event fields and the inline event list are gone, replaced by the
+  review-sourced id, severity, zones, detection ids, and a thumbnail
+  detection id.
 
 ## [0.12.1] — 2026-06-14
 

@@ -36,7 +36,6 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Get("/prefs", h.handleGetPrefs)
 		r.Put("/prefs", h.handlePutPrefs)
 		r.Get("/events", h.handleEvents)
-		r.Get("/moments", h.handleMoments)
 		r.Get("/glance", h.handleGlance)
 		r.Post("/glance/seen", h.handleGlanceSeen)
 		r.Post("/glance/seen-all", h.handleGlanceSeenAll)

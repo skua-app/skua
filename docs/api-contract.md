@@ -411,103 +411,86 @@ type RuntimeConfigErrorBody = {
 // save triggers the same clean exit + container-restart as
 // /api/runtime-config/restart. Not part of the steady-state SPA surface.
 
-// === Glance — Phase 1 (internal) ===
+// === Glance — Moment shape (internal) ===
 //
-// Server-side grouping of recent Frigate events into per-camera "moments"
-// for the planned glance surface. Phase 1 is read-only and stateless: no
-// persistence, no last_seen / ack / seen-state, no SSE additions, and not
-// yet surfaced in the UI. Phases 2 (persistence + seen-state) and 3 (UI
-// wiring) are planned separately.
+// "Moments" surface recent Frigate activity for the glance "while you
+// were away" UI. Each Moment is a per-camera review segment sourced
+// directly from Frigate's /api/review endpoint — Frigate already
+// performs the cross-event clustering server-side, so the BFF reshapes
+// one review item into one Moment with no client-side grouping.
+//
+// The previous BFF-internal grouping endpoint (GET /api/moments) and
+// its representative-event ranking have been removed in favour of
+// Frigate-native review segments. Replaced fields from that contract:
+//   - event_count, representative_event_id, representative_has_clip,
+//     events[]  → removed
+// New fields:
+//   - id           (Frigate review id; stable for seen-state keying)
+//   - severity     ("alert" | "detection")
+//   - zones        (zone names from Frigate config)
+//   - detection_ids (tracked-object event ids in the segment)
+//   - thumb_event_id (the detection id whose snapshot the UI should
+//                     use as the moment thumbnail — the latest
+//                     tracked-object event in the segment by
+//                     unix-seconds prefix; empty when detections is
+//                     empty)
 
-// GET /api/moments?since=&limit=
-//   since: optional ISO 8601 timestamp; events with started_at not
-//          strictly after `since` are dropped before grouping. Bad
-//          value → 400 bad_request "since must be ISO 8601".
-//   limit: optional positive integer (default 50, max 200). This is the
-//          lookback window — the number of source events fetched from
-//          Frigate, NOT the number of moments returned. There is no
-//          pagination cursor in Phase 1; the window is bounded by
-//          `limit` and clients re-fetch from the top.
-//
-// Grouping rules:
-//   - Strictly per camera; events from different cameras never merge.
-//   - Within a camera, events are sorted by started_at ascending; a new
-//     moment starts when the gap between consecutive started_at values
-//     exceeds the 5-minute MomentGap constant.
-//   - kinds and labels are not used to split a cluster — only the time
-//     gap is.
-//
-// Per moment:
-//   - started_at = earliest started_at in the cluster.
-//   - ended_at   = latest ended_at among cluster events, or null when
-//                  any event in the cluster is still in progress.
-//   - kinds      = distinct normalised kinds in stable encounter order.
-//   - labels     = distinct raw labels, sorted ascending.
-//   - representative_event_id = id of the highest-score event in the
-//                  cluster; nil scores rank below any real score; ties
-//                  break by most recent started_at.
-//   - representative_has_clip = has_clip of the representative event.
-//
-// Moments are returned sorted by their latest event started_at
-// descending (most recent moment first). Cache-Control: no-store.
-
-type MomentsResponse = {
-  items: Moment[]
-}
 type Moment = {
-  cam_id: string
-  started_at: string                // ISO 8601 UTC, earliest event start
-  ended_at: string | null           // null while any clustered event is in progress
-  kinds: EventKind[]                // distinct, stable encounter order
-  labels: string[]                  // distinct raw labels, sorted ascending
-  event_count: number
-  representative_event_id: string
-  representative_has_clip: boolean
-  events: EventItem[]               // cluster detections, newest first; length === event_count
+  id: string                      // Frigate review id, stable per segment
+  cam_id: string                  // Frigate camera id
+  started_at: string              // ISO 8601 UTC
+  ended_at: string | null         // null while the segment is still active
+  severity: 'alert' | 'detection'
+  kinds: EventKind[]              // distinct, stable encounter order, deduped
+  labels: string[]                // distinct raw labels, sorted ascending
+  zones: string[]                 // zone names from Frigate config, as supplied
+  detection_ids: string[]         // tracked-object event ids inside the segment
+  thumb_event_id: string          // empty when detection_ids is empty
 }
 
-// === Glance — Phase 2 (internal) ===
+// === Glance — household seen-state ===
 //
-// Household seen-state for the glance feature. Phase 2 persists a
-// scope-keyed SET of viewed event ids to a dedicated state file
-// (env GLANCE_STATE_PATH, default /data/glance.json) and exposes
-// two endpoints that compose the Phase 1 moment grouping with that
-// set. Still internal; UI wiring is Phase 3.
+// Household seen-state for the glance feature. The store persists a
+// scope-keyed SET of viewed ids plus a seen_through watermark to a
+// dedicated state file (env GLANCE_STATE_PATH, default
+// /data/glance.json) and exposes endpoints that compose Frigate's
+// review segments (see Moment above) with that set.
 //
-// The seen-state is keyed on each moment's representative_event_id:
-// a moment is "seen" iff its representative event id appears in the
-// household scope's set. The set is scope-keyed under a single v1
-// scope ("household") shared by every client on the LAN-only
-// deployment; the `scope` field is reserved for a future per-user
-// split and clients must omit it (or send "household") in v1. Set
-// entries are pruned to a 30-day retention window on load and after
-// every write so the file stays bounded.
+// The seen-state is keyed on the review-sourced moment id (m.id): a
+// moment is "seen" iff its id appears in the household scope's set OR
+// its started_at is at or before the household seen_through
+// watermark. The set is scope-keyed under a single v1 scope
+// ("household") shared by every client on the LAN-only deployment;
+// the `scope` field is reserved for a future per-user split and
+// clients must omit it (or send "household") in v1. Set entries are
+// pruned to a 30-day retention window on load and after every write
+// so the file stays bounded.
+//
+// Wire-compat note: POST /api/glance/seen still accepts the body
+// shape { event_ids: string[], scope?: string }. The field is named
+// `event_ids` for backwards compatibility with the original glance
+// rollout; the store is id-agnostic, so clients send moment ids
+// (m.id) under this key.
 
 // GET /api/glance?hours=&max=
 //   hours: optional positive integer (default 24, clamped to 1..168 =
 //          1 hour through 7 days). Controls how far back the "while you
 //          were away" window extends.
 //   max:   optional positive integer (default 20, clamped to 1..200).
-//          Caps the number of MOMENTS returned in the response (not
-//          the source events fetched). After grouping, the moment list
-//          is truncated to the newest `max`.
-//   The BFF walks Frigate backwards via the /api/events cursor (page
-//   size glancePageLimit = 200, up to glanceMaxPages = 5 pages = 1000
-//   source events for safety) until the source events cover
-//   since = now - hours, then groups them into moments. The window
-//   is purely time-based: there is no `cleared_at`-style clamp, and
-//   moments already at-or-before the household `seen_through`
-//   watermark stay in the response (they render with `seen: true`,
-//   not dropped). On exceptionally busy installs the safety cap may
-//   stop the loop before the full `hours` window is covered — older
-//   moments may then be missing from the response; full event history
-//   continues to live behind GET /api/events. After grouping, moments
-//   are truncated to the newest `max`. Each moment carries a `seen`
-//   boolean that is true iff its `representative_event_id` is in the
-//   household seen-set OR its newest event start is at or before the
-//   household `seen_through` watermark. `unseen_count` is the count
-//   of moments whose `seen` is false. There is no pagination cursor
-//   on this endpoint; clients re-fetch from the top.
+//          Caps the number of moments returned and is forwarded to
+//          Frigate as the upstream review-list limit.
+//   The BFF makes a single GET /api/review call against Frigate with
+//   `after = now - hours` (unix seconds) and `limit = max`. Frigate
+//   returns review segments newest-first; the BFF preserves that
+//   order and defensively truncates to `max`. The window is purely
+//   time-based: there is no `cleared_at`-style clamp, and moments
+//   already at-or-before the household `seen_through` watermark stay
+//   in the response (they render with `seen: true`, not dropped).
+//   Each moment carries a `seen` boolean that is true iff its `id`
+//   is in the household seen-set OR its `started_at` is at or before
+//   the household `seen_through` watermark. `unseen_count` is the
+//   count of moments whose `seen` is false. There is no pagination
+//   cursor on this endpoint; clients re-fetch from the top.
 //
 // Response: Cache-Control: no-store.
 
@@ -593,12 +576,14 @@ type GlanceHeartbeatResponse = {
 // is empty AND its seen_through watermark is zero — a mark-all-seen
 // must survive an empty seen set across restarts.
 //
-// Known edge: `seen` is keyed on representative_event_id, which is
-// derived per request from the current Frigate result set. If the
-// window of recent events shifts so that a moment regroups against
-// a different representative event id, that moment can re-surface
-// as unseen until the new representative id is also marked seen.
-// Acceptable for a small-household glance UI.
+// Note: `seen` is keyed on the review-sourced moment id (m.id),
+// which is stable per Frigate review segment for the segment's
+// lifetime. A moment marked seen stays seen as long as the segment
+// is still in the response window. If Frigate finalises a still-
+// active segment and reissues it with a stable id, the seen flag
+// continues to apply; if a segment ages out of the configured
+// retention window, its id naturally falls out of both the response
+// and the pruned seen set.
 
 // === Camera order (v0.13.0) ===
 //
