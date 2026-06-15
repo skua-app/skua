@@ -500,6 +500,38 @@ type GlanceResponse = {
 }
 type GlanceMoment = Moment & { seen: boolean }
 
+// GET /api/glance/{id}/clip.mp4
+//   Resolves the Frigate review id `{id}` to the segment's
+//   [start_time, end_time] window (same pad/clamp rule as the
+//   preview endpoint) and serves Frigate's full-resolution
+//   /api/{camera}/start/{start}/end/{end}/clip.mp4 through the same
+//   buffered + hev1→hvc1 retag pipeline as
+//   GET /api/events/{id}/clip.mp4. Real-time playback with audio,
+//   intended for the moment-detail "Open clip" affordance — the
+//   counterpart to the scrub-quality preview endpoint below.
+//
+//   The clip path uses the per-event clip timeout (eventsClipTimeout,
+//   30s) — Frigate reassembles the time-range clip on demand and is
+//   roughly as expensive as a per-event clip, so the 10s preview
+//   timeout would be too tight here.
+//
+//   Cache + single-flight are keyed on the review id, so repeat
+//   opens of the same moment share one upstream fetch. The ETag and
+//   immutable Cache-Control assume the cached window is stable; an
+//   active (still-growing) review served before its segment
+//   finalises may keep serving a slightly-short window until LRU
+//   evicts the entry. Acceptable for the household glance UI.
+//
+//   No HEAD route: the buffered pipeline does not have a useful HEAD
+//   path, and the glance UI only ever issues GETs.
+//
+//   Errors map the same way as the preview path:
+//     - invalid id format     → 404 not_found
+//     - upstream review 404   → 404 not_found
+//     - upstream review or
+//       clip context deadline → 504 upstream_timeout
+//     - other upstream / transport failure → 502 upstream_error
+
 // GET  /api/glance/{id}/preview.mp4
 // HEAD /api/glance/{id}/preview.mp4
 //   Resolves the Frigate review id `{id}` to the segment's

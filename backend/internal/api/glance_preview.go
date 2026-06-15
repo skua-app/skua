@@ -17,13 +17,32 @@ const (
 	// segments are short low-res scrub-quality clips, so 10s is
 	// generous for a household LAN deployment.
 	glancePreviewTimeout = 10 * time.Second
-	// glancePreviewPad adds slack around the review segment's
+	// glanceMomentPad adds slack around the review segment's
 	// [start_time, end_time] window when asking Frigate for the
-	// preview.mp4. A few seconds of head and tail lets the user scrub
-	// just outside the detected activity without hitting empty
-	// renderable frames.
-	glancePreviewPad = 4.0
+	// preview.mp4 or full-res clip.mp4. A few seconds of head and tail
+	// lets the user scrub just outside the detected activity without
+	// hitting empty renderable frames.
+	glanceMomentPad = 4.0
 )
+
+// momentClipWindow computes the [start, end] unix-seconds window the
+// glance clip/preview handlers ask Frigate to render around a review
+// segment. start is the segment start minus glanceMomentPad, clamped
+// to >= 0. end is the segment end (if present and > 0) or now (for an
+// active segment with null/zero end_time), then plus glanceMomentPad.
+func momentClipWindow(review events.FrigateReviewItem) (start, end float64) {
+	start = review.StartTime - glanceMomentPad
+	if start < 0 {
+		start = 0
+	}
+	if review.EndTime != nil && *review.EndTime > 0 {
+		end = *review.EndTime
+	} else {
+		end = float64(time.Now().Unix())
+	}
+	end += glanceMomentPad
+	return
+}
 
 // handleGlancePreview serves GET / HEAD /api/glance/{id}/preview.mp4.
 // Resolves the Frigate review id to its [start_time, end_time] window
@@ -85,17 +104,7 @@ func (h *Handler) handleGlancePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	start := review.StartTime - glancePreviewPad
-	if start < 0 {
-		start = 0
-	}
-	var end float64
-	if review.EndTime != nil && *review.EndTime > 0 {
-		end = *review.EndTime
-	} else {
-		end = float64(time.Now().Unix())
-	}
-	end += glancePreviewPad
+	start, end := momentClipWindow(review)
 
 	upstream, err := h.events.OpenPreview(ctx, r.Method, review.Camera, start, end, r.Header.Get("Range"))
 	if err != nil {

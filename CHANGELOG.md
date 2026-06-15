@@ -41,6 +41,13 @@ Changed
   separate, lighter playback path from the full-resolution event
   clip endpoint and is intended for moment-detail playback in the
   glance UI.
+- A full-resolution real-time clip for a moment is now available at
+  `GET /api/glance/{id}/clip.mp4`. The BFF resolves the review's
+  window the same way as the preview endpoint and serves Frigate's
+  time-range `clip.mp4` through the same buffered + iOS-friendly
+  retag pipeline as the existing per-event clip endpoint, so it
+  plays inline in `<video>` with audio and supports HTTP Range
+  natively.
 
 Removed
 - GET /api/moments has been removed; the BFF no longer exposes a
