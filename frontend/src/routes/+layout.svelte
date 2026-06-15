@@ -69,10 +69,29 @@
     // this device is "away" AND the user is on the grid AND there are
     // unseen moments. The away verdict comes from the per-device
     // heartbeat session — an active device never trips it.
+    //
+    // sessionStorage survives the in-session location.reload() that
+    // the PWA service worker fires on autoUpdate, but is cleared on
+    // a genuine cold launch. The post-reload heartbeat would report
+    // this device as no-longer-away (the pre-reload ping marked it
+    // active), which would skip the surfacing gate and make the
+    // peek appear to flash and vanish. Persisting the surfacing
+    // intent re-surfaces the peek across that reload only.
     async function surfaceGlance(): Promise<void> {
       try {
+        if (glanceStore.wasSurfaced()) {
+          // Post-reload re-surface: skip the heartbeat (its verdict
+          // is poisoned by our own pre-reload ping; startPing keeps
+          // the device active going forward).
+          await glanceStore.load()
+          if (page.route.id === '/' && glanceStore.unseenCount > 0) {
+            glanceStore.openPeek()
+          }
+          return
+        }
         const [away] = await Promise.all([glanceStore.heartbeat(), glanceStore.load()])
         if (away && page.route.id === '/' && glanceStore.unseenCount > 0) {
+          glanceStore.markSurfaced()
           glanceStore.openPeek()
         }
       } catch (err) {
