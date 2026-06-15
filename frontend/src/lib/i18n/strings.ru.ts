@@ -210,7 +210,6 @@ export const ui = {
   glanceMaxMomentsLabel: 'Сколько моментов',
   glanceMaxMomentsDesc: 'Ограничить количество сгруппированных моментов.',
   glanceMomentTitle: 'Момент',
-  glanceEventsSection: 'События',
   glanceEventOne: '{n} событие',
   glanceEventMany: '{n} событий',
   glanceTitle: 'Пока вас не было',

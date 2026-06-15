@@ -37,9 +37,7 @@ class GlanceStore {
   async markSeen(ids: string[]): Promise<void> {
     if (ids.length === 0) return
     const idSet = new Set(ids)
-    this.moments = this.moments.map((m) =>
-      m.seen || !idSet.has(m.representative_event_id) ? m : { ...m, seen: true }
-    )
+    this.moments = this.moments.map((m) => (m.seen || !idSet.has(m.id) ? m : { ...m, seen: true }))
     this.unseenCount = this.moments.filter((m) => !m.seen).length
     try {
       await markGlanceSeen(ids)

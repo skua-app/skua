@@ -211,28 +211,16 @@ describe('glance', () => {
       unseen_count: 1,
       moments: [
         {
+          id: 'rev-1',
           cam_id: 'camA',
           started_at: '2026-06-04T22:05:00Z',
           ended_at: '2026-06-04T22:05:30Z',
+          severity: 'detection',
           kinds: ['person'],
           labels: ['person'],
-          event_count: 1,
-          representative_event_id: 'evt-1',
-          representative_has_clip: true,
-          events: [
-            {
-              id: 'evt-1',
-              cam_id: 'camA',
-              started_at: '2026-06-04T22:05:00Z',
-              ended_at: '2026-06-04T22:05:30Z',
-              duration_seconds: 30,
-              label: 'person',
-              kind: 'person',
-              score: null,
-              has_snapshot: true,
-              has_clip: true
-            }
-          ],
+          zones: [],
+          detection_ids: ['1779310005.0-aaa'],
+          thumb_event_id: '1779310005.0-aaa',
           seen: false
         }
       ]

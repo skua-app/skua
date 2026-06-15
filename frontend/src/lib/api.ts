@@ -186,26 +186,40 @@ export function eventClipURL(id: string, download = false): string {
   return download ? `${base}?download=1` : base
 }
 
-// Moment mirrors backend/internal/events.Moment exactly: a per-camera
-// time-cluster summarising one or more events. started_at is RFC3339
-// UTC; ended_at is null while any clustered event is still in progress.
-// events lists every detection in the cluster, sorted by started_at
-// descending (newest first); length === event_count.
+// momentPreviewURL returns the BFF route that resolves a moment id
+// (Frigate review id) to its preview.mp4 — a low-res scrub-quality
+// clip covering the whole review window, served inline with Range
+// passthrough. Distinct from eventClipURL: the moment preview is one
+// clip per review segment; the event clip is one clip per tracked
+// detection.
+export function momentPreviewURL(id: string): string {
+  return `/api/glance/${encodeURIComponent(id)}/preview.mp4`
+}
+
+// Moment mirrors backend/internal/events.Moment: one Frigate review
+// segment, surfaced as the glance "while you were away" unit. id is
+// the Frigate review id (stable, suitable as a seen-state key).
+// started_at is RFC3339 UTC; ended_at is null while the segment is
+// still active. detection_ids lists the tracked-object event ids
+// inside the segment, and thumb_event_id is the detection whose
+// snapshot the UI should use as the moment thumbnail (empty when the
+// segment has no detections yet).
 export type Moment = {
+  id: string
   cam_id: string
   started_at: string
   ended_at: string | null
+  severity: 'alert' | 'detection'
   kinds: EventKind[]
   labels: string[]
-  event_count: number
-  representative_event_id: string
-  representative_has_clip: boolean
-  events: EventItem[]
+  zones: string[]
+  detection_ids: string[]
+  thumb_event_id: string
 }
 
 // GlanceMoment is a Moment plus a per-moment seen flag, keyed against
 // the household seen-set on the BFF. A moment flips to seen as soon as
-// its representative event id is in the set.
+// its id appears in the set.
 export type GlanceMoment = Moment & { seen: boolean }
 
 // GlanceResponse is the envelope of GET /api/glance: the count of

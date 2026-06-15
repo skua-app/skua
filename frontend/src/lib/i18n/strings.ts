@@ -209,7 +209,6 @@ export const ui = {
   glanceMaxMomentsLabel: 'Moments shown',
   glanceMaxMomentsDesc: 'Cap the number of grouped moments shown.',
   glanceMomentTitle: 'Moment',
-  glanceEventsSection: 'Events',
   glanceEventOne: '{n} event',
   glanceEventMany: '{n} events',
   glanceTitle: 'While you were away',

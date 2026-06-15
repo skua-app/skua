@@ -78,15 +78,16 @@
     return parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
   }
   function countChipText(moment: GlanceMoment): string {
-    const tpl = moment.event_count === 1 ? ui.glanceEventOne : ui.glanceEventMany
-    return tpl.replace('{n}', String(moment.event_count))
+    const n = moment.detection_ids.length
+    const tpl = n === 1 ? ui.glanceEventOne : ui.glanceEventMany
+    return tpl.replace('{n}', String(n))
   }
   function newestTime(moment: GlanceMoment): string {
-    const newest = moment.events[0]?.started_at ?? moment.started_at
+    const newest = moment.ended_at ?? moment.started_at
     return relativeTime(newest, now)
   }
   function onRowClick(moment: GlanceMoment) {
-    void glanceStore.markOneSeen(moment.representative_event_id)
+    void glanceStore.markOneSeen(moment.id)
     modalMoment = moment
   }
   function openLiveFor(moment: GlanceMoment | null): (() => void) | undefined {
@@ -347,19 +348,21 @@
   {#if visibleMoments.length === 0}
     <div class="sheet-empty">{ui.glanceAllCaughtUp}</div>
   {:else}
-    {#each visibleMoments as m (m.cam_id + m.started_at)}
+    {#each visibleMoments as m (m.id)}
       <button type="button" class="moment" class:seen={m.seen} onclick={() => onRowClick(m)}>
         <span class="m-dotcol" aria-hidden="true">
           {#if !m.seen}<span class="m-unseen"></span>{/if}
         </span>
         <div class="m-thumb">
-          <img
-            src={eventThumbnailURL(m.representative_event_id)}
-            alt={camName(m.cam_id)}
-            loading="lazy"
-            width="112"
-            height="63"
-          />
+          {#if m.thumb_event_id}
+            <img
+              src={eventThumbnailURL(m.thumb_event_id)}
+              alt={camName(m.cam_id)}
+              loading="lazy"
+              width="112"
+              height="63"
+            />
+          {/if}
         </div>
         <div class="m-meta">
           <div class="m-l1">
