@@ -255,6 +255,40 @@
     }
   })
 
+  // Shared drag math used by both the header pointer handlers and the
+  // list-area touch coordination below. The header drag uses pointer
+  // events (which cleanly cancel iOS Safari long-press / text-select);
+  // the list-area drag uses touch events because pointer events do
+  // NOT reliably preventDefault the native scroll mid-gesture on iOS.
+  function sheetDragMove(dy: number) {
+    if (!sheetEl) return
+    const peekT = detents[detents.length - 1]!
+    const max = peekT + 140
+    curT = Math.max(0, Math.min(max, dragStartT + dy))
+    sheetEl.style.transform = `translateY(${curT}px)`
+    setScrimForTranslate(curT)
+  }
+  function sheetDragRelease() {
+    const peekT = detents[detents.length - 1]!
+    if (curT > peekT + 70) {
+      glanceStore.closePeek()
+      return
+    }
+    let best = 0
+    let bd = Infinity
+    detents.forEach((t, i) => {
+      const d = Math.abs(t - curT)
+      if (d < bd) {
+        bd = d
+        best = i
+      }
+    })
+    applyDetent(best, true)
+  }
+  function sheetDragCancel() {
+    applyDetent(detentIdx, true)
+  }
+
   function onHeadPointerDown(e: PointerEvent) {
     if (!sheetEl) return
     // Let the close button's own click pass through without starting a drag.
@@ -271,40 +305,107 @@
   }
   function onHeadPointerMove(e: PointerEvent) {
     if (!dragging || !sheetEl) return
-    const dy = e.clientY - dragStartY
-    const peekT = detents[detents.length - 1]!
-    const max = peekT + 140
-    curT = Math.max(0, Math.min(max, dragStartT + dy))
-    sheetEl.style.transform = `translateY(${curT}px)`
-    setScrimForTranslate(curT)
+    sheetDragMove(e.clientY - dragStartY)
   }
   function onHeadPointerUp(e: PointerEvent) {
     if (!dragging) return
     dragging = false
     const head = e.currentTarget as HTMLElement
     if (head.hasPointerCapture(e.pointerId)) head.releasePointerCapture(e.pointerId)
-    const peekT = detents[detents.length - 1]!
-    if (curT > peekT + 70) {
-      glanceStore.closePeek()
-      return
-    }
-    // Snap to nearest detent.
-    let best = 0
-    let bd = Infinity
-    detents.forEach((t, i) => {
-      const d = Math.abs(t - curT)
-      if (d < bd) {
-        bd = d
-        best = i
-      }
-    })
-    applyDetent(best, true)
+    sheetDragRelease()
   }
   function onHeadPointerCancel() {
     if (!dragging) return
     dragging = false
-    applyDetent(detentIdx, true)
+    sheetDragCancel()
   }
+
+  // List-area scroll-edge coordination. A drag that starts inside the
+  // moment list engages a SHEET drag only when the list is at its top
+  // edge AND the finger moves downward; otherwise the list scrolls
+  // natively. The "engage" decision is made on the first material
+  // move (4px slop) and locks for the gesture. Once engaged we
+  // preventDefault every subsequent touchmove so iOS's native scroll
+  // yields to the sheet.
+  let listEl: HTMLDivElement | undefined = $state()
+  let touchStartY = 0
+  let touchDecided = false
+  let touchEngaged = false
+
+  $effect(() => {
+    if (!mobileMounted) return
+    const list = listEl
+    if (!list) return
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length !== 1) {
+        touchDecided = true
+        touchEngaged = false
+        return
+      }
+      touchStartY = e.touches[0]!.clientY
+      touchDecided = false
+      touchEngaged = false
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (!list || !sheetEl) return
+      if (e.touches.length !== 1) return
+      const dy = e.touches[0]!.clientY - touchStartY
+
+      if (touchEngaged) {
+        // Lock: keep iOS native scroll out of the way and follow finger.
+        e.preventDefault()
+        sheetDragMove(dy)
+        return
+      }
+      if (touchDecided) return
+      // 4px slop avoids treating taps as drags.
+      if (Math.abs(dy) < 4) return
+      touchDecided = true
+      // Engage only on a downward drag from the top edge. Anything
+      // else (upward drag, or downward drag mid-list) belongs to the
+      // native list scroll.
+      if (dy > 0 && list.scrollTop <= 0) {
+        touchEngaged = true
+        dragStartT = detents[detentIdx]!
+        curT = dragStartT
+        sheetEl.style.transition = 'none'
+        e.preventDefault()
+        sheetDragMove(dy)
+      }
+    }
+
+    function onTouchEnd() {
+      if (touchEngaged) {
+        sheetDragRelease()
+      }
+      touchEngaged = false
+      touchDecided = false
+    }
+
+    function onTouchCancel() {
+      if (touchEngaged) {
+        sheetDragCancel()
+      }
+      touchEngaged = false
+      touchDecided = false
+    }
+
+    // touchstart / touchmove must be NON-passive so we can call
+    // preventDefault on engage. touchend / touchcancel never call
+    // preventDefault, so they stay passive (cheaper on iOS).
+    list.addEventListener('touchstart', onTouchStart, { passive: false })
+    list.addEventListener('touchmove', onTouchMove, { passive: false })
+    list.addEventListener('touchend', onTouchEnd, { passive: true })
+    list.addEventListener('touchcancel', onTouchCancel, { passive: true })
+    return () => {
+      list.removeEventListener('touchstart', onTouchStart)
+      list.removeEventListener('touchmove', onTouchMove)
+      list.removeEventListener('touchend', onTouchEnd)
+      list.removeEventListener('touchcancel', onTouchCancel)
+    }
+  })
 </script>
 
 <svelte:window bind:innerWidth={width} />
@@ -460,7 +561,7 @@
     <div class="sheet-sub">
       {@render subBar()}
     </div>
-    <div class="sheet-list">
+    <div class="sheet-list" bind:this={listEl}>
       {@render rows()}
     </div>
   </div>
@@ -669,6 +770,10 @@
     flex: 1 1 auto;
     overflow-y: auto;
     overflow-x: hidden;
+    /* Suppress the browser's overscroll bounce + page chaining so the
+       JS sheet-drag is the only thing that moves on a downward pull
+       at scrollTop=0. */
+    overscroll-behavior: contain;
     scrollbar-width: none;
     padding: 4px 20px 20px;
   }
