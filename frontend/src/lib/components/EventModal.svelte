@@ -2,7 +2,7 @@
   import { fly, fade } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import type { EventItem } from '$lib/api'
-  import { eventSnapshotURL, eventClipURL } from '$lib/api'
+  import { eventSnapshotURL, eventClipURL, fetchEventReview } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { configStore } from '$lib/stores/config.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
@@ -38,17 +38,35 @@
 
   // Frigate UI deep-link.
   //
-  // Verified against Frigate 0.17 on 2026-05-20:
-  // The UI is a SPA, so /events/<id>, /explore?event_id=<id>, and /?camera=<cam>
-  // all return 200 unconditionally. 0.17 retired the dedicated event-detail
-  // route used in 0.16, so there is no reliable "scroll-to-event" deep-link.
-  // We use /explore?event_id=<id>: Explore is the tab that lists per-event
-  // snapshots, so even if the query param is ignored the user lands in the
-  // right context to find the event. The cam_id query is appended so that,
-  // if Explore filters by camera, only the relevant camera's events show.
+  // Events now resolve their containing review segment via
+  // GET /api/events/{id}/review and deep-link to the review timeline
+  // (/review?id=<review_id>) when one is found, falling back to
+  // /explore?event_id=<id> when no review contains the event. The
+  // button is usable immediately (Explore link) and upgrades to the
+  // timeline link once the resolver responds, so a slow round-trip
+  // never blocks the user.
+  //
+  // Verified against Frigate 0.17 on 2026-05-20: the UI is a SPA, so
+  // /review?id=<id>, /events/<id>, /explore?event_id=<id>, and
+  // /?camera=<cam> all return 200 unconditionally. 0.17 retired the
+  // dedicated event-detail route used in 0.16; the review timeline
+  // is the closest "scroll-to-this-activity" affordance, with
+  // Explore as the safe fallback when no review covers the event.
+  let reviewId = $state<string | null>(null)
+  $effect(() => {
+    const id = event.id
+    reviewId = null
+    void fetchEventReview(id).then((found) => {
+      // Stale-assign guard: only commit if we're still on the same
+      // event the request was made for.
+      if (id === event.id) reviewId = found
+    })
+  })
   const deepLink = $derived(
     configStore.frigateUIURL
-      ? `${configStore.frigateUIURL}/explore?event_id=${encodeURIComponent(event.id)}&camera=${encodeURIComponent(event.cam_id)}`
+      ? reviewId
+        ? `${configStore.frigateUIURL}/review?id=${encodeURIComponent(reviewId)}`
+        : `${configStore.frigateUIURL}/explore?event_id=${encodeURIComponent(event.id)}&camera=${encodeURIComponent(event.cam_id)}`
       : ''
   )
 

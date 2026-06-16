@@ -39,9 +39,15 @@
       timeStyle: 'medium'
     }).format(new Date(moment.started_at))
   )
+  // Moments deep-link straight to the Frigate review timeline at this
+  // segment: moment.id IS the Frigate review id, so /review?id=<id>
+  // scrolls to (and selects) the matching review on Frigate's
+  // history view. No /explore fallback is needed — the BFF only
+  // surfaces moments that came from /api/review, so the id is
+  // guaranteed to be valid for the timeline.
   const deepLink = $derived(
-    configStore.frigateUIURL && moment.thumb_event_id
-      ? `${configStore.frigateUIURL}/explore?event_id=${encodeURIComponent(moment.thumb_event_id)}&camera=${encodeURIComponent(moment.cam_id)}`
+    configStore.frigateUIURL
+      ? `${configStore.frigateUIURL}/review?id=${encodeURIComponent(moment.id)}`
       : ''
   )
   const titleText = $derived(`${ui.glanceMomentTitle} · ${camName}`)

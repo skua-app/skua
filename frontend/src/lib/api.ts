@@ -186,6 +186,24 @@ export function eventClipURL(id: string, download = false): string {
   return download ? `${base}?download=1` : base
 }
 
+// fetchEventReview asks the BFF to resolve the Frigate review segment
+// that contains the supplied tracked-object event id. On 200 it
+// returns the review id string; on 404 or any error (network, server,
+// timeout) it resolves to null so callers can degrade gracefully —
+// the event modal falls back to the Explore deep-link when no review
+// is found. The Frigate review URL is constructed in the caller from
+// configStore.frigateUIURL, which already gates the deep-link button.
+export async function fetchEventReview(eventId: string): Promise<string | null> {
+  try {
+    const res = await apiFetch<{ review_id: string }>(
+      `/api/events/${encodeURIComponent(eventId)}/review`
+    )
+    return res.review_id || null
+  } catch {
+    return null
+  }
+}
+
 // momentPreviewURL returns the BFF route that resolves a moment id
 // (Frigate review id) to its preview.mp4 — a low-res scrub-quality
 // clip covering the whole review window, served inline with Range
