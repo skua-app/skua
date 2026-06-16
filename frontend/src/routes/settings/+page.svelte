@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { pushState } from '$app/navigation'
+  import { page } from '$app/state'
   import AboutSection from '$lib/components/settings/AboutSection.svelte'
   import AppearanceSection from '$lib/components/settings/AppearanceSection.svelte'
   import CamerasSection from '$lib/components/settings/CamerasSection.svelte'
@@ -55,9 +57,12 @@
   type MobileView = 'index' | MobileDrillId
 
   // Mobile: 'index' shows the inline Appearance block plus the grouped row
-  // list; otherwise we're drilled into a section. State-driven only — no
-  // history pushes. Phones always land on the index.
-  let mobileView = $state<MobileView>('index')
+  // list; otherwise we're drilled into a section. The current drill is held
+  // in SvelteKit shallow-routing state so the iOS left-edge swipe (and
+  // browser back) pops the drill before leaving the /settings route. On a
+  // fresh load page.state is empty, so we resolve to 'index' — phones still
+  // always land on the index.
+  const mobileView = $derived<MobileView>(page.state.settingsSection ?? 'index')
 
   // Mobile nav rows: same shape as desktop, minus the Appearance row (and
   // therefore minus the now-empty Personalize group).
@@ -146,7 +151,7 @@
           <button
             type="button"
             class="set-row"
-            onclick={() => (mobileView = it.id as MobileDrillId)}
+            onclick={() => pushState('', { settingsSection: it.id as MobileDrillId })}
           >
             <span class="ico" aria-hidden="true"><Icon name={it.icon} size={22} /></span>
             <span class="set-row-label">{it.label}</span>
@@ -165,7 +170,7 @@
       <button
         type="button"
         class="cbtn"
-        onclick={() => (mobileView = 'index')}
+        onclick={() => history.back()}
         aria-label={ui.settingsBack}
       >
         <Icon name="back" size={21} />
