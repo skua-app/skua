@@ -143,6 +143,18 @@ func (h *Handler) handleTimelineVOD(w http.ResponseWriter, r *http.Request) {
 
 	upstream, err := h.frigate.OpenVOD(ctx, r.Method, id, start, end, rest, r.Header.Get("Range"))
 	if err != nil {
+		// Client-disconnect path: iOS <video> opens HLS segments in
+		// parallel and cancels some immediately as it picks a ladder
+		// position. The request context fires Canceled, which propagates
+		// through our derived ctx into OpenVOD's transport error. There
+		// is no client left to receive a 502, so log at Debug and bail
+		// without writing a status or body. Check Canceled BEFORE
+		// DeadlineExceeded — our own timeout also cancels the derived
+		// ctx and would otherwise be misclassified.
+		if errors.Is(err, context.Canceled) && r.Context().Err() == context.Canceled {
+			h.logger.Debug("timeline vod cancelled by client", "cam", id, "rest", rest)
+			return
+		}
 		status := http.StatusBadGateway
 		code := "upstream_error"
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -200,6 +212,14 @@ func (h *Handler) handleRecordingsSummary(w http.ResponseWriter, r *http.Request
 
 	upstream, err := h.frigate.GetRecordingsSummary(ctx, id, r.URL.Query().Get("timezone"))
 	if err != nil {
+		// Mirror handleTimelineVOD's client-disconnect branch: a
+		// cancelled request context (typically the browser walked away
+		// from the timeline before the summary fetch landed) is not an
+		// upstream error and there is no one to receive a 502.
+		if errors.Is(err, context.Canceled) && r.Context().Err() == context.Canceled {
+			h.logger.Debug("recordings summary cancelled by client", "cam", id)
+			return
+		}
 		status := http.StatusBadGateway
 		code := "upstream_error"
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

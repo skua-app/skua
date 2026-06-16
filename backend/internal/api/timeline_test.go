@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/skua-app/skua/internal/cameras"
 	"github.com/skua-app/skua/internal/config"
@@ -345,5 +347,116 @@ func TestHandleRecordingsSummary_NoTimezone_NotForwarded(t *testing.T) {
 	fake.mu.Unlock()
 	if gotTZ != "" {
 		t.Errorf("upstream timezone = %q, want empty (omitted)", gotTZ)
+	}
+}
+
+// assertNotErrorEnvelope fails if body parses as the writeError
+// {"error":...,"message":...} envelope. The cancelled-client cases
+// must produce no body at all; this check guards against accidentally
+// surfacing a 502 / 504 envelope while the recorder still reports
+// status 200 (httptest default).
+func assertNotErrorEnvelope(t *testing.T, body []byte) {
+	t.Helper()
+	if len(body) == 0 {
+		return
+	}
+	var env map[string]string
+	if err := json.Unmarshal(body, &env); err == nil {
+		if _, hasError := env["error"]; hasError {
+			t.Errorf("response carried error envelope %s, want no body", body)
+		}
+	}
+}
+
+// TestHandleTimelineVOD_ClientCancelled_NoErrorWritten exercises the
+// iOS HLS-cancel pattern: a request whose context is already cancelled
+// reaches the handler, OpenVOD's transport call fails immediately with
+// context.Canceled, and the handler must bail without writing a 502
+// (no client left to receive one). The check order (Canceled BEFORE
+// DeadlineExceeded) is what keeps the playback-cancel storm out of
+// the ERROR log.
+func TestHandleTimelineVOD_ClientCancelled_NoErrorWritten(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/vod/1779310000/1779310600/master.m3u8", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code == http.StatusBadGateway {
+		t.Fatalf("client-cancelled VOD got 502 (body=%s), want no error written", w.Body.String())
+	}
+	if w.Code == http.StatusGatewayTimeout {
+		t.Fatalf("client-cancelled VOD got 504 (body=%s), want no error written", w.Body.String())
+	}
+	assertNotErrorEnvelope(t, w.Body.Bytes())
+}
+
+// TestHandleRecordingsSummary_ClientCancelled_NoErrorWritten mirrors
+// the VOD case for the summary handler: a cancelled request context
+// must skip writeError and leave no envelope behind.
+func TestHandleRecordingsSummary_ClientCancelled_NoErrorWritten(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/recordings-summary", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code == http.StatusBadGateway {
+		t.Fatalf("client-cancelled summary got 502 (body=%s), want no error written", w.Body.String())
+	}
+	if w.Code == http.StatusGatewayTimeout {
+		t.Fatalf("client-cancelled summary got 504 (body=%s), want no error written", w.Body.String())
+	}
+	assertNotErrorEnvelope(t, w.Body.Bytes())
+}
+
+// TestHandleTimelineVOD_UpstreamFailure_Still502 guards against the
+// cancellation branch accidentally swallowing real upstream failures.
+// The fake Frigate is shut down before the request fires, so the
+// transport returns a connect-refused error (not context.Canceled);
+// the handler must still surface 502 upstream_error with the standard
+// envelope. The request context is fresh so r.Context().Err() is nil
+// and the canceled-branch predicate must NOT trigger.
+func TestHandleTimelineVOD_UpstreamFailure_Still502(t *testing.T) {
+	logger := applog.New("error", "text")
+	frigateSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// never reached — server is closed below before the request runs.
+	}))
+	frigateSrv.Close()
+
+	frigateClient := frigate.NewClient(frigateSrv.URL, &http.Client{Timeout: 2 * time.Second})
+	camSpecs := []config.CameraSpec{
+		{ID: "cam1", Name: "Cam 1", StreamMain: "cam1_main", StreamSub: "cam1_sub"},
+	}
+	h := NewHandler(HandlerDeps{
+		Logger:     logger,
+		Frigate:    frigateClient,
+		Cameras:    cameras.NewForTest(camSpecs),
+		HTTPClient: &http.Client{},
+	})
+	staticFS := fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("ok")}}
+	router := NewRouter(h, sse.NewHub(logger), logger, staticFS)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/vod/1779310000/1779310600/master.m3u8", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("dead upstream: want 502, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "upstream_error" {
+		t.Errorf("error = %q, want upstream_error", body["error"])
 	}
 }
