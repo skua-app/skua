@@ -20,6 +20,7 @@ export type DesktopColumns = 2 | 3 | 4 | 5
 export type MobileColumns = 1 | 2
 export type GlanceWindowHours = 6 | 12 | 24 | 48 | 72
 export type GlanceMaxMoments = 10 | 20 | 30 | 50
+export type GridFps = 1 | 2
 
 export type Prefs = {
   grid_mode: 'hd' | 'eco'
@@ -34,6 +35,7 @@ export type Prefs = {
   grid_filter: string | null
   glance_window_hours: GlanceWindowHours
   glance_max_moments: GlanceMaxMoments
+  grid_fps: GridFps
 }
 
 export const ACCENT_VALUES: Record<Accent, string> = {

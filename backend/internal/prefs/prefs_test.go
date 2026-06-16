@@ -227,6 +227,38 @@ func TestUpdate_NonIntegerDesktopColumns_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestUpdate_GridFPS_ValidValuesAccepted(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Default is 1 Hz; bumping to 2 must round-trip, then back to 1.
+	for _, want := range []int{2, 1} {
+		updated, err := store.Update(map[string]any{"grid_fps": float64(want)})
+		if err != nil {
+			t.Fatalf("grid_fps=%d: unexpected error: %v", want, err)
+		}
+		if updated.GridFPS != want {
+			t.Errorf("grid_fps=%d: GridFPS = %d, want %d", want, updated.GridFPS, want)
+		}
+	}
+}
+
+func TestUpdate_InvalidGridFPS_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Update(map[string]any{"grid_fps": float64(3)}); err == nil {
+		t.Fatal("expected error for out-of-range grid_fps, got nil")
+	}
+	if _, err := store.Update(map[string]any{"grid_fps": float64(1.5)}); err == nil {
+		t.Fatal("expected error for non-integer grid_fps, got nil")
+	}
+}
+
 func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prefs.json")

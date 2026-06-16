@@ -74,9 +74,10 @@ type Prefs = {
   grid_filter: string | null  // last-selected group id, null = "Все" (E3.3)
   glance_window_hours: 6 | 12 | 24 | 48 | 72  // "while you were away" lookback
   glance_max_moments: 10 | 20 | 30 | 50       // cap on glance peek output moments
+  grid_fps: 1 | 2                             // grid tile refresh rate, Hz
 }
 // Stored at /data/prefs.json. Atomic write (tmp + rename).
-// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null / 24 / 20
+// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null / 24 / 20 / 1
 
 // === E3 (stable) ===
 

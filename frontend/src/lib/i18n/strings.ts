@@ -114,6 +114,8 @@ export const ui = {
   nameStyleLabel: 'Camera name',
   nameStyleDesc: 'Where the name sits on each tile.',
   showTimestampDesc: 'Burn a clock onto live snapshots and feeds.',
+  gridFpsLabel: 'Grid frame rate',
+  gridFpsDesc: 'How often grid tiles refresh. 2 Hz roughly doubles bandwidth.',
   accentLabel: 'Accent',
   accentDesc: 'Used across highlights and controls.',
   nameLabel: 'Name',

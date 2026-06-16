@@ -48,6 +48,11 @@ Changed
   retag pipeline as the existing per-event clip endpoint, so it
   plays inline in `<video>` with audio and supports HTTP Range
   natively.
+- New Appearance setting "Grid frame rate" — switch the camera grid
+  tile refresh between 1 Hz (default) and 2 Hz. 2 Hz roughly doubles
+  the snapshot bandwidth in exchange for a smoother grid. The
+  preference is shared across the household and persists like the
+  other prefs.
 - The BFF can now resolve a tracked-object event to the Frigate
   review segment that contains it via `GET /api/events/{id}/review`.
   It returns `{ review_id }` for the containing review and 404

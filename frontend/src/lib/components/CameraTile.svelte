@@ -35,15 +35,23 @@
   function refreshSnapshot() {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
     imgError = false
-    snapshotSrc = `${srcBase}?t=${Math.floor(Date.now() / 1000)}`
+    // ms-resolution cache-buster: two requests within the same second
+    // (at 2 Hz) must be distinct URLs. The SW strips the query when
+    // caching tile.jpg, and snapshot.jpg is no-store, so this is safe.
+    snapshotSrc = `${srcBase}?t=${Date.now()}`
   }
   function tickTime() {
     currentTime = timeFmt.format(new Date())
   }
 
   // Stagger first fetch by index so all tiles don't hit the BFF at once;
-  // then poll at 1 Hz. Visibility wake-up forces a refresh on resume.
+  // then poll at the configured grid frame rate (1 or 2 Hz). Reading
+  // prefsStore.gridFps inside the effect makes it re-run and rebuild
+  // the timer when the user flips the switch. Visibility wake-up forces
+  // a refresh on resume.
   $effect(() => {
+    const fps = prefsStore.gridFps
+    const intervalMs = Math.round(1000 / fps)
     const stagger = untrack(() => index * 100)
     const start = setTimeout(() => {
       refreshSnapshot()
@@ -52,7 +60,7 @@
     const ticker = setInterval(() => {
       refreshSnapshot()
       tickTime()
-    }, 1000)
+    }, intervalMs)
     function onVisibility() {
       if (document.visibilityState === 'visible') {
         refreshSnapshot()
