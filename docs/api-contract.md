@@ -727,4 +727,69 @@ type CameraOrderErrorBody = {
   error: 'invalid_body' | 'internal'
   message: string  // English, ready to display
 }
+
+// === Recording timeline (Phase 1, unreleased) ===
+//
+// Thin BFF passthrough for Frigate's recording VOD endpoint plus the
+// per-camera recordings summary. Single camera; codec-agnostic; no
+// transcode, no retag, no buffering — the BFF only validates camera
+// id / time slots / filename, forwards Range verbatim, and streams
+// the upstream body. Frigate emits an HLS fMP4 ladder
+// (master.m3u8 → index-*.m3u8 → init-*.mp4 + seg-*.m4s) under
+// /vod/{cam}/start/{start}/end/{end}/. Every URI inside the playlists
+// is relative, so the path-embedded {start}/{end} survive relative
+// resolution and clients fetch every child playlist / segment back
+// through the same /api/cameras/{id}/vod/{start}/{end}/ prefix
+// without any playlist-body rewriting in the BFF.
+
+// GET  /api/cameras/{id}/vod/{start}/{end}/*
+// HEAD /api/cameras/{id}/vod/{start}/{end}/*
+//   {id}    camera id (must be present in the camera registry).
+//   {start},{end}  integer unix seconds — passed verbatim into the
+//     upstream URL. The BFF only enforces digit-only / non-empty so
+//     the upstream URL stays parseable; Frigate decides whether the
+//     range is valid against its recording retention.
+//   {*}     the relative playlist or segment filename: master.m3u8,
+//     index-*.m3u8, init-*.mp4, or seg-*.m4s. Restricted to
+//     [A-Za-z0-9._-] with `.` / `..` and any `/` or `\` explicitly
+//     rejected — the catch-all slot is the SSRF / path-traversal
+//     surface and is the only validation gate between the client and
+//     the upstream URL composition.
+//
+//   The BFF forwards the incoming Range header verbatim and passes
+//   the upstream status code, Content-Type, Content-Length,
+//   Content-Range, Accept-Ranges, and ETag through unchanged. HEAD
+//   skips the body copy.
+//
+//   Cache-Control by suffix:
+//     - .m3u8                → "no-store" (playlist mutates while
+//                              the window includes now)
+//     - .mp4 (init) / .m4s   → "public, max-age=31536000, immutable"
+//                              (segment bytes are write-once for a
+//                              given time range)
+//   Content-Disposition is not touched — Frigate's VOD does not send
+//   attachment for these.
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - non-numeric start or end         → 400 invalid_range
+//     - malformed {*} (traversal, slash,
+//       non-allowed bytes)               → 404 not_found
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport       → 502 upstream_error
+//   Frigate's VOD endpoint may return 416 / 404 / etc. directly;
+//   those statuses are passed through verbatim.
+
+// GET /api/cameras/{id}/recordings-summary[?timezone=]
+//   Verbatim pass-through of Frigate's
+//   /api/{cam}/recordings/summary. The timezone query is forwarded
+//   only when non-empty (Frigate uses it to bucket entries by the
+//   caller's local day). The response shape is owned upstream and
+//   not yet typed by the BFF — clients consume it as opaque JSON.
+//   Content-Type is copied through from upstream (fallback
+//   "application/json"); the body is streamed verbatim.
+//
+//   Errors mirror the VOD path: invalid_id (400), not_found (404),
+//   upstream_timeout (504), upstream_error (502).
 ```
