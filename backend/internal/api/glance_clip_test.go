@@ -150,6 +150,47 @@ func TestHandleGlanceClip_HappyPath_BodyServedInline(t *testing.T) {
 	}
 }
 
+func TestHandleGlanceClip_DownloadFlagSwapsToAttachment(t *testing.T) {
+	fake := &frigateClipFake{
+		reviews: map[string]events.FrigateReviewItem{
+			"rev-A": {
+				ID:        "rev-A",
+				Camera:    "camA",
+				StartTime: 1779310000,
+				EndTime:   ptrF(1779310060),
+				Severity:  "alert",
+			},
+		},
+	}
+	router := clipRouter(t, fake)
+
+	// Default (no flag): inline.
+	inlineReq := httptest.NewRequest(http.MethodGet, "/api/glance/rev-A/clip.mp4", nil)
+	inlineW := httptest.NewRecorder()
+	router.ServeHTTP(inlineW, inlineReq)
+	if inlineW.Code != http.StatusOK {
+		t.Fatalf("inline: want 200, got %d", inlineW.Code)
+	}
+	if cd := inlineW.Header().Get("Content-Disposition"); cd != "inline" {
+		t.Errorf("inline Content-Disposition = %q, want inline", cd)
+	}
+
+	// download=1: attachment with filename containing the review id.
+	dlReq := httptest.NewRequest(http.MethodGet, "/api/glance/rev-A/clip.mp4?download=1", nil)
+	dlW := httptest.NewRecorder()
+	router.ServeHTTP(dlW, dlReq)
+	if dlW.Code != http.StatusOK {
+		t.Fatalf("download: want 200, got %d", dlW.Code)
+	}
+	cd := dlW.Header().Get("Content-Disposition")
+	if !strings.HasPrefix(cd, "attachment;") {
+		t.Errorf("download Content-Disposition = %q, want attachment;…", cd)
+	}
+	if !strings.Contains(cd, "rev-A") {
+		t.Errorf("download Content-Disposition = %q, want it to contain rev-A", cd)
+	}
+}
+
 func TestHandleGlanceClip_RangeRequestReturns206(t *testing.T) {
 	fake := &frigateClipFake{
 		reviews: map[string]events.FrigateReviewItem{

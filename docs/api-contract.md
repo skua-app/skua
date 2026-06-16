@@ -544,6 +544,13 @@ type GlanceMoment = Moment & { seen: boolean }
 //   finalises may keep serving a slightly-short window until LRU
 //   evicts the entry. Acceptable for the household glance UI.
 //
+//   With ?download=1 the response is served as an attachment with
+//   filename "frigate-{id}.mp4"; without the flag it stays inline.
+//   The download and the inline player share the same buffered bytes
+//   (cache + single-flight are keyed on the review id) — only the
+//   Content-Disposition differs per request. Same convention as
+//   GET /api/events/{id}/clip.mp4?download=1.
+//
 //   No HEAD route: the buffered pipeline does not have a useful HEAD
 //   path, and the glance UI only ever issues GETs.
 //

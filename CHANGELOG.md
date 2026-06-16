@@ -54,6 +54,13 @@ Changed
   when no review around the event time matches. This is the
   backend half of the new "Open in Frigate review" deep-link in
   the event modal.
+- The moment modal now has a Download button next to Open in
+  Frigate that saves the full-resolution moment clip. The same
+  buffered bytes back both the inline player and the download —
+  only the response disposition differs — so a moment that was
+  just played downloads without a second upstream fetch.
+  `GET /api/glance/{id}/clip.mp4?download=1` is the new attachment
+  variant of the existing moment clip endpoint.
 
 Removed
 - GET /api/moments has been removed; the BFF no longer exposes a

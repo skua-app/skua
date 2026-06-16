@@ -24,6 +24,12 @@ import (
 // the buffered pipeline does not have a useful HEAD path, and the
 // glance UI only ever issues GETs.
 //
+// With ?download=1 the response is served as an attachment with the
+// filename "frigate-{id}.mp4"; without the flag it stays inline. The
+// download and the inline player share the same buffered bytes (cache
+// + single-flight are keyed on the review id) — only the
+// Content-Disposition differs per request.
+//
 // Errors:
 //   - invalid id format       → 404 not_found (mirrors the preview path)
 //   - upstream review 404     → 404 not_found
@@ -61,7 +67,12 @@ func (h *Handler) handleGlanceClip(w http.ResponseWriter, r *http.Request) {
 
 	start, end := momentClipWindow(review)
 
-	if err := h.events.ServeMomentClip(ctx, id, review.Camera, start, end, w, r, ""); err != nil {
+	var downloadName string
+	if r.URL.Query().Get("download") == "1" {
+		downloadName = "frigate-" + id + ".mp4"
+	}
+
+	if err := h.events.ServeMomentClip(ctx, id, review.Camera, start, end, w, r, downloadName); err != nil {
 		status := http.StatusBadGateway
 		code := "upstream_error"
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {

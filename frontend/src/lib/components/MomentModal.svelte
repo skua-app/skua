@@ -190,6 +190,17 @@
           <Icon name="cams" size={20} />
         </button>
       {/if}
+      {#if moment.thumb_event_id}
+        <a
+          class="mm-btn mm-btn-secondary mm-btn-icon"
+          href={momentClipURL(moment.id, true)}
+          download
+          aria-label={ui.downloadVideo}
+          title={ui.downloadVideo}
+        >
+          <Icon name="download" size={20} />
+        </a>
+      {/if}
       {#if deepLink}
         <a class="mm-btn mm-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
           <Icon name="link" size={16} />

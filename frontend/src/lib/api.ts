@@ -218,9 +218,12 @@ export function momentPreviewURL(id: string): string {
 // momentClipURL returns the BFF route for a moment's full-resolution
 // time-range clip, served through the same buffered + iOS-friendly
 // retag pipeline as the per-event clip endpoint. Real-time playback
-// with audio; the modal default.
-export function momentClipURL(id: string): string {
-  return `/api/glance/${encodeURIComponent(id)}/clip.mp4`
+// with audio; the modal default. Passing download=true appends
+// ?download=1 so the BFF responds with Content-Disposition:
+// attachment — same convention as eventClipURL.
+export function momentClipURL(id: string, download = false): string {
+  const base = `/api/glance/${encodeURIComponent(id)}/clip.mp4`
+  return download ? `${base}?download=1` : base
 }
 
 // Moment mirrors backend/internal/events.Moment: one Frigate review
