@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,6 +23,8 @@ import (
 	applog "github.com/skua-app/skua/internal/log"
 	"github.com/skua-app/skua/internal/sse"
 )
+
+func ptrF(v float64) *float64 { return &v }
 
 // glanceRouterWith builds an api.Router whose events client talks to the
 // supplied upstream and whose glance store is backed by a temp file in t.
@@ -52,15 +55,113 @@ func glanceRouterWith(t *testing.T, upstream http.Handler) (http.Handler, *glanc
 	return NewRouter(h, sse.NewHub(logger), logger, staticFS), glanceStore, path
 }
 
-func TestHandleGlance_HappyPath_NothingSeen(t *testing.T) {
-	// Two same-camera events within the gap → one moment. Both
-	// survive because the store has no seen ids.
-	t0 := float64(time.Now().Add(-30 * time.Minute).Unix())
-	page := []events.FrigateEvent{
-		{ID: "a1", Camera: "camA", Label: "person", StartTime: t0, EndTime: ptrF(t0 + 10), HasSnapshot: true},
-		{ID: "a2", Camera: "camA", Label: "car", StartTime: t0 + 60, EndTime: ptrF(t0 + 90), HasSnapshot: true, HasClip: true},
+// frigateReviewHandler serves GET /api/review with after/limit/cameras
+// honoured the way Frigate does: review items are returned newest-first,
+// `after` drops items whose start_time is not strictly greater than
+// after-unix, `limit` truncates, `cameras` is a csv allowlist. Any
+// other path (notably /api/events) returns 404 so an accidental
+// regression to the old code path surfaces as an upstream_error.
+//
+// gotPath captures the upstream request path (without query) so the
+// test can assert that the glance handler hit /api/review and never
+// touched /api/events. gotQuery captures the URL query for the last
+// /api/review request.
+func frigateReviewHandler(t *testing.T, items []events.FrigateReviewItem, gotPath *string, gotQuery *url.Values, requestCount *int) http.Handler {
+	t.Helper()
+	sorted := make([]events.FrigateReviewItem, len(items))
+	copy(sorted, items)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].StartTime > sorted[j].StartTime })
+	var mu sync.Mutex
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		if gotPath != nil {
+			*gotPath = r.URL.Path
+		}
+		if requestCount != nil {
+			*requestCount++
+		}
+		mu.Unlock()
+
+		if r.URL.Path != "/api/review" {
+			http.NotFound(w, r)
+			return
+		}
+		q := r.URL.Query()
+		if gotQuery != nil {
+			mu.Lock()
+			*gotQuery = q
+			mu.Unlock()
+		}
+		after := math.Inf(-1)
+		if s := q.Get("after"); s != "" {
+			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+				after = float64(n)
+			}
+		}
+		limit := len(sorted)
+		if s := q.Get("limit"); s != "" {
+			if n, err := strconv.Atoi(s); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		var allowed map[string]struct{}
+		if s := q.Get("cameras"); s != "" {
+			allowed = make(map[string]struct{})
+			for _, c := range strings.Split(s, ",") {
+				allowed[c] = struct{}{}
+			}
+		}
+		out := make([]events.FrigateReviewItem, 0, limit)
+		for _, it := range sorted {
+			if it.StartTime <= after {
+				continue
+			}
+			if allowed != nil {
+				if _, ok := allowed[it.Camera]; !ok {
+					continue
+				}
+			}
+			out = append(out, it)
+			if len(out) >= limit {
+				break
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(out)
+	})
+}
+
+// segment builds a FrigateReviewItem for tests with the supplied fields,
+// a deterministic id derived from start_time, and a single detection +
+// object so common-case mappings produce non-empty Kinds/Labels and a
+// non-empty ThumbEventID without ceremony per test.
+func segment(id, cam string, start float64, end *float64, severity, label string) events.FrigateReviewItem {
+	r := events.FrigateReviewItem{
+		ID:        id,
+		Camera:    cam,
+		StartTime: start,
+		EndTime:   end,
+		Severity:  severity,
 	}
-	router, _, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
+	r.Data.Objects = []string{label}
+	r.Data.Detections = []string{fmt.Sprintf("%.1f-det", start)}
+	return r
+}
+
+func TestHandleGlance_HappyPath_NothingSeen(t *testing.T) {
+	now := time.Now()
+	t0 := float64(now.Add(-30 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{segment("rev-A", "camA", t0, ptrF(t0+60), "alert", "person")}
+	// Add a second object + detection so we can assert dedup + thumb pick.
+	items[0].Data.Objects = []string{"person", "person", "car"}
+	items[0].Data.Detections = []string{
+		fmt.Sprintf("%.1f-old", t0+5),
+		fmt.Sprintf("%.1f-new", t0+45),
+	}
+	items[0].Data.Zones = []string{"ZoneA"}
+
+	var gotPath string
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, &gotPath, nil, nil))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
 	w := httptest.NewRecorder()
@@ -72,6 +173,10 @@ func TestHandleGlance_HappyPath_NothingSeen(t *testing.T) {
 	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
 		t.Errorf("Cache-Control = %q, want no-store", cc)
 	}
+	if gotPath != "/api/review" {
+		t.Errorf("upstream path = %q, want /api/review (must NOT call /api/events)", gotPath)
+	}
+
 	var body glanceResponse
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -82,70 +187,264 @@ func TestHandleGlance_HappyPath_NothingSeen(t *testing.T) {
 	if len(body.Moments) != 1 {
 		t.Fatalf("moments len = %d, want 1", len(body.Moments))
 	}
-	if body.Moments[0].CamID != "camA" {
-		t.Errorf("moments[0].cam_id = %q, want camA", body.Moments[0].CamID)
+	m := body.Moments[0]
+	if m.ID != "rev-A" {
+		t.Errorf("id = %q, want rev-A", m.ID)
 	}
-	if body.Moments[0].Seen {
-		t.Errorf("moments[0].seen = true, want false")
+	if m.CamID != "camA" {
+		t.Errorf("cam_id = %q, want camA", m.CamID)
 	}
-	// Each returned moment carries its cluster detections, newest first.
-	if len(body.Moments[0].Events) != 2 {
-		t.Fatalf("moments[0].events len = %d, want 2", len(body.Moments[0].Events))
+	if m.Severity != "alert" {
+		t.Errorf("severity = %q, want alert", m.Severity)
 	}
-	if body.Moments[0].Events[0].ID != "a2" || body.Moments[0].Events[1].ID != "a1" {
-		t.Errorf("events order = [%q, %q], want [a2, a1] (newest first)",
-			body.Moments[0].Events[0].ID, body.Moments[0].Events[1].ID)
+	if m.Seen {
+		t.Errorf("seen = true, want false")
+	}
+	// Labels: deduped + sorted ascending.
+	wantLabels := []string{"car", "person"}
+	if got := m.Labels; len(got) != len(wantLabels) || got[0] != wantLabels[0] || got[1] != wantLabels[1] {
+		t.Errorf("labels = %v, want %v", got, wantLabels)
+	}
+	// Zones: as supplied.
+	if len(m.Zones) != 1 || m.Zones[0] != "ZoneA" {
+		t.Errorf("zones = %v, want [ZoneA]", m.Zones)
+	}
+	// ThumbEventID is the latest detection by unix-seconds prefix.
+	wantThumb := fmt.Sprintf("%.1f-new", t0+45)
+	if m.ThumbEventID != wantThumb {
+		t.Errorf("thumb_event_id = %q, want %q", m.ThumbEventID, wantThumb)
 	}
 }
 
-func TestHandleGlance_AllMomentsReturned_WithSeenFlag(t *testing.T) {
-	// Two separate moments (different cameras). Pre-mark the
-	// representative event of one as seen. GET returns both moments,
-	// only one carries seen=true, unseen_count=1.
-	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
-	tNew := float64(time.Now().Add(-30 * time.Minute).Unix())
-	page := []events.FrigateEvent{
-		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
-		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
+func TestHandleGlance_SeenFlagByID(t *testing.T) {
+	// Two segments on different cameras. Pre-mark one moment id as
+	// seen. GET returns both moments, only that one carries seen=true,
+	// unseen_count=1.
+	now := time.Now()
+	tOld := float64(now.Add(-2 * time.Hour).Unix())
+	tNew := float64(now.Add(-30 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{
+		segment("rev-old", "camA", tOld, ptrF(tOld+10), "alert", "person"),
+		segment("rev-new", "camB", tNew, ptrF(tNew+10), "detection", "person"),
 	}
-	router, store, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
+	router, store, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, nil, nil))
 
-	// camA has a single event so its rep id is "old".
-	if err := store.MarkSeen(glance.ScopeHousehold, []string{"old"}, time.Now()); err != nil {
+	if err := store.MarkSeen(glance.ScopeHousehold, []string{"rev-old"}, time.Now()); err != nil {
 		t.Fatalf("seed MarkSeen: %v", err)
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-
 	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+		t.Fatalf("want 200, got %d", w.Code)
 	}
 	var body glanceResponse
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(body.Moments) != 2 {
-		t.Fatalf("moments len = %d, want 2 (both surfaced)", len(body.Moments))
+		t.Fatalf("moments len = %d, want 2", len(body.Moments))
 	}
 	if body.UnseenCount != 1 {
 		t.Errorf("unseen_count = %d, want 1", body.UnseenCount)
 	}
-	// Find each moment by rep id and assert the seen flag.
 	for _, m := range body.Moments {
-		switch m.RepresentativeEventID {
-		case "old":
+		switch m.ID {
+		case "rev-old":
 			if !m.Seen {
-				t.Errorf("moment %q: seen=false, want true", m.RepresentativeEventID)
+				t.Errorf("moment %q: seen=false, want true", m.ID)
 			}
-		case "new":
+		case "rev-new":
 			if m.Seen {
-				t.Errorf("moment %q: seen=true, want false", m.RepresentativeEventID)
+				t.Errorf("moment %q: seen=true, want false", m.ID)
 			}
 		default:
-			t.Errorf("unexpected moment rep id %q", m.RepresentativeEventID)
+			t.Errorf("unexpected moment id %q", m.ID)
 		}
+	}
+}
+
+func TestHandleGlance_SeenThroughWatermark(t *testing.T) {
+	// Two moments within window. MarkAllSeen at a point between them;
+	// both moments survive, but the older one is reported with
+	// seen=true (it is NOT dropped from the list).
+	now := time.Now()
+	tOld := float64(now.Add(-2 * time.Hour).Unix())
+	tNew := float64(now.Add(-10 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{
+		segment("rev-old", "camA", tOld, ptrF(tOld+10), "alert", "person"),
+		segment("rev-new", "camB", tNew, ptrF(tNew+10), "detection", "person"),
+	}
+	router, store, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, nil, nil))
+
+	if err := store.MarkAllSeen(glance.ScopeHousehold, time.Now().Add(-1*time.Hour)); err != nil {
+		t.Fatalf("MarkAllSeen: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var body glanceResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Moments) != 2 {
+		t.Fatalf("moments len = %d, want 2 (watermark only flips seen)", len(body.Moments))
+	}
+	if body.UnseenCount != 1 {
+		t.Errorf("unseen_count = %d, want 1", body.UnseenCount)
+	}
+	for _, m := range body.Moments {
+		switch m.ID {
+		case "rev-old":
+			if !m.Seen {
+				t.Errorf("moment %q: seen=false, want true (started_at at or before watermark)", m.ID)
+			}
+		case "rev-new":
+			if m.Seen {
+				t.Errorf("moment %q: seen=true, want false (after watermark)", m.ID)
+			}
+		default:
+			t.Errorf("unexpected moment id %q", m.ID)
+		}
+	}
+}
+
+func TestHandleGlance_HoursFiltersOlderSegments(t *testing.T) {
+	// One segment 2h ago, one 30m ago. With ?hours=1, only the recent
+	// one survives because the BFF passes after = now-1h to Frigate
+	// and the fake upstream filters strictly on after.
+	now := time.Now()
+	tOld := float64(now.Add(-2 * time.Hour).Unix())
+	tNew := float64(now.Add(-30 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{
+		segment("rev-old", "camA", tOld, ptrF(tOld+10), "alert", "person"),
+		segment("rev-new", "camB", tNew, ptrF(tNew+10), "detection", "person"),
+	}
+	var gotQuery url.Values
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, &gotQuery, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance?hours=1", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	if gotQuery.Get("after") == "" {
+		t.Errorf("upstream `after` not set: %v", gotQuery)
+	}
+	var body glanceResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Moments) != 1 {
+		t.Fatalf("moments len = %d, want 1 (only recent within hours=1)", len(body.Moments))
+	}
+	if body.Moments[0].ID != "rev-new" {
+		t.Errorf("id = %q, want rev-new", body.Moments[0].ID)
+	}
+}
+
+func TestHandleGlance_MaxTruncatesAndForwardsLimit(t *testing.T) {
+	// 25 segments at distinct times. With ?max=10 the BFF forwards
+	// limit=10 to Frigate AND defensively truncates if upstream returns
+	// more. Newest-first order is preserved.
+	now := time.Now()
+	var items []events.FrigateReviewItem
+	for i := 0; i < 25; i++ {
+		started := float64(now.Add(-time.Duration(i*30) * time.Second).Unix())
+		items = append(items, segment(
+			fmt.Sprintf("rev-%02d", i),
+			fmt.Sprintf("cam%02d", i),
+			started, ptrF(started+5), "detection", "person",
+		))
+	}
+	var gotQuery url.Values
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, &gotQuery, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance?max=10", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if gotQuery.Get("limit") != "10" {
+		t.Errorf("upstream limit = %q, want 10", gotQuery.Get("limit"))
+	}
+	var body glanceResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Moments) != 10 {
+		t.Fatalf("moments len = %d, want 10", len(body.Moments))
+	}
+	if body.Moments[0].ID != "rev-00" {
+		t.Errorf("moments[0].id = %q, want rev-00 (newest)", body.Moments[0].ID)
+	}
+	if body.Moments[9].ID != "rev-09" {
+		t.Errorf("moments[9].id = %q, want rev-09 (10th-newest)", body.Moments[9].ID)
+	}
+}
+
+func TestHandleGlance_MaxClampedToCeiling(t *testing.T) {
+	now := time.Now()
+	t0 := float64(now.Add(-30 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{segment("rev-A", "camA", t0, ptrF(t0+10), "alert", "person")}
+	var gotQuery url.Values
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, &gotQuery, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance?max=99999", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	if gotQuery.Get("limit") != strconv.Itoa(glanceMaxMomentsCeil) {
+		t.Errorf("upstream limit = %q, want %d (ceiling clamp)",
+			gotQuery.Get("limit"), glanceMaxMomentsCeil)
+	}
+}
+
+func TestHandleGlance_UpstreamErrorMapped(t *testing.T) {
+	router, _, _ := glanceRouterWith(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("want 502, got %d", w.Code)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "upstream_error" {
+		t.Errorf("error = %q, want upstream_error", body["error"])
+	}
+}
+
+func TestHandleGlance_CallsReviewOnlyOnce(t *testing.T) {
+	// Sanity: the new path is a single upstream call, not the old
+	// backwards-paged /api/events loop.
+	now := time.Now()
+	t0 := float64(now.Add(-30 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{segment("rev-A", "camA", t0, ptrF(t0+10), "alert", "person")}
+	var count int
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, nil, &count))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	if count != 1 {
+		t.Errorf("upstream request count = %d, want 1", count)
 	}
 }
 
@@ -165,7 +464,6 @@ func TestHandleGlanceSeen_MissingEventIDs_BadRequest(t *testing.T) {
 	router, _, _ := glanceRouterWith(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatal("upstream must not be called on seen validation failure")
 	}))
-	// Body is valid JSON but lacks event_ids.
 	req := httptest.NewRequest(http.MethodPost, "/api/glance/seen", strings.NewReader(`{"scope":"household"}`))
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -209,16 +507,17 @@ func TestHandleGlanceSeen_EmptyArray_NoContentNoWrite(t *testing.T) {
 }
 
 func TestHandleGlanceSeen_ValidIDs_PersistsAndFollowupGlanceReflects(t *testing.T) {
-	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
-	tNew := float64(time.Now().Add(-30 * time.Minute).Unix())
-	page := []events.FrigateEvent{
-		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
-		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
+	now := time.Now()
+	tOld := float64(now.Add(-2 * time.Hour).Unix())
+	tNew := float64(now.Add(-30 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{
+		segment("rev-old", "camA", tOld, ptrF(tOld+10), "alert", "person"),
+		segment("rev-new", "camB", tNew, ptrF(tNew+10), "detection", "person"),
 	}
-	router, _, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, nil, nil))
 
 	seenReq := httptest.NewRequest(http.MethodPost, "/api/glance/seen",
-		strings.NewReader(`{"event_ids":["old"]}`))
+		strings.NewReader(`{"event_ids":["rev-old"]}`))
 	seenW := httptest.NewRecorder()
 	router.ServeHTTP(seenW, seenReq)
 	if seenW.Code != http.StatusNoContent {
@@ -242,109 +541,11 @@ func TestHandleGlanceSeen_ValidIDs_PersistsAndFollowupGlanceReflects(t *testing.
 		t.Errorf("unseen_count = %d, want 1", glBody.UnseenCount)
 	}
 	for _, m := range glBody.Moments {
-		if m.RepresentativeEventID == "old" && !m.Seen {
-			t.Errorf("moment %q: seen=false, want true after POST /seen", m.RepresentativeEventID)
+		if m.ID == "rev-old" && !m.Seen {
+			t.Errorf("moment %q: seen=false, want true after POST /seen", m.ID)
 		}
-		if m.RepresentativeEventID == "new" && m.Seen {
-			t.Errorf("moment %q: seen=true, want false", m.RepresentativeEventID)
-		}
-	}
-}
-
-func TestHandleGlance_UpstreamErrorMapped(t *testing.T) {
-	router, _, _ := glanceRouterWith(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "boom", http.StatusInternalServerError)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("want 502, got %d", w.Code)
-	}
-	var body map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body["error"] != "upstream_error" {
-		t.Errorf("error = %q, want upstream_error", body["error"])
-	}
-}
-
-func TestHandleGlance_HoursParamFiltersOlderEvents(t *testing.T) {
-	// One event 2h ago, one 30m ago. With ?hours=1, only the recent
-	// one survives. With ?hours=24, both survive.
-	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
-	tNew := float64(time.Now().Add(-30 * time.Minute).Unix())
-	page := []events.FrigateEvent{
-		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
-		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
-	}
-	router, _, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/glance?hours=1", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
-	}
-	var body glanceResponse
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(body.Moments) != 1 {
-		t.Fatalf("moments len = %d, want 1 (only recent within hours=1)", len(body.Moments))
-	}
-	if body.Moments[0].RepresentativeEventID != "new" {
-		t.Errorf("rep id = %q, want new", body.Moments[0].RepresentativeEventID)
-	}
-}
-
-func TestHandleGlance_SeenThroughMarksOlderMomentsSeen(t *testing.T) {
-	// Two events within window. MarkAllSeen at a point between them;
-	// both moments survive, but the older one is reported with
-	// seen=true (it is NOT dropped from the list).
-	tOld := float64(time.Now().Add(-2 * time.Hour).Unix())
-	tNew := float64(time.Now().Add(-10 * time.Minute).Unix())
-	page := []events.FrigateEvent{
-		{ID: "old", Camera: "camA", Label: "person", StartTime: tOld, EndTime: ptrF(tOld + 10), HasSnapshot: true},
-		{ID: "new", Camera: "camB", Label: "person", StartTime: tNew, EndTime: ptrF(tNew + 10), HasSnapshot: true},
-	}
-	router, store, _ := glanceRouterWith(t, frigateEventsHandler(t, page, nil))
-
-	// MarkAllSeen at 1h ago — old event (2h ago) is at or before the
-	// watermark, new event (10m ago) is after it.
-	if err := store.MarkAllSeen(glance.ScopeHousehold, time.Now().Add(-1*time.Hour)); err != nil {
-		t.Fatalf("MarkAllSeen: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
-	}
-	var body glanceResponse
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(body.Moments) != 2 {
-		t.Fatalf("moments len = %d, want 2 (both surfaced; watermark only flips seen)", len(body.Moments))
-	}
-	if body.UnseenCount != 1 {
-		t.Errorf("unseen_count = %d, want 1 (only the post-watermark moment)", body.UnseenCount)
-	}
-	for _, m := range body.Moments {
-		switch m.RepresentativeEventID {
-		case "old":
-			if !m.Seen {
-				t.Errorf("moment %q: seen=false, want true (at or before watermark)", m.RepresentativeEventID)
-			}
-		case "new":
-			if m.Seen {
-				t.Errorf("moment %q: seen=true, want false (after watermark)", m.RepresentativeEventID)
-			}
-		default:
-			t.Errorf("unexpected moment rep id %q", m.RepresentativeEventID)
+		if m.ID == "rev-new" && m.Seen {
+			t.Errorf("moment %q: seen=true, want false", m.ID)
 		}
 	}
 }
@@ -377,185 +578,5 @@ func TestHandleGlanceSeenAll_WithScopeBody(t *testing.T) {
 	}
 	if got := store.SeenThrough(glance.ScopeHousehold); got.IsZero() {
 		t.Errorf("SeenThrough is zero after seen-all; want non-zero")
-	}
-}
-
-// frigatePagedEventsHandler serves /api/events with paging semantics
-// matching Frigate: it honours `limit` and `before` (unix-seconds) and
-// returns events sorted by start_time descending. Concurrent-safe
-// because httptest may dispatch requests on its own goroutine.
-func frigatePagedEventsHandler(t *testing.T, all []events.FrigateEvent, requestCount *int) http.Handler {
-	t.Helper()
-	sorted := make([]events.FrigateEvent, len(all))
-	copy(sorted, all)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].StartTime > sorted[j].StartTime })
-	var mu sync.Mutex
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/events" {
-			http.NotFound(w, r)
-			return
-		}
-		if requestCount != nil {
-			mu.Lock()
-			*requestCount++
-			mu.Unlock()
-		}
-		q := r.URL.Query()
-		limit := 200
-		if s := q.Get("limit"); s != "" {
-			if n, err := strconv.Atoi(s); err == nil && n > 0 {
-				limit = n
-			}
-		}
-		before := math.Inf(1)
-		if s := q.Get("before"); s != "" {
-			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
-				before = float64(n)
-			}
-		}
-		out := make([]events.FrigateEvent, 0, limit)
-		for _, e := range sorted {
-			if e.StartTime < before {
-				out = append(out, e)
-				if len(out) >= limit {
-					break
-				}
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(out)
-	})
-}
-
-func TestHandleGlance_MaxQueryTruncatesMoments(t *testing.T) {
-	// 25 unique cameras at distinct times, each producing exactly one
-	// moment. With ?max=10 we expect only the 10 most-recent moments.
-	now := time.Now()
-	var page []events.FrigateEvent
-	for i := 0; i < 25; i++ {
-		// Newest cameras have the highest index. Stagger 30s apart.
-		started := float64(now.Add(-time.Duration(i*30) * time.Second).Unix())
-		page = append(page, events.FrigateEvent{
-			ID:          fmt.Sprintf("e%02d", i),
-			Camera:      fmt.Sprintf("cam%02d", i),
-			Label:       "person",
-			StartTime:   started,
-			EndTime:     ptrF(started + 5),
-			HasSnapshot: true,
-		})
-	}
-	router, _, _ := glanceRouterWith(t, frigatePagedEventsHandler(t, page, nil))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/glance?max=10", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
-	}
-	var body glanceResponse
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(body.Moments) != 10 {
-		t.Fatalf("moments len = %d, want 10 after max truncation", len(body.Moments))
-	}
-	// Newest first: cam00 (i=0) is most recent.
-	if body.Moments[0].CamID != "cam00" {
-		t.Errorf("moments[0].cam_id = %q, want cam00 (newest)", body.Moments[0].CamID)
-	}
-	if body.Moments[9].CamID != "cam09" {
-		t.Errorf("moments[9].cam_id = %q, want cam09 (10th-newest)", body.Moments[9].CamID)
-	}
-}
-
-func TestHandleGlance_MaxClampedToCeiling(t *testing.T) {
-	// One moment in store, request max=99999 → silently clamped, no
-	// error.
-	t0 := float64(time.Now().Add(-30 * time.Minute).Unix())
-	page := []events.FrigateEvent{
-		{ID: "a1", Camera: "camA", Label: "person", StartTime: t0, EndTime: ptrF(t0 + 10), HasSnapshot: true},
-	}
-	router, _, _ := glanceRouterWith(t, frigatePagedEventsHandler(t, page, nil))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/glance?max=99999", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d", w.Code)
-	}
-	var body glanceResponse
-	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(body.Moments) != 1 {
-		t.Fatalf("moments len = %d, want 1", len(body.Moments))
-	}
-}
-
-func TestHandleGlance_StopsWhenWindowCovered(t *testing.T) {
-	// Build a full first-page (200) plus extras outside the window.
-	// Page-1's oldest must sit at or below `since` so the loop breaks
-	// after exactly one upstream call.
-	now := time.Now()
-	// 200 in-page events spaced 30s, plus 50 events farther back.
-	// At 30s spacing, the 200th event is 200*30 = 6000s = 100min ago.
-	// With hours=1 (since = 60min ago), page-1's oldest is < since →
-	// "window covered" → stop after 1 fetch.
-	var page []events.FrigateEvent
-	for i := 0; i < 250; i++ {
-		started := float64(now.Add(-time.Duration(30+i*30) * time.Second).Unix())
-		page = append(page, events.FrigateEvent{
-			ID:          fmt.Sprintf("e%03d", i),
-			Camera:      "camA",
-			Label:       "person",
-			StartTime:   started,
-			EndTime:     ptrF(started + 5),
-			HasSnapshot: true,
-		})
-	}
-	var count int
-	router, _, _ := glanceRouterWith(t, frigatePagedEventsHandler(t, page, &count))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/glance?hours=1", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
-	}
-	if count != 1 {
-		t.Errorf("upstream request count = %d, want 1 (window covered after first page)", count)
-	}
-}
-
-func TestHandleGlance_PagesUntilHistoryExhausted(t *testing.T) {
-	// 250 events all within the window so page-1's oldest is still
-	// inside the window. The loop must fetch page 2 (and break on
-	// NextBefore=nil there).
-	now := time.Now()
-	var page []events.FrigateEvent
-	// Spread across 5 minutes total (300s) so all are within hours=1
-	// and the page-1 oldest still sits inside the window.
-	for i := 0; i < 250; i++ {
-		started := float64(now.Add(-time.Duration(i+1) * time.Second).Unix())
-		page = append(page, events.FrigateEvent{
-			ID:          fmt.Sprintf("e%03d", i),
-			Camera:      "camA",
-			Label:       "person",
-			StartTime:   started,
-			EndTime:     ptrF(started + 1),
-			HasSnapshot: true,
-		})
-	}
-	var count int
-	router, _, _ := glanceRouterWith(t, frigatePagedEventsHandler(t, page, &count))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/glance?hours=1", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
-	}
-	if count != 2 {
-		t.Errorf("upstream request count = %d, want 2 (page 1 full + page 2 short)", count)
 	}
 }

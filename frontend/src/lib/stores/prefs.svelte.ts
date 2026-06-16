@@ -6,7 +6,8 @@ import type {
   DesktopColumns,
   MobileColumns,
   GlanceWindowHours,
-  GlanceMaxMoments
+  GlanceMaxMoments,
+  GridFps
 } from '$lib/api'
 
 class PrefsStore {
@@ -22,6 +23,7 @@ class PrefsStore {
   gridFilter = $state<string | null>(null)
   glanceWindowHours = $state<GlanceWindowHours>(24)
   glanceMaxMoments = $state<GlanceMaxMoments>(20)
+  gridFps = $state<GridFps>(1)
   loaded = $state(false)
 
   async load() {
@@ -39,6 +41,7 @@ class PrefsStore {
       this.gridFilter = prefs.grid_filter
       this.glanceWindowHours = prefs.glance_window_hours
       this.glanceMaxMoments = prefs.glance_max_moments
+      this.gridFps = prefs.grid_fps
       this.applyAccent()
     } catch (err) {
       console.error('[prefs] load failed, using defaults:', err)
@@ -123,6 +126,11 @@ class PrefsStore {
   async setGlanceMaxMoments(v: GlanceMaxMoments) {
     this.glanceMaxMoments = v
     await this.#persist({ glance_max_moments: v }, 'glance_max_moments')
+  }
+
+  async setGridFps(v: GridFps) {
+    this.gridFps = v
+    await this.#persist({ grid_fps: v }, 'grid_fps')
   }
 }
 

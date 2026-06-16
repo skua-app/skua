@@ -5,7 +5,7 @@
   import { themeStore, type Theme } from '$lib/stores/theme.svelte'
   import { ui } from '$lib/i18n/strings'
   import { ACCENT_VALUES } from '$lib/api'
-  import type { Accent, NameStyle, GlanceWindowHours, GlanceMaxMoments } from '$lib/api'
+  import type { Accent, NameStyle, GlanceWindowHours, GlanceMaxMoments, GridFps } from '$lib/api'
 
   const themeOptions: { value: Theme; label: string }[] = [
     { value: 'auto', label: ui.themeAuto },
@@ -19,6 +19,10 @@
   const showTimestampOptions = [
     { value: 'on' as const, label: ui.yes },
     { value: 'off' as const, label: ui.no }
+  ]
+  const gridFpsOptions = [
+    { value: '1' as const, label: '1 Hz' },
+    { value: '2' as const, label: '2 Hz' }
   ]
   const accentOptions: { value: Accent; label: string }[] = [
     { value: 'cyan', label: ui.accentCyan },
@@ -73,6 +77,18 @@
         value={prefsStore.showTimestamp ? 'on' : 'off'}
         options={showTimestampOptions}
         onChange={(v) => prefsStore.setShowTimestamp(v === 'on')}
+        tone="surface-2"
+      />
+    </div>
+  </div>
+
+  <div class="set-line">
+    <div class="sl-label">{ui.gridFpsLabel}</div>
+    <div class="sl-control">
+      <Segmented
+        value={String(prefsStore.gridFps) as '1' | '2'}
+        options={gridFpsOptions}
+        onChange={(v) => prefsStore.setGridFps(Number(v) as GridFps)}
         tone="surface-2"
       />
     </div>

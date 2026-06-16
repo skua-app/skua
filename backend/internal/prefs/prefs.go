@@ -25,6 +25,7 @@ type Prefs struct {
 	GridFilter        *string `json:"grid_filter"`
 	GlanceWindowHours int     `json:"glance_window_hours"`
 	GlanceMaxMoments  int     `json:"glance_max_moments"`
+	GridFPS           int     `json:"grid_fps"`
 }
 
 var defaults = Prefs{
@@ -40,6 +41,7 @@ var defaults = Prefs{
 	GridFilter:        nil,
 	GlanceWindowHours: 24,
 	GlanceMaxMoments:  20,
+	GridFPS:           1,
 }
 
 var validGridModes = map[string]bool{"hd": true, "eco": true}
@@ -49,6 +51,7 @@ var validDesktopColumns = map[int]bool{2: true, 3: true, 4: true, 5: true}
 var validMobileColumns = map[int]bool{1: true, 2: true}
 var validGlanceWindowHours = map[int]bool{6: true, 12: true, 24: true, 48: true, 72: true}
 var validGlanceMaxMoments = map[int]bool{10: true, 20: true, 30: true, 50: true}
+var validGridFPS = map[int]bool{1: true, 2: true}
 
 var knownFields = map[string]bool{
 	"grid_mode":           true,
@@ -63,6 +66,7 @@ var knownFields = map[string]bool{
 	"grid_filter":         true,
 	"glance_window_hours": true,
 	"glance_max_moments":  true,
+	"grid_fps":            true,
 }
 
 // Store is a thread-safe, file-backed preferences store.
@@ -132,6 +136,10 @@ func sanitize(p Prefs) (Prefs, []string) {
 	if !validGlanceMaxMoments[p.GlanceMaxMoments] {
 		p.GlanceMaxMoments = defaults.GlanceMaxMoments
 		reset = append(reset, "glance_max_moments")
+	}
+	if !validGridFPS[p.GridFPS] {
+		p.GridFPS = defaults.GridFPS
+		reset = append(reset, "grid_fps")
 	}
 	return p, reset
 }
@@ -296,6 +304,21 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("glance_max_moments must be 10/20/30/50, got %d", n)
 		}
 		next.GlanceMaxMoments = n
+	}
+
+	if v, ok := partial["grid_fps"]; ok {
+		f, ok := v.(float64)
+		if !ok {
+			return Prefs{}, fmt.Errorf("grid_fps must be a number")
+		}
+		n := int(f)
+		if float64(n) != f {
+			return Prefs{}, fmt.Errorf("grid_fps must be an integer, got %v", f)
+		}
+		if !validGridFPS[n] {
+			return Prefs{}, fmt.Errorf("grid_fps must be 1 or 2, got %d", n)
+		}
+		next.GridFPS = n
 	}
 
 	if err := s.atomicWrite(next); err != nil {

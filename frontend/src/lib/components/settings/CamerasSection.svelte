@@ -60,13 +60,36 @@
   type DndDetail = { items: RowItem[] }
   type DndEvent = CustomEvent<DndDetail>
 
+  // Cache-busting tick for the camera thumbnails. /api/cameras/{id}/tile.jpg
+  // is StaleWhileRevalidate'd by the SW with the query stripped from the
+  // cache key — appending ?t={tileTick} doesn't bust the SW cache directly,
+  // but it forces the browser to re-request, which triggers the SW's
+  // background revalidation. Repeated ticks converge the thumbnail to the
+  // current frame. The dragging gate freezes the tick while a row is
+  // being moved (svelte-dnd-action owns the DOM during the drag); on
+  // drop we bump immediately and let the interval resume so the moved
+  // row re-requests right away and then settles.
+  let tileTick = $state(Date.now())
+  let dragging = $state(false)
+  $effect(() => {
+    const t = setInterval(() => {
+      if (!dragging) tileTick = Date.now()
+    }, 2000)
+    return () => clearInterval(t)
+  })
+
   function onConsider(e: DndEvent) {
+    dragging = true
     items = e.detail.items
   }
 
   async function onFinalize(e: DndEvent) {
     items = e.detail.items
     const orderedIds = items.map((c) => c.id)
+    dragging = false
+    // Re-request the moved row's thumbnail right after the drop so it
+    // does not linger on the stale frame the SW served while paused.
+    tileTick = Date.now()
     // Optimistic: reflect the new order across the app immediately so the
     // grid and any other consumer of `camerasStore.cameras` follow the drop
     // without waiting on the round-trip.
@@ -178,7 +201,12 @@
         >
           <Icon name="grip" size={18} />
         </span>
-        <img class="cam-thumb" src="/api/cameras/{cam.id}/tile.jpg" alt="" loading="lazy" />
+        <img
+          class="cam-thumb"
+          src="/api/cameras/{cam.id}/tile.jpg?t={tileTick}"
+          alt=""
+          loading="lazy"
+        />
         <span class="cam-text">
           <span class="cam-name">{cam.name}</span>
           <span class="cam-id">{cam.id}</span>

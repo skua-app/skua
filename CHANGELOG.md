@@ -12,21 +12,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > the public release. The 0.8.0 entry covers the rename and the
 > surrounding open-source readiness work.
 
-## [Unreleased]
+## [0.13.0] — 2026-06-16
 
 Added
-- Drag-to-reorder cameras. Settings → Cameras now lists every camera in one
-  column with a drag handle on the left; reorder by dragging the handle
-  and the new order persists immediately. The order is shared across the
-  household and is reflected in the grid (mobile and desktop) and in the
-  camera switcher on the focus view. Newly discovered cameras appear at
-  the end so they never silently vanish from the list.
+- Drag-to-reorder cameras. Settings > Cameras lists every camera in one column with a drag handle; reorder by dragging and the new order saves right away. The order is shared across the household and shows up in the grid (phone and desktop) and in the focus view's camera switcher. Newly discovered cameras are appended so they never disappear from the list.
+- A "Grid frame rate" setting in Appearance to switch the camera grid between 1 Hz (default) and 2 Hz. 2 Hz refreshes the tiles twice a second for a smoother grid, at roughly double the snapshot bandwidth. The setting is shared across the household.
+- A Download button in the moment view that saves the full-resolution clip for that moment.
 
 Changed
-- Settings → Cameras has been reworked from inline editor cards into a
-  single-column list. Editing a camera's friendly name and per-camera
-  main/sub stream overrides now lives in a focused modal opened from
-  that row's edit button.
+- Settings > Cameras has been reworked from inline editor cards into a single-column list. Editing a camera's friendly name and its per-camera main/sub stream overrides now happens in a focused modal opened from the row.
+- The "while you were away" glance now uses Frigate's own review segments instead of grouping raw events itself, so each moment matches a single review segment and carries its severity (alert or detection) and zones. The grouping now matches what Frigate shows.
+- The moment view now plays the full-resolution recording with audio for the whole moment, instead of stitching together the individual event clips.
+- "Open in Frigate" from a moment or an event now opens the Frigate review timeline for that activity, instead of the Explore tab.
+
+Fixed
+- The glance sheet no longer flashes and then vanishes right after the app starts.
+- The glance sheet can now be dragged to dismiss from anywhere on it, not just the handle. When the moment list is scrolled, dragging down scrolls the list first and pulls the sheet once it reaches the top, the way an iOS sheet behaves.
+- The camera you're watching now stays in the focus filmstrip on phones and is highlighted, matching the desktop layout.
+- Camera thumbnails in Settings no longer show an old frame after you drag a camera to a new position.
+- The back gesture inside Settings now returns to the Settings list instead of leaving for another tab.
+- The focus play/pause button is no longer highlighted while the stream is playing; it lights up only when the stream is paused.
+
+Removed
+- The GET /api/moments endpoint has been removed; the glance feed at GET /api/glance is now sourced from Frigate review segments. The moment payload changed shape as part of this: the representative-event fields and the inline event list are gone, replaced by the review id, severity, zones, detection ids, and a thumbnail detection id.
 
 ## [0.12.1] — 2026-06-14
 

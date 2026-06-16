@@ -74,9 +74,10 @@ type Prefs = {
   grid_filter: string | null  // last-selected group id, null = "Все" (E3.3)
   glance_window_hours: 6 | 12 | 24 | 48 | 72  // "while you were away" lookback
   glance_max_moments: 10 | 20 | 30 | 50       // cap on glance peek output moments
+  grid_fps: 1 | 2                             // grid tile refresh rate, Hz
 }
 // Stored at /data/prefs.json. Atomic write (tmp + rename).
-// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null / 24 / 20
+// Defaults: eco / true / main / false / cyan / below / false / 4 / 1 / null / 24 / 20 / 1
 
 // === E3 (stable) ===
 
@@ -123,6 +124,28 @@ type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
 // GET /api/events/:id/snapshot.jpg
 // → image/jpeg; Cache-Control: public, max-age=31536000, immutable
 // ETag passed through from Frigate, else derived from event id.
+
+// GET /api/events/:id/review
+//   Resolves the Frigate review segment that contains the tracked-
+//   object event with id `:id`. The BFF derives the event's
+//   timestamp from the id's "<unix>.<frac>-<hash>" prefix, queries
+//   Frigate's /api/review for the ±10 min window around that
+//   timestamp (Limit=100), and scans the returned segments'
+//   data.detections for an exact id match. Detection ids are
+//   globally unique, so the camera does not have to be passed and
+//   a cross-camera scan is safe. The recall window is wide; the
+//   exact id match supplies precision.
+//
+//   200 → { "review_id": "<frigate-review-id>" }
+//   Cache-Control: no-store.
+//
+//   Errors:
+//     - invalid id format / unparseable prefix → 404 not_found
+//     - no review in the window contains the id → 404 not_found
+//     - upstream context deadline → 504 upstream_timeout
+//     - any other upstream failure → 502 upstream_error
+//
+// type EventReviewResponse = { review_id: string }
 
 // GET  /api/events/:id/clip.mp4
 // HEAD /api/events/:id/clip.mp4              (http.ServeContent skips the body)
@@ -411,103 +434,86 @@ type RuntimeConfigErrorBody = {
 // save triggers the same clean exit + container-restart as
 // /api/runtime-config/restart. Not part of the steady-state SPA surface.
 
-// === Glance — Phase 1 (internal) ===
+// === Glance — Moment shape (internal) ===
 //
-// Server-side grouping of recent Frigate events into per-camera "moments"
-// for the planned glance surface. Phase 1 is read-only and stateless: no
-// persistence, no last_seen / ack / seen-state, no SSE additions, and not
-// yet surfaced in the UI. Phases 2 (persistence + seen-state) and 3 (UI
-// wiring) are planned separately.
+// "Moments" surface recent Frigate activity for the glance "while you
+// were away" UI. Each Moment is a per-camera review segment sourced
+// directly from Frigate's /api/review endpoint — Frigate already
+// performs the cross-event clustering server-side, so the BFF reshapes
+// one review item into one Moment with no client-side grouping.
+//
+// The previous BFF-internal grouping endpoint (GET /api/moments) and
+// its representative-event ranking have been removed in favour of
+// Frigate-native review segments. Replaced fields from that contract:
+//   - event_count, representative_event_id, representative_has_clip,
+//     events[]  → removed
+// New fields:
+//   - id           (Frigate review id; stable for seen-state keying)
+//   - severity     ("alert" | "detection")
+//   - zones        (zone names from Frigate config)
+//   - detection_ids (tracked-object event ids in the segment)
+//   - thumb_event_id (the detection id whose snapshot the UI should
+//                     use as the moment thumbnail — the latest
+//                     tracked-object event in the segment by
+//                     unix-seconds prefix; empty when detections is
+//                     empty)
 
-// GET /api/moments?since=&limit=
-//   since: optional ISO 8601 timestamp; events with started_at not
-//          strictly after `since` are dropped before grouping. Bad
-//          value → 400 bad_request "since must be ISO 8601".
-//   limit: optional positive integer (default 50, max 200). This is the
-//          lookback window — the number of source events fetched from
-//          Frigate, NOT the number of moments returned. There is no
-//          pagination cursor in Phase 1; the window is bounded by
-//          `limit` and clients re-fetch from the top.
-//
-// Grouping rules:
-//   - Strictly per camera; events from different cameras never merge.
-//   - Within a camera, events are sorted by started_at ascending; a new
-//     moment starts when the gap between consecutive started_at values
-//     exceeds the 5-minute MomentGap constant.
-//   - kinds and labels are not used to split a cluster — only the time
-//     gap is.
-//
-// Per moment:
-//   - started_at = earliest started_at in the cluster.
-//   - ended_at   = latest ended_at among cluster events, or null when
-//                  any event in the cluster is still in progress.
-//   - kinds      = distinct normalised kinds in stable encounter order.
-//   - labels     = distinct raw labels, sorted ascending.
-//   - representative_event_id = id of the highest-score event in the
-//                  cluster; nil scores rank below any real score; ties
-//                  break by most recent started_at.
-//   - representative_has_clip = has_clip of the representative event.
-//
-// Moments are returned sorted by their latest event started_at
-// descending (most recent moment first). Cache-Control: no-store.
-
-type MomentsResponse = {
-  items: Moment[]
-}
 type Moment = {
-  cam_id: string
-  started_at: string                // ISO 8601 UTC, earliest event start
-  ended_at: string | null           // null while any clustered event is in progress
-  kinds: EventKind[]                // distinct, stable encounter order
-  labels: string[]                  // distinct raw labels, sorted ascending
-  event_count: number
-  representative_event_id: string
-  representative_has_clip: boolean
-  events: EventItem[]               // cluster detections, newest first; length === event_count
+  id: string                      // Frigate review id, stable per segment
+  cam_id: string                  // Frigate camera id
+  started_at: string              // ISO 8601 UTC
+  ended_at: string | null         // null while the segment is still active
+  severity: 'alert' | 'detection'
+  kinds: EventKind[]              // distinct, stable encounter order, deduped
+  labels: string[]                // distinct raw labels, sorted ascending
+  zones: string[]                 // zone names from Frigate config, as supplied
+  detection_ids: string[]         // tracked-object event ids inside the segment
+  thumb_event_id: string          // empty when detection_ids is empty
 }
 
-// === Glance — Phase 2 (internal) ===
+// === Glance — household seen-state ===
 //
-// Household seen-state for the glance feature. Phase 2 persists a
-// scope-keyed SET of viewed event ids to a dedicated state file
-// (env GLANCE_STATE_PATH, default /data/glance.json) and exposes
-// two endpoints that compose the Phase 1 moment grouping with that
-// set. Still internal; UI wiring is Phase 3.
+// Household seen-state for the glance feature. The store persists a
+// scope-keyed SET of viewed ids plus a seen_through watermark to a
+// dedicated state file (env GLANCE_STATE_PATH, default
+// /data/glance.json) and exposes endpoints that compose Frigate's
+// review segments (see Moment above) with that set.
 //
-// The seen-state is keyed on each moment's representative_event_id:
-// a moment is "seen" iff its representative event id appears in the
-// household scope's set. The set is scope-keyed under a single v1
-// scope ("household") shared by every client on the LAN-only
-// deployment; the `scope` field is reserved for a future per-user
-// split and clients must omit it (or send "household") in v1. Set
-// entries are pruned to a 30-day retention window on load and after
-// every write so the file stays bounded.
+// The seen-state is keyed on the review-sourced moment id (m.id): a
+// moment is "seen" iff its id appears in the household scope's set OR
+// its started_at is at or before the household seen_through
+// watermark. The set is scope-keyed under a single v1 scope
+// ("household") shared by every client on the LAN-only deployment;
+// the `scope` field is reserved for a future per-user split and
+// clients must omit it (or send "household") in v1. Set entries are
+// pruned to a 30-day retention window on load and after every write
+// so the file stays bounded.
+//
+// Wire-compat note: POST /api/glance/seen still accepts the body
+// shape { event_ids: string[], scope?: string }. The field is named
+// `event_ids` for backwards compatibility with the original glance
+// rollout; the store is id-agnostic, so clients send moment ids
+// (m.id) under this key.
 
 // GET /api/glance?hours=&max=
 //   hours: optional positive integer (default 24, clamped to 1..168 =
 //          1 hour through 7 days). Controls how far back the "while you
 //          were away" window extends.
 //   max:   optional positive integer (default 20, clamped to 1..200).
-//          Caps the number of MOMENTS returned in the response (not
-//          the source events fetched). After grouping, the moment list
-//          is truncated to the newest `max`.
-//   The BFF walks Frigate backwards via the /api/events cursor (page
-//   size glancePageLimit = 200, up to glanceMaxPages = 5 pages = 1000
-//   source events for safety) until the source events cover
-//   since = now - hours, then groups them into moments. The window
-//   is purely time-based: there is no `cleared_at`-style clamp, and
-//   moments already at-or-before the household `seen_through`
-//   watermark stay in the response (they render with `seen: true`,
-//   not dropped). On exceptionally busy installs the safety cap may
-//   stop the loop before the full `hours` window is covered — older
-//   moments may then be missing from the response; full event history
-//   continues to live behind GET /api/events. After grouping, moments
-//   are truncated to the newest `max`. Each moment carries a `seen`
-//   boolean that is true iff its `representative_event_id` is in the
-//   household seen-set OR its newest event start is at or before the
-//   household `seen_through` watermark. `unseen_count` is the count
-//   of moments whose `seen` is false. There is no pagination cursor
-//   on this endpoint; clients re-fetch from the top.
+//          Caps the number of moments returned and is forwarded to
+//          Frigate as the upstream review-list limit.
+//   The BFF makes a single GET /api/review call against Frigate with
+//   `after = now - hours` (unix seconds) and `limit = max`. Frigate
+//   returns review segments newest-first; the BFF preserves that
+//   order and defensively truncates to `max`. The window is purely
+//   time-based: there is no `cleared_at`-style clamp, and moments
+//   already at-or-before the household `seen_through` watermark stay
+//   in the response (they render with `seen: true`, not dropped).
+//   Each moment carries a `seen` boolean that is true iff its `id`
+//   is in the household seen-set OR its `started_at` is at or before
+//   the household `seen_through` watermark. `unseen_count` is the
+//   count of moments whose `seen` is false. There is no pagination
+//   cursor on this endpoint; clients re-fetch from the top.
 //
 // Response: Cache-Control: no-store.
 
@@ -516,6 +522,77 @@ type GlanceResponse = {
   moments: GlanceMoment[]  // all surviving moments, both seen and unseen
 }
 type GlanceMoment = Moment & { seen: boolean }
+
+// GET /api/glance/{id}/clip.mp4
+//   Resolves the Frigate review id `{id}` to the segment's
+//   [start_time, end_time] window (same pad/clamp rule as the
+//   preview endpoint) and serves Frigate's full-resolution
+//   /api/{camera}/start/{start}/end/{end}/clip.mp4 through the same
+//   buffered + hev1→hvc1 retag pipeline as
+//   GET /api/events/{id}/clip.mp4. Real-time playback with audio,
+//   intended for the moment-detail "Open clip" affordance — the
+//   counterpart to the scrub-quality preview endpoint below.
+//
+//   The clip path uses the per-event clip timeout (eventsClipTimeout,
+//   30s) — Frigate reassembles the time-range clip on demand and is
+//   roughly as expensive as a per-event clip, so the 10s preview
+//   timeout would be too tight here.
+//
+//   Cache + single-flight are keyed on the review id, so repeat
+//   opens of the same moment share one upstream fetch. The ETag and
+//   immutable Cache-Control assume the cached window is stable; an
+//   active (still-growing) review served before its segment
+//   finalises may keep serving a slightly-short window until LRU
+//   evicts the entry. Acceptable for the household glance UI.
+//
+//   With ?download=1 the response is served as an attachment with
+//   filename "frigate-{id}.mp4"; without the flag it stays inline.
+//   The download and the inline player share the same buffered bytes
+//   (cache + single-flight are keyed on the review id) — only the
+//   Content-Disposition differs per request. Same convention as
+//   GET /api/events/{id}/clip.mp4?download=1.
+//
+//   No HEAD route: the buffered pipeline does not have a useful HEAD
+//   path, and the glance UI only ever issues GETs.
+//
+//   Errors map the same way as the preview path:
+//     - invalid id format     → 404 not_found
+//     - upstream review 404   → 404 not_found
+//     - upstream review or
+//       clip context deadline → 504 upstream_timeout
+//     - other upstream / transport failure → 502 upstream_error
+
+// GET  /api/glance/{id}/preview.mp4
+// HEAD /api/glance/{id}/preview.mp4
+//   Resolves the Frigate review id `{id}` to the segment's
+//   [start_time, end_time] window, then reverse-proxies Frigate's
+//   /api/{camera}/start/{start}/end/{end}/preview.mp4 inline. The
+//   window is padded by 4 seconds on each side (start clamped to
+//   >= 0); an active segment with null end_time uses now as the
+//   upper bound before padding.
+//
+//   The BFF forwards the incoming Range header verbatim and passes
+//   the upstream status code, Content-Type, Content-Length,
+//   Content-Range, Accept-Ranges, and ETag through unchanged.
+//   Content-Disposition is rewritten to "inline" — Frigate sends
+//   "attachment", which would block in-page <video> playback.
+//   Cache-Control: private, max-age=86400.
+//
+//   The body is streamed, NOT buffered: preview MP4s from Frigate
+//   are already iOS-friendly and Range-native, so this path skips
+//   the buffer + hev1→hvc1 retag the full event clip pipeline
+//   needs. This is intentionally a separate, lighter path from
+//   GET /api/events/{id}/clip.mp4 — preview.mp4 is low-res
+//   scrub-quality video for the moment-detail card; full-res clips
+//   continue to live behind the event clip endpoint.
+//
+//   Errors:
+//     - invalid id format → 404 not_found
+//     - upstream review 404 → 404 not_found
+//     - upstream review timeout (ctx deadline) → 504 upstream_timeout
+//     - any other upstream / transport failure → 502 upstream_error
+//   Statuses from Frigate's preview endpoint (e.g. 416 Range Not
+//   Satisfiable) are passed through verbatim.
 
 // POST /api/glance/seen
 //   body: { event_ids: string[], scope?: string }
@@ -593,12 +670,14 @@ type GlanceHeartbeatResponse = {
 // is empty AND its seen_through watermark is zero — a mark-all-seen
 // must survive an empty seen set across restarts.
 //
-// Known edge: `seen` is keyed on representative_event_id, which is
-// derived per request from the current Frigate result set. If the
-// window of recent events shifts so that a moment regroups against
-// a different representative event id, that moment can re-surface
-// as unseen until the new representative id is also marked seen.
-// Acceptable for a small-household glance UI.
+// Note: `seen` is keyed on the review-sourced moment id (m.id),
+// which is stable per Frigate review segment for the segment's
+// lifetime. A moment marked seen stays seen as long as the segment
+// is still in the response window. If Frigate finalises a still-
+// active segment and reissues it with a stable id, the seen flag
+// continues to apply; if a segment ages out of the configured
+// retention window, its id naturally falls out of both the response
+// and the pruned seen set.
 
 // === Camera order (v0.13.0) ===
 //

@@ -264,9 +264,10 @@ func (c *Client) List(ctx context.Context, p ListParams) (ListResponse, error) {
 	return out, nil
 }
 
-// ServeClip serves a per-event MP4 clip from Frigate via http.ServeContent
-// so that HTTP Range requests are handled natively against an in-memory
-// byte slice.
+// ServeClip serves the per-event MP4 clip for eventID via the buffered
+// clip pipeline. Thin wrapper over serveClip that pins the upstream
+// URL to Frigate's per-event /api/events/{id}/clip.mp4 and reuses the
+// event id as both the cache/single-flight key and the ETag validator.
 //
 // Why buffer instead of reverse-proxy: iOS Safari's <video> element issues a
 // Range request on mount and aborts with a broken-video icon if the server
@@ -279,10 +280,10 @@ func (c *Client) List(ctx context.Context, p ListParams) (ListResponse, error) {
 // Why cache: <video> typically issues 10–20 parallel Range subrequests per
 // source, and a fresh upstream fetch per range (~35 MiB read each) saturated
 // the BFF and caused individual ranges to time out or be cancelled, breaking
-// playback. We cache the buffered bytes by event id so concurrent and
-// repeat ranges share one upstream fetch. Event ids are immutable in
-// Frigate (clips are write-once), so no TTL — eviction is LRU under count
-// and byte caps. See clipcache.go.
+// playback. We cache the buffered bytes by key so concurrent and repeat
+// ranges share one upstream fetch. Event clips are immutable in Frigate
+// (write-once), so no TTL — eviction is LRU under count and byte caps. See
+// clipcache.go.
 //
 // On non-2xx upstream, oversized body, or transport failure, ServeClip
 // returns an error and writes nothing to w. Callers translate the error to
@@ -290,9 +291,41 @@ func (c *Client) List(ctx context.Context, p ListParams) (ListResponse, error) {
 // downloadName is non-empty the response is served as an attachment with
 // that filename; otherwise inline. Cache hits never error.
 func (c *Client) ServeClip(ctx context.Context, eventID string, w http.ResponseWriter, r *http.Request, downloadName string) error {
-	buf, modTime, ok := c.clips.Get(eventID)
+	upstreamURL := fmt.Sprintf("%s/api/events/%s/clip.mp4", c.baseURL, eventID)
+	return c.serveClip(ctx, eventID, upstreamURL, w, r, downloadName)
+}
+
+// ServeMomentClip serves Frigate's full-resolution time-range clip for
+// the [start, end] window (unix seconds, with subseconds) on the given
+// camera through the same buffered + hev1→hvc1 retag pipeline as
+// ServeClip. key is the cache / single-flight / ETag validator; the
+// glance preview handler passes the Frigate review id so successive
+// requests against the same moment hit the same cached bytes.
+//
+// Unlike per-event clips, a moment clip's source segment may still be
+// growing when the BFF first caches it. Because the cache is content-
+// addressed by `key` and gets a long immutable Cache-Control, a still-
+// active review served before its segment finalises can serve a
+// slightly-short cached window until LRU evicts the entry — acceptable
+// for the household glance UI.
+func (c *Client) ServeMomentClip(ctx context.Context, key, camera string, start, end float64, w http.ResponseWriter, r *http.Request, downloadName string) error {
+	upstreamURL := c.baseURL + "/api/" + url.PathEscape(camera) +
+		"/start/" + strconv.FormatFloat(start, 'f', 6, 64) +
+		"/end/" + strconv.FormatFloat(end, 'f', 6, 64) +
+		"/clip.mp4"
+	return c.serveClip(ctx, key, upstreamURL, w, r, downloadName)
+}
+
+// serveClip is the shared clip-serving pipeline behind ServeClip and
+// ServeMomentClip. `key` is the cache / single-flight / ETag validator;
+// `upstreamURL` is the Frigate endpoint to fetch on a cold miss. The
+// ETag and the immutable Cache-Control are correct only for sources
+// that don't change once observed — true for per-event clips and
+// acceptable for finalised review windows (see ServeMomentClip).
+func (c *Client) serveClip(ctx context.Context, key, upstreamURL string, w http.ResponseWriter, r *http.Request, downloadName string) error {
+	buf, modTime, ok := c.clips.Get(key)
 	if !ok {
-		fetched, err := c.fetchClipShared(ctx, eventID)
+		fetched, err := c.fetchClipShared(ctx, key, upstreamURL)
 		if err != nil {
 			return err
 		}
@@ -305,9 +338,7 @@ func (c *Client) ServeClip(ctx context.Context, eventID string, w http.ResponseW
 	// segment when this handler is reached via chi.
 	w.Header().Set("Content-Type", "video/mp4")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	// Frigate event clips are immutable once finalised, so the event id is a
-	// safe ETag validator.
-	w.Header().Set("ETag", `"`+eventID+`"`)
+	w.Header().Set("ETag", `"`+key+`"`)
 	if downloadName != "" {
 		w.Header().Set("Content-Disposition", `attachment; filename="`+downloadName+`"`)
 	} else {
@@ -327,17 +358,18 @@ func (c *Client) ServeClip(ctx context.Context, eventID string, w http.ResponseW
 	return nil
 }
 
-// fetchClipShared single-flights concurrent cold misses for the same event
-// id. The first caller spawns the upstream fetch on a context decoupled
-// from any specific request's cancellation, so a probe Range request that
-// gives up mid-fetch (iOS issues 10–20 parallel ranges and frequently
-// cancels the first few) does not poison the sibling waiters. All callers
-// block on the shared done channel; the resulting bytes + cache Put happen
-// exactly once before the inflight entry is released. Errors are shared
-// across waiters but are not cached — a subsequent cold miss retries.
-func (c *Client) fetchClipShared(ctx context.Context, eventID string) ([]byte, error) {
+// fetchClipShared single-flights concurrent cold misses for the same
+// cache key. The first caller spawns the upstream fetch on a context
+// decoupled from any specific request's cancellation, so a probe Range
+// request that gives up mid-fetch (iOS issues 10–20 parallel ranges and
+// frequently cancels the first few) does not poison the sibling
+// waiters. All callers block on the shared done channel; the resulting
+// bytes + cache Put happen exactly once before the inflight entry is
+// released. Errors are shared across waiters but are not cached — a
+// subsequent cold miss retries.
+func (c *Client) fetchClipShared(ctx context.Context, key, upstreamURL string) ([]byte, error) {
 	c.inflightMu.Lock()
-	if existing, ok := c.inflight[eventID]; ok {
+	if existing, ok := c.inflight[key]; ok {
 		c.inflightMu.Unlock()
 		select {
 		case <-existing.done:
@@ -347,7 +379,7 @@ func (c *Client) fetchClipShared(ctx context.Context, eventID string) ([]byte, e
 		}
 	}
 	call := &clipInflight{done: make(chan struct{})}
-	c.inflight[eventID] = call
+	c.inflight[key] = call
 	c.inflightMu.Unlock()
 
 	go func() {
@@ -360,14 +392,14 @@ func (c *Client) fetchClipShared(ctx context.Context, eventID string) ([]byte, e
 			fetchCtx, cancel = context.WithDeadline(fetchCtx, d)
 			defer cancel()
 		}
-		buf, err := c.fetchClip(fetchCtx, eventID)
+		buf, err := c.fetchClip(fetchCtx, key, upstreamURL)
 		call.buf = buf
 		call.err = err
 		if err == nil {
-			c.clips.Put(eventID, buf, time.Time{})
+			c.clips.Put(key, buf, time.Time{})
 		}
 		c.inflightMu.Lock()
-		delete(c.inflight, eventID)
+		delete(c.inflight, key)
 		c.inflightMu.Unlock()
 		close(call.done)
 	}()
@@ -380,12 +412,12 @@ func (c *Client) fetchClipShared(ctx context.Context, eventID string) ([]byte, e
 	}
 }
 
-// fetchClip pulls the raw MP4 bytes for eventID from Frigate, capped at
-// c.maxClipBytes. Returns the buffered bytes on success; the caller decides
-// whether to cache them.
-func (c *Client) fetchClip(ctx context.Context, eventID string) ([]byte, error) {
-	reqURL := fmt.Sprintf("%s/api/events/%s/clip.mp4", c.baseURL, eventID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+// fetchClip pulls the raw MP4 bytes for upstreamURL from Frigate, capped
+// at c.maxClipBytes. `key` is the cache / log identifier; the upstream
+// URL is supplied by the caller so the same buffer/retag pipeline can
+// front either per-event or per-window clip endpoints.
+func (c *Client) fetchClip(ctx context.Context, key, upstreamURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstreamURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
@@ -416,7 +448,7 @@ func (c *Client) fetchClip(ctx context.Context, eventID string) ([]byte, error) 
 	retagged, rerr := remuxHvc1(buf)
 	if rerr != nil {
 		slog.Warn("hev1→hvc1 retag failed; serving original clip bytes",
-			"event_id", eventID, "error", rerr)
+			"clip_key", key, "error", rerr)
 	} else {
 		buf = retagged
 	}

@@ -14,15 +14,7 @@ import (
 )
 
 const (
-	glanceListTimeout = 5 * time.Second
-	// glancePageLimit is the per-Frigate-call page size used by the
-	// backward pagination loop. Same value as eventsMaxLimit (Frigate's
-	// observed per-request cap).
-	glancePageLimit = 200
-	// glanceMaxPages caps how many pages the loop will fetch before it
-	// surrenders, even if the `hours` window is not yet covered. At
-	// glancePageLimit per page this is 1000 source events.
-	glanceMaxPages          = 5
+	glanceListTimeout       = 5 * time.Second
 	glanceDefaultHours      = 24
 	glanceMinHours          = 1
 	glanceMaxHours          = 168
@@ -31,26 +23,28 @@ const (
 )
 
 // glanceMoment embeds events.Moment and adds a per-moment seen flag
-// computed from the household scope's seen-set keyed on the moment's
-// representative event id, OR from the seen_through watermark
-// (moments whose newest event start sits at or before the watermark
-// are also reported as seen).
+// computed from the household scope's seen-set keyed on the moment id
+// (the Frigate review segment id), OR from the seen_through watermark
+// (moments whose started_at sits at or before the watermark are also
+// reported as seen).
 type glanceMoment struct {
 	events.Moment
 	Seen bool `json:"seen"`
 }
 
 // glanceResponse is the JSON envelope for GET /api/glance: the count
-// of moments whose representative event has not yet been marked seen,
-// and the surviving moments themselves (all of them, each carrying
-// its seen flag).
+// of moments not yet marked seen, and the surviving moments themselves
+// (all of them, each carrying its seen flag).
 type glanceResponse struct {
 	UnseenCount int            `json:"unseen_count"`
 	Moments     []glanceMoment `json:"moments"`
 }
 
 // glanceSeenRequest is the JSON body for POST /api/glance/seen.
-// EventIDs is required; Scope is reserved for a future per-user split
+// EventIDs carries the ids the client considers seen; in v1 these are
+// the review-sourced moment ids. The field is intentionally not
+// renamed this phase so the existing frontend continues to send them
+// under the same key. Scope is reserved for a future per-user split
 // and defaults to ScopeHousehold when absent.
 type glanceSeenRequest struct {
 	EventIDs *[]string `json:"event_ids"`
@@ -58,19 +52,17 @@ type glanceSeenRequest struct {
 }
 
 // handleGlance serves GET /api/glance: the "while you were away"
-// payload. Walks Frigate backwards (page size glancePageLimit, up to
-// glanceMaxPages pages for safety) until the source events cover the
-// since = now - hours window, groups the survivors into moments,
-// truncates to the newest `max` moments, and annotates each moment
-// with seen. seen is true when the moment's representative_event_id
-// sits in the household seen-set, OR when its newest event start is
-// at or before the household seen_through watermark. unseen_count is
-// the count of moments whose seen flag is false. `hours` is the
-// optional query param (default glanceDefaultHours, clamped to
-// glanceMinHours..glanceMaxHours). `max` is the optional output cap
-// (default glanceDefaultMaxMoments, clamped to 1..glanceMaxMomentsCeil)
-// — it bounds the number of moments returned, NOT the source events
-// fetched.
+// payload. Fetches Frigate review segments via /api/review with
+// after = now - hours and limit = max, reshapes each into a Moment,
+// and annotates each moment with seen. seen is true when the
+// moment's id sits in the household seen-set, OR when its
+// started_at is at or before the household seen_through watermark.
+// unseen_count is the count of moments whose seen flag is false.
+// `hours` is the optional query param (default glanceDefaultHours,
+// clamped to glanceMinHours..glanceMaxHours). `max` is the optional
+// output cap (default glanceDefaultMaxMoments, clamped to
+// 1..glanceMaxMomentsCeil) and is forwarded to Frigate as the upstream
+// limit; Frigate /api/review already returns segments newest-first.
 func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	hours := glanceDefaultHours
 	if s := r.URL.Query().Get("hours"); s != "" {
@@ -101,69 +93,38 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), glanceListTimeout)
 	defer cancel()
 
-	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	after := time.Now().Add(-time.Duration(hours) * time.Hour)
 
-	var allItems []events.Item
-	var before time.Time
-	for page := 0; page < glanceMaxPages; page++ {
-		params := events.ListParams{Limit: glancePageLimit}
-		if !before.IsZero() {
-			params.Before = before
+	reviewItems, err := h.events.ListReview(ctx, events.ReviewParams{
+		After: after,
+		Limit: maxMoments,
+	})
+	if err != nil {
+		status := http.StatusBadGateway
+		code := "upstream_error"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
 		}
-		resp, err := h.events.List(ctx, params)
-		if err != nil {
-			status := http.StatusBadGateway
-			code := "upstream_error"
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				status = http.StatusGatewayTimeout
-				code = "upstream_timeout"
-			}
-			writeError(w, h.logger, status, code, "events upstream error", err)
-			return
-		}
-		allItems = append(allItems, resp.Items...)
-		// Short page or no cursor ⇒ end of history.
-		if resp.NextBefore == nil {
-			break
-		}
-		// Window fully covered: oldest item (last, since Frigate returns
-		// newest-first) sits at or below since.
-		if len(resp.Items) > 0 {
-			oldest := resp.Items[len(resp.Items)-1]
-			if t, perr := time.Parse(time.RFC3339, oldest.StartedAt); perr == nil && !t.After(since) {
-				break
-			}
-		}
-		next, perr := time.Parse(time.RFC3339, *resp.NextBefore)
-		if perr != nil {
-			// Unparseable cursor: degrade gracefully rather than burn the
-			// safety budget on guaranteed-failing requests.
-			break
-		}
-		before = next
+		writeError(w, h.logger, status, code, "review upstream error", err)
+		return
 	}
 
-	moments := events.GroupMoments(allItems, since)
-	if len(moments) > maxMoments {
-		moments = moments[:maxMoments]
+	// Frigate /api/review returns segments newest-first; preserve that
+	// order. Defensive truncate in case upstream ignores limit.
+	if len(reviewItems) > maxMoments {
+		reviewItems = reviewItems[:maxMoments]
 	}
+
 	seenSet := h.glance.SeenSet(glance.ScopeHousehold)
 	seenThrough := h.glance.SeenThrough(glance.ScopeHousehold)
 
-	out := glanceResponse{Moments: make([]glanceMoment, len(moments))}
-	for i, m := range moments {
-		_, seen := seenSet[m.RepresentativeEventID]
+	out := glanceResponse{Moments: make([]glanceMoment, len(reviewItems))}
+	for i, it := range reviewItems {
+		m := events.ReviewItemToMoment(it)
+		_, seen := seenSet[m.ID]
 		if !seen && !seenThrough.IsZero() {
-			// Fall back to the watermark: a moment is seen if its
-			// newest event started at or before seen_through. Use the
-			// first event in m.Events (newest-first) when available;
-			// otherwise fall back to the moment's earliest started_at
-			// so a malformed cluster still produces a defined answer.
-			newest := m.StartedAt
-			if len(m.Events) > 0 {
-				newest = m.Events[0].StartedAt
-			}
-			if t, perr := time.Parse(time.RFC3339, newest); perr == nil && !t.After(seenThrough) {
+			if t, perr := time.Parse(time.RFC3339, m.StartedAt); perr == nil && !t.After(seenThrough) {
 				seen = true
 			}
 		}
@@ -211,11 +172,12 @@ func (h *Handler) handleGlanceSeenAll(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGlanceSeen serves POST /api/glance/seen: marks the supplied
-// event ids as seen in the requested scope (default household). The
-// /api group's cross-site guard already enforces Sec-Fetch-Site on
-// this mutating route; no extra check here. There is no per-user
-// identity in v1 — scope is accepted on the wire for forward-compat
-// only.
+// ids as seen in the requested scope (default household). The seen
+// store is id-agnostic; in v1 these ids are the review-sourced moment
+// ids. The /api group's cross-site guard already enforces
+// Sec-Fetch-Site on this mutating route; no extra check here. There is
+// no per-user identity in v1 — scope is accepted on the wire for
+// forward-compat only.
 func (h *Handler) handleGlanceSeen(w http.ResponseWriter, r *http.Request) {
 	var body glanceSeenRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

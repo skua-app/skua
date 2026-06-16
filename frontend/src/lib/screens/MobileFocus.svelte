@@ -91,8 +91,6 @@
     return () => clearInterval(t)
   })
 
-  const otherCameras = $derived(camerasStore.cameras.filter((c) => c.id !== camera?.id))
-
   // Focus → focus must REPLACE the history entry so a single back tap returns
   // to the grid regardless of how many cameras the user hopped through.
   function switchCam(e: MouseEvent, id: string) {
@@ -219,7 +217,8 @@
     <div class="livebar">
       <button
         type="button"
-        class="livebtn primary"
+        class="livebtn playpause"
+        class:active={isPaused}
         onclick={togglePause}
         aria-label={isPaused ? 'Play' : 'Pause'}
       >
@@ -268,37 +267,61 @@
       {/if}
     </div>
 
-    {#if otherCameras.length > 0}
+    {#if camerasStore.cameras.length > 0}
       <div class="sec-label">
         <span>{ui.otherCamerasLabel}</span>
       </div>
       <div class="hscroll" aria-label={ui.otherCamerasLabel}>
-        {#each otherCameras as c (c.id)}
-          <a
-            href={`/cam/${c.id}`}
-            class="mini"
-            class:offline-tile={!c.online}
-            onclick={(e) => switchCam(e, c.id)}
-          >
-            {#if c.online}
-              <div class="cam">
-                <img
-                  src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
-                  alt={c.name}
-                  class="mini-img"
-                  loading="lazy"
-                />
+        {#each camerasStore.cameras as c (c.id)}
+          {@const current = c.id === camera?.id}
+          {#if current}
+            <div class="mini on" class:offline-tile={!c.online} aria-current="page">
+              {#if c.online}
+                <div class="cam">
+                  <img
+                    src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
+                    alt={c.name}
+                    class="mini-img"
+                    loading="lazy"
+                  />
+                </div>
+              {:else}
+                <div class="cam offline">
+                  <span class="off-ico" aria-hidden="true"><Icon name="warning" size={18} /></span>
+                </div>
+              {/if}
+              <div class="lbl">
+                <OnlineDot online={c.online} size={5} />
+                <span class="mini-name">{c.name}</span>
               </div>
-            {:else}
-              <div class="cam offline">
-                <span class="off-ico" aria-hidden="true"><Icon name="warning" size={18} /></span>
-              </div>
-            {/if}
-            <div class="lbl">
-              <OnlineDot online={c.online} size={5} />
-              <span class="mini-name">{c.name}</span>
             </div>
-          </a>
+          {:else}
+            <a
+              href={`/cam/${c.id}`}
+              class="mini"
+              class:offline-tile={!c.online}
+              onclick={(e) => switchCam(e, c.id)}
+            >
+              {#if c.online}
+                <div class="cam">
+                  <img
+                    src={`/api/cameras/${c.id}/tile.jpg?t=${tileTick}`}
+                    alt={c.name}
+                    class="mini-img"
+                    loading="lazy"
+                  />
+                </div>
+              {:else}
+                <div class="cam offline">
+                  <span class="off-ico" aria-hidden="true"><Icon name="warning" size={18} /></span>
+                </div>
+              {/if}
+              <div class="lbl">
+                <OnlineDot online={c.online} size={5} />
+                <span class="mini-name">{c.name}</span>
+              </div>
+            </a>
+          {/if}
         {/each}
       </div>
     {/if}
@@ -500,14 +523,14 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
-  .livebtn.primary {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent-ink);
-  }
-  .livebtn.primary :global(svg) {
-    fill: var(--accent-ink);
-    stroke: var(--accent-ink);
+  /* Play/pause icon: pin both fill and stroke to the button's text
+     colour so the filled-triangle play glyph and the two-bar pause
+     glyph stay fully visible in both the neutral (--text) and active
+     (--accent-ink) states — independent of how individual glyphs in
+     icons.ts declare their fill/stroke. */
+  .livebtn.playpause :global(svg) {
+    fill: currentColor;
+    stroke: currentColor;
   }
   .livebtn.active {
     background: var(--accent-soft);
@@ -559,6 +582,14 @@
   .mini .cam.offline {
     border: 1px dashed var(--border-strong);
     color: var(--warn);
+  }
+  /* Current camera in the rail: accent ring on the thumb + accent
+     label, mirroring DesktopFocus's .dk-film.on .thumb / .flbl. */
+  .mini.on .cam {
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .mini.on .lbl {
+    color: var(--accent-ink);
   }
   .off-ico {
     color: var(--warn);

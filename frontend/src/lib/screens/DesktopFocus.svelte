@@ -234,7 +234,12 @@
 
       <div class="dk-livebar">
         {#if camera?.online}
-          <button type="button" class="dk-livebtn primary" onclick={togglePause}>
+          <button
+            type="button"
+            class="dk-livebtn playpause"
+            class:active={isPaused}
+            onclick={togglePause}
+          >
             <Icon name={isPaused ? 'play' : 'pause'} size={20} />
             <span>{isPaused ? 'Play' : 'Pause'}</span>
           </button>
@@ -616,14 +621,14 @@
     opacity: 0.4;
     cursor: not-allowed;
   }
-  .dk-livebtn.primary {
-    background: var(--accent-soft);
-    border-color: transparent;
-    color: var(--accent-ink);
-  }
-  .dk-livebtn.primary :global(svg) {
-    fill: var(--accent-ink);
-    stroke: var(--accent-ink);
+  /* Play/pause icon: pin both fill and stroke to the button's text
+     colour so the filled-triangle play glyph and the two-bar pause
+     glyph stay fully visible in both the neutral (--text) and active
+     (--accent-ink) states — independent of how individual glyphs in
+     icons.ts declare their fill/stroke. */
+  .dk-livebtn.playpause :global(svg) {
+    fill: currentColor;
+    stroke: currentColor;
   }
   .dk-livebtn.active {
     background: var(--accent-soft);
