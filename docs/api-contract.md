@@ -124,6 +124,28 @@ type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
 // → image/jpeg; Cache-Control: public, max-age=31536000, immutable
 // ETag passed through from Frigate, else derived from event id.
 
+// GET /api/events/:id/review
+//   Resolves the Frigate review segment that contains the tracked-
+//   object event with id `:id`. The BFF derives the event's
+//   timestamp from the id's "<unix>.<frac>-<hash>" prefix, queries
+//   Frigate's /api/review for the ±10 min window around that
+//   timestamp (Limit=100), and scans the returned segments'
+//   data.detections for an exact id match. Detection ids are
+//   globally unique, so the camera does not have to be passed and
+//   a cross-camera scan is safe. The recall window is wide; the
+//   exact id match supplies precision.
+//
+//   200 → { "review_id": "<frigate-review-id>" }
+//   Cache-Control: no-store.
+//
+//   Errors:
+//     - invalid id format / unparseable prefix → 404 not_found
+//     - no review in the window contains the id → 404 not_found
+//     - upstream context deadline → 504 upstream_timeout
+//     - any other upstream failure → 502 upstream_error
+//
+// type EventReviewResponse = { review_id: string }
+
 // GET  /api/events/:id/clip.mp4
 // HEAD /api/events/:id/clip.mp4              (http.ServeContent skips the body)
 // GET  /api/events/:id/clip.mp4?download=1   (Content-Disposition: attachment)

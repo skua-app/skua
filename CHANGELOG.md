@@ -48,6 +48,12 @@ Changed
   retag pipeline as the existing per-event clip endpoint, so it
   plays inline in `<video>` with audio and supports HTTP Range
   natively.
+- The BFF can now resolve a tracked-object event to the Frigate
+  review segment that contains it via `GET /api/events/{id}/review`.
+  It returns `{ review_id }` for the containing review and 404
+  when no review around the event time matches. This is the
+  backend half of the new "Open in Frigate review" deep-link in
+  the event modal.
 
 Removed
 - GET /api/moments has been removed; the BFF no longer exposes a

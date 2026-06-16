@@ -45,6 +45,7 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Method(http.MethodGet, "/glance/{id}/clip.mp4", http.HandlerFunc(h.handleGlanceClip))
 		r.Get("/events/{id}/thumbnail.jpg", h.handleEventThumbnail)
 		r.Get("/events/{id}/snapshot.jpg", h.handleEventSnapshot)
+		r.Get("/events/{id}/review", h.handleEventReview)
 		r.Method(http.MethodGet, "/events/{id}/clip.mp4", http.HandlerFunc(h.handleEventClip))
 		r.Method(http.MethodHead, "/events/{id}/clip.mp4", http.HandlerFunc(h.handleEventClip))
 		r.Get("/groups", h.handleListGroups)

@@ -60,9 +60,13 @@ type FrigateReviewItem struct {
 }
 
 // ReviewParams are the supported BFF query filters for ListReview.
+// After / Before are inclusive lower / upper bounds on the segment's
+// start_time, in line with Frigate's /api/review semantics. Either
+// may be zero to omit the bound.
 type ReviewParams struct {
 	Cameras []string
 	After   time.Time // zero ⇒ no filter
+	Before  time.Time // zero ⇒ no filter
 	Limit   int
 }
 
@@ -94,6 +98,9 @@ func (c *Client) ListReview(ctx context.Context, p ReviewParams) ([]FrigateRevie
 	}
 	if !p.After.IsZero() {
 		q.Set("after", strconv.FormatInt(p.After.Unix(), 10))
+	}
+	if !p.Before.IsZero() {
+		q.Set("before", strconv.FormatInt(p.Before.Unix(), 10))
 	}
 	if p.Limit > 0 {
 		q.Set("limit", strconv.Itoa(p.Limit))
@@ -181,9 +188,9 @@ func ReviewItemToMoment(r FrigateReviewItem) Moment {
 	thumbID := ""
 	if len(r.Data.Detections) > 0 {
 		thumbID = r.Data.Detections[0]
-		best := detectionTimestampPrefix(thumbID)
+		best := EventTimestampPrefix(thumbID)
 		for _, id := range r.Data.Detections[1:] {
-			ts := detectionTimestampPrefix(id)
+			ts := EventTimestampPrefix(id)
 			if ts > best {
 				best = ts
 				thumbID = id
@@ -262,10 +269,13 @@ func (c *Client) OpenPreview(ctx context.Context, method, camera string, start, 
 	return resp, nil
 }
 
-// detectionTimestampPrefix parses the unix-seconds float prefix of a
-// Frigate event id ("<unix>.<frac>-<hash>"). Returns 0 on any parse
-// failure so a malformed id sorts below well-formed ones.
-func detectionTimestampPrefix(id string) float64 {
+// EventTimestampPrefix parses the unix-seconds float prefix of a
+// Frigate event id ("<unix>.<frac>-<hash>") — the same encoding
+// detection ids inside review segments and tracked-object event ids
+// share. Returns 0 on any parse failure so a malformed id sorts
+// below well-formed ones. Exported for the events→review resolver
+// (it needs the event start to pick a recall window for /api/review).
+func EventTimestampPrefix(id string) float64 {
 	dash := strings.Index(id, "-")
 	if dash <= 0 {
 		return 0
