@@ -9,6 +9,8 @@
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { timelineMasterURL } from '$lib/api'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
+  import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
+  import type { TimelineHour } from '$lib/timeline'
 
   // page.params.id is typed string | undefined by SvelteKit's $types; the
   // route only matches when [id] is bound, so the empty fallback never
@@ -22,6 +24,34 @@
   // whether the range actually has recording behind it.
   const end = Math.floor(Date.now() / 1000)
   const start = end - 3600
+
+  // 2b-ii visual scaffold: MOCK scrubber data. The window below is the
+  // last 6 hours, with hand-picked recordedFraction values — some full,
+  // some partial, one gap — so the cells, label decimation, and playhead
+  // can be eyeballed without depending on a real Frigate. 2b-iii replaces
+  // this block with the timeline store driving real summary data and
+  // wires onSeek into the HlsVideo current time.
+  const scrubEnd = end
+  const scrubStart = scrubEnd - 6 * 3600
+  function hourAt(offsetHours: number, fraction: number, events = 0): TimelineHour {
+    const tSec = scrubStart + offsetHours * 3600
+    const d = new Date(0)
+    d.setTime(tSec * 1000)
+    return { hourStart: d, recordedFraction: fraction, events, motion: 0 }
+  }
+  const mockHours: TimelineHour[] = [
+    hourAt(0, 1.0),
+    hourAt(1, 0.62, 3),
+    hourAt(2, 0.0), // gap
+    hourAt(3, 0.85, 8),
+    hourAt(4, 1.0),
+    hourAt(5, 0.35, 1)
+  ]
+  let playhead = $state(scrubStart + 3 * 3600 + 1800)
+  function handleSeek(t: number) {
+    playhead = t
+    console.debug('[timeline scaffold] onSeek', t)
+  }
 </script>
 
 <div class="page">
@@ -33,6 +63,14 @@
   <div class="frame">
     <HlsVideo src={timelineMasterURL(camId, start, end)} />
   </div>
+
+  <TimelineScrubber
+    hours={mockHours}
+    windowStart={scrubStart}
+    windowEnd={scrubEnd}
+    position={playhead}
+    onSeek={handleSeek}
+  />
 </div>
 
 <style>
