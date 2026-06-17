@@ -29,8 +29,26 @@
     return () => ro.disconnect()
   })
 
+  // Drag state lives above the derived display fraction so the derived
+  // can read it directly (declaration order matters under
+  // verbatimModuleSyntax + strict $state checks). dragging is $state so
+  // displayFraction recomputes when a drag starts / ends and the
+  // playhead transition flips off in the same render pass.
+  let dragging = $state(false)
+  let dragFraction = $state<number | null>(null)
+
   const cells = $derived(hourCells(hours, windowStart, windowEnd))
+  // Resting playhead follows the consumer-echoed position prop. Drives
+  // keyboard / programmatic seeks and idle playback in 2b-iii.
   const playheadFraction = $derived(timeToFraction(position, windowStart, windowEnd))
+  // During a drag we render the LIVE finger fraction instead of the
+  // round-tripped position — iOS in particular re-echoes the prop a frame
+  // or two late, so left-on-prop was visibly trailing the finger by
+  // 0.5-1s. dragFraction is null when not dragging so the displayed
+  // fraction collapses to the prop-driven derivation above.
+  const displayFraction = $derived(
+    dragging && dragFraction !== null ? dragFraction : playheadFraction
+  )
 
   // Hour-tick model. Every hourStart in the window is a candidate label;
   // we drop labels until the per-label slice exceeds ~52px so HH:00 in
@@ -75,7 +93,8 @@
   // pointermove even after the finger/cursor leaves the track bounds;
   // touch-action: none on the track (CSS) cancels the page's
   // horizontal-pan gesture without resorting to non-passive listeners.
-  let dragging = false
+  // (dragging / dragFraction declared above so displayFraction can read
+  // them in declaration order.)
   function fractionFromEvent(e: PointerEvent): number {
     const el = trackEl
     if (!el) return 0
@@ -85,7 +104,9 @@
     return f < 0 ? 0 : f > 1 ? 1 : f
   }
   function seekAt(e: PointerEvent) {
-    onSeek(Math.round(fractionToTime(fractionFromEvent(e), windowStart, windowEnd)))
+    const f = fractionFromEvent(e)
+    dragFraction = f
+    onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
   }
   function onPointerDown(e: PointerEvent) {
     if (!trackEl) return
@@ -100,6 +121,7 @@
   function onPointerUp(e: PointerEvent) {
     if (!dragging) return
     dragging = false
+    dragFraction = null
     trackEl?.releasePointerCapture(e.pointerId)
   }
 
@@ -152,7 +174,12 @@
     {/each}
   </div>
 
-  <span class="playhead" aria-hidden="true" style:left="{playheadFraction * 100}%">
+  <span
+    class="playhead"
+    class:dragging
+    aria-hidden="true"
+    style:transform="translateX({displayFraction * trackWidth - 1}px)"
+  >
     <span class="playhead-line"></span>
     <span class="playhead-handle"></span>
   </span>
@@ -235,11 +262,21 @@
   }
   .playhead {
     position: absolute;
+    left: 0;
     top: 0;
     bottom: 0;
     pointer-events: none;
-    transform: translateX(-1px);
-    transition: left 120ms linear;
+    /* Driven by transform: translateX so the GPU compositor handles
+       movement without per-frame layout. left:% + transition: left was
+       chasing the round-tripped position prop a frame or two behind the
+       finger on iOS (visible ~0.5-1s lag). */
+    transition: transform 120ms linear;
+    will-change: transform;
+  }
+  .playhead.dragging {
+    /* No easing while the finger drags — the element must land exactly
+       under clientX on every pointermove. */
+    transition: none;
   }
   .playhead-line {
     position: absolute;
