@@ -58,6 +58,20 @@ export function fractionToTime(f: number, startSec: number, endSec: number): num
   return startSec + clamped * (endSec - startSec)
 }
 
+// clockHourBucket returns the LOCAL clock-hour [start, end) containing
+// tSec (unix seconds): start is the unix-seconds boundary of the local
+// hour at or before t (minutes/seconds/ms zeroed), end is start + 3600.
+// Frigate's preview.mp4 only ever returns the first clock-hour file for a
+// multi-hour request, so the scrubber loads one hourly bucket at a time
+// and swaps on hour crossings. Local time so the bucket aligns with the
+// hour ticks the scrubber draws (which use the browser timezone).
+export function clockHourBucket(tSec: number): { start: number; end: number } {
+  const d = new Date(tSec * 1000)
+  d.setMinutes(0, 0, 0)
+  const start = Math.floor(d.getTime() / 1000)
+  return { start, end: start + 3600 }
+}
+
 // HourCell is one drawable hour slot in window-fraction coordinates.
 // x0/x1 are in [0,1]; fraction is the source TimelineHour's
 // recordedFraction (carried, not re-derived from x1-x0, because window

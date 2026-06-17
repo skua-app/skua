@@ -10,8 +10,8 @@
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
-  import { timelineMasterURL, timelinePreviewURL } from '$lib/api'
-  import { timeToFraction } from '$lib/timeline'
+  import { timelineMasterURL, timelinePreviewURL, fetchPreviewBounds } from '$lib/api'
+  import { clockHourBucket } from '$lib/timeline'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
   import Icon from '$lib/components/Icon.svelte'
@@ -43,8 +43,12 @@
   // the full-res chunk drives it.
   let mode = $state<'scrubbing' | 'playback'>('scrubbing')
 
-  // Low-res preview layer (the whole window in one short seekable file). We
-  // only ever set its currentTime during scrubbing — never let it run. But a
+  // Low-res preview layer. Frigate's preview.mp4 only returns the first
+  // clock-hour file for a multi-hour request, so the scrubber loads ONE
+  // hourly bucket at a time (the bucket containing the playhead) and swaps
+  // files when the finger crosses into another hour — stretching one hour
+  // over the 3h window was the scrub-drift bug. We only ever set the
+  // element's currentTime during scrubbing — never let it run. But a
   // <video> on iOS/mobile won't decode or paint a frame from a bare
   // currentTime assignment until it has been played at least once (preload
   // is not honoured for data on mobile), which read as a black scrub. So we
@@ -55,9 +59,14 @@
   let previewPrimed = $state(false)
   // Coalesces rapid drag seeks to one currentTime assignment per frame.
   let previewSeekRaf: number | null = null
-  const previewSrc = $derived(
-    windowEnd > 0 ? timelinePreviewURL(camId, windowStart, windowEnd) : ''
-  )
+  // The clock-hour bucket currently loaded, and its real covered wall-clock
+  // span (from fetchPreviewBounds) — null when bounds are unavailable, in
+  // which case seekPreview falls back to the full clock hour. boundsCache
+  // keyed by bucket.start avoids refetching on re-entry to an hour.
+  let bucket = $state<{ start: number; end: number } | null>(null)
+  let bucketBounds = $state<{ first: number; last: number } | null>(null)
+  const boundsCache = new Map<number, { first: number; last: number }>()
+  const previewSrc = $derived(bucket ? timelinePreviewURL(camId, bucket.start, bucket.end) : '')
 
   // Full-res chunk layer (HlsVideo). chunkSrc is '' until a chunk is loaded,
   // so no full-res network on mount.
@@ -100,14 +109,20 @@
       chunkStart = null
       chunkEnd = null
       previewDuration = 0
-      // New window swaps previewSrc, so the new file must be re-primed.
+      // New bucket swaps previewSrc, so the new file must be re-primed.
       previewPrimed = false
       showFullRes = false
       pendingPlay = false
       chunkEnded = false
       playerError = false
       paused = true
+      // Fresh camera: drop the bounds cache and the loaded bucket, then load
+      // the bucket containing the oldest window edge.
+      boundsCache.clear()
+      bucket = null
+      bucketBounds = null
       void timelineStore.load(id)
+      ensureBucket(windowStart)
     })
   })
 
@@ -128,32 +143,83 @@
       .catch(() => {})
   }
 
-  // Show the preview frame at the current wall-clock position. The preview's
-  // own duration is much shorter than the window, so we map the window
-  // fraction onto preview.currentTime. Cheap, but a fast drag fires many
-  // times per frame, so coalesce to one assignment per animation frame using
-  // the latest position.
+  // Ensure the loaded preview bucket is the clock-hour containing t. On an
+  // hour crossing, swap the bucket (previewSrc reloads, the loadedmetadata
+  // effect re-primes + seeks), reset the per-file prime/duration, seed
+  // bucketBounds from the cache if known, and kick a bounds fetch. Cheap
+  // when t stays inside the current hour — just a start comparison.
+  function ensureBucket(t: number) {
+    const b = clockHourBucket(t)
+    if (bucket && bucket.start === b.start) return
+    bucket = b
+    previewDuration = 0
+    previewPrimed = false
+    bucketBounds = boundsCache.get(b.start) ?? null
+    void loadBounds(b)
+  }
+
+  // Fetch (or reuse cached) the real covered span for bucket b. Applies the
+  // result only if b is still the current bucket — an async result for an
+  // hour the finger has already left must not corrupt the live mapping. On
+  // failure or an empty bucket, bucketBounds stays null and seekPreview
+  // falls back to the full clock hour.
+  async function loadBounds(b: { start: number; end: number }) {
+    const cached = boundsCache.get(b.start)
+    if (cached) {
+      if (bucket && bucket.start === b.start) {
+        bucketBounds = cached
+        seekPreview()
+      }
+      return
+    }
+    try {
+      const resp = await fetchPreviewBounds(camId, b.start, b.end)
+      if (resp.count > 0 && resp.end > resp.start) {
+        const bounds = { first: resp.start, last: resp.end }
+        boundsCache.set(b.start, bounds)
+        if (bucket && bucket.start === b.start) {
+          bucketBounds = bounds
+          seekPreview()
+        }
+      }
+    } catch {
+      // Leave bucketBounds null — the clock-hour fallback covers it.
+    }
+  }
+
+  // Show the preview frame at the current wall-clock position, mapped onto
+  // the loaded bucket. The preview file covers only its clock hour and its
+  // own duration is much shorter than 3600s, so the fraction is computed
+  // BUCKET-relative: against the real covered span when known, else the full
+  // clock hour. Cheap, but a fast drag fires many times per frame, so
+  // coalesce to one assignment per animation frame using the latest position.
   function seekPreview() {
     const el = previewEl
-    if (!el || previewDuration <= 0) return
+    if (!el || previewDuration <= 0 || !bucket) return
     if (previewSeekRaf !== null) return
     previewSeekRaf = requestAnimationFrame(() => {
       previewSeekRaf = null
       const e = previewEl
-      if (!e || previewDuration <= 0) return
-      e.currentTime = timeToFraction(position, windowStart, windowEnd) * previewDuration
+      const b = bucket
+      if (!e || previewDuration <= 0 || !b) return
+      const lo = bucketBounds ? bucketBounds.first : b.start
+      const hi = bucketBounds ? bucketBounds.last : b.end
+      const raw = hi > lo ? (position - lo) / (hi - lo) : 0
+      const frac = raw < 0 ? 0 : raw > 1 ? 1 : raw
+      e.currentTime = frac * previewDuration
     })
   }
 
   // Preview metadata: capture duration, then show the resting frame at the
-  // current position. Fires again whenever previewSrc swaps (new window).
+  // current position. Fires again whenever previewSrc swaps (new bucket).
   $effect(() => {
     const el = previewEl
     if (!el) return
     const onMeta = () => {
       previewDuration = Number.isFinite(el.duration) ? el.duration : 0
-      // Best-effort prime on load so the resting frame at windowStart paints
-      // without waiting for a scrub. primePreview seeks once primed.
+      // Best-effort prime on load so the resting frame at the current
+      // position paints without waiting for a scrub. primePreview seeks
+      // once primed.
       primePreview()
       seekPreview()
     }
@@ -251,10 +317,13 @@
   }
 
   // Continuous drag value. Preview-only — cheap, no throttle, no full-res.
+  // ensureBucket swaps the hourly preview file only on an actual hour
+  // crossing; otherwise it is a no-op comparison.
   function handleSeek(t: number) {
     const clamped = t < windowStart ? windowStart : t > windowEnd ? windowEnd : t
     position = clamped
     chunkEnded = false
+    ensureBucket(position)
     if (mode === 'scrubbing') seekPreview()
   }
 
