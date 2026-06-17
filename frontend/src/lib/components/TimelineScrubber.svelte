@@ -7,9 +7,15 @@
     windowEnd: number
     position: number
     onSeek: (tSec: number) => void
+    // Pointer-drag lifecycle hooks. Fired only for pointer drags, NOT for
+    // keyboard nudges — the consumer uses them to switch between the cheap
+    // preview-scrub layer (during drag) and full-res playback (on settle).
+    onScrubStart?: () => void
+    onScrubEnd?: () => void
   }
 
-  let { hours, windowStart, windowEnd, position, onSeek }: Props = $props()
+  let { hours, windowStart, windowEnd, position, onSeek, onScrubStart, onScrubEnd }: Props =
+    $props()
 
   // Width in CSS pixels, kept reactive via a ResizeObserver — same pattern
   // Segmented uses. Drives the label-decimation logic so narrow viewports
@@ -113,6 +119,7 @@
     dragging = true
     trackEl.setPointerCapture(e.pointerId)
     seekAt(e)
+    onScrubStart?.()
   }
   function onPointerMove(e: PointerEvent) {
     if (!dragging) return
@@ -123,6 +130,7 @@
     dragging = false
     dragFraction = null
     trackEl?.releasePointerCapture(e.pointerId)
+    onScrubEnd?.()
   }
 
   // Keyboard nudge: ±60s per arrow press, ±300s with Shift. Stays within

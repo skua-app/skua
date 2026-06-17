@@ -238,6 +238,7 @@ export const ui = {
   timelineSummaryError: 'Не удалось загрузить сводку таймлайна',
   timelineEmpty: 'Нет записей в этом окне',
   timelineNoRecording: 'Нет записи для этого диапазона',
+  timelineChunkEnd: 'Перемотайте, чтобы продолжить',
   // theme (device-local)
   themeLabel: 'Тема',
   themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',

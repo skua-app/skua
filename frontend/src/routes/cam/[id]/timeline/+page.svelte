@@ -1,27 +1,28 @@
-<!-- Phase 2b-iii: the real recording-timeline screen. Wires HlsVideo +
-     TimelineScrubber + timelineStore over a single fixed 3-hour window
-     (scrubber window == VOD window). No wide-window / zoom / on-demand chunk
-     reload yet — that is 2b-iv. Still reachable by URL only; the focus-screen
-     entry link lands in 2c. -->
+<!-- Phase 2b-iv-b-1: two-layer recording-timeline screen. Scrubbing rides a
+     single low-res preview timelapse (instant seeking, no network per move);
+     settling loads full-res only as a bounded <=5-min chunk and plays it.
+     Playback STOPS at the chunk end with a hint — continuous gapless
+     cross-chunk playback is 2b-iv-b-2. The 3h full-res master URL is gone:
+     full-res is ever only a chunk. Still URL-reachable only (entry link is 2c). -->
 <script lang="ts">
   import { page } from '$app/state'
-  import { onDestroy, untrack } from 'svelte'
+  import { untrack } from 'svelte'
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
-  import { timelineMasterURL } from '$lib/api'
+  import { timelineMasterURL, timelinePreviewURL } from '$lib/api'
+  import { timeToFraction } from '$lib/timeline'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import { ui } from '$lib/i18n/strings'
 
-  // Decision 1: a single fixed 3-hour window per camera.
+  // Scrubber window: a fixed 3-hour span per camera. Full-res chunk: 5 min.
   const WINDOW_SECONDS = 3 * 3600
-  // Throttle budget for heavy currentTime seeks during a continuous drag.
-  const SEEK_THROTTLE_MS = 200
-  // After a user seek, ignore playback's own timeupdate for a brief settle
-  // window so it doesn't fight the finger right after release.
+  const CHUNK_SECONDS = 5 * 60
+  // After a settle/seek, ignore the full-res timeupdate echo briefly so it
+  // doesn't fight the UI right after the assignment.
   const SEEK_SETTLE_MS = 300
 
   // page.params.id is typed string | undefined; the route only matches when
@@ -29,38 +30,55 @@
   const camId = $derived(page.params.id ?? '')
   const camera = $derived(camerasStore.cameras.find((c) => c.id === camId) ?? null)
 
-  // The window is captured ONCE per camId (in the effect below) so the VOD
-  // src stays stable and HlsVideo does not re-attach on every render. start
-  // is the oldest edge of the window; end is wall-clock now at capture time.
+  // Window captured ONCE per camId (in the effect below). start is the oldest
+  // edge; end is wall-clock now at capture time.
   let windowStart = $state(0)
   let windowEnd = $state(0)
 
-  // Wall-clock playhead in unix seconds. The scrubber consumes this; we echo
-  // it back from playback (timeupdate) and from drag (onSeek).
+  // Wall-clock playhead (unix sec). Driven by drag (preview) or full-res
+  // timeupdate (playback); consumed by the scrubber + the clock readout.
   let position = $state(0)
 
-  // HlsVideo error (e.g. Frigate 400 on an empty window) — shown as a text
-  // overlay in the video frame; the summary can still be fine.
+  // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
+  // the full-res chunk drives it.
+  let mode = $state<'scrubbing' | 'playback'>('scrubbing')
+
+  // Low-res preview layer (the whole window in one short seekable file). We
+  // only ever set its currentTime — never play() it.
+  let previewEl = $state<HTMLVideoElement | null>(null)
+  let previewDuration = $state(0)
+  const previewSrc = $derived(
+    windowEnd > 0 ? timelinePreviewURL(camId, windowStart, windowEnd) : ''
+  )
+
+  // Full-res chunk layer (HlsVideo). chunkSrc is '' until a chunk is loaded,
+  // so no full-res network on mount.
+  let videoEl = $state<HTMLVideoElement | null>(null)
+  let chunkStart = $state<number | null>(null)
+  let chunkEnd = $state<number | null>(null)
+  let chunkSrc = $state('')
+  let paused = $state(true)
+  let chunkEnded = $state(false)
+  // Holds false until the freshly loaded chunk has painted its first frame —
+  // until then the preview frame stays visible as a poster over the 1-3s
+  // Frigate chunk generation rather than flashing the empty feed background.
+  let showFullRes = $state(false)
+  // Set when a chunk (re)load wants to start playing once it can: a brand-new
+  // src attaches asynchronously inside HlsVideo, so we defer play() to canplay.
+  let pendingPlay = $state(false)
+
+  // HlsVideo error (e.g. Frigate 400 on an empty chunk range).
   let playerError = $state(false)
 
-  // Bindable <video> from HlsVideo so this screen drives play/pause + seeks.
-  let videoEl = $state<HTMLVideoElement | null>(null)
-  let paused = $state(true)
-
-  // Seek throttling + settle guard (declared before the handlers that read
-  // them so closures capture live getters).
   let lastSeekAt = 0
-  let lastThrottleRun = 0
-  let pendingSeek: number | null = null
-  let throttleTimer: ReturnType<typeof setTimeout> | null = null
 
-  // src is empty until the window is captured, so HlsVideo's attach effect
-  // (which returns early on !src) never issues a vod/0/0 fetch on mount.
-  const src = $derived(windowEnd > 0 ? timelineMasterURL(camId, windowStart, windowEnd) : '')
+  // Layer visibility: the preview holds until full-res has a frame, then the
+  // swap happens. In scrubbing mode the preview is always the visible layer.
+  const fullResVisible = $derived(mode === 'playback' && showFullRes)
+  const previewVisible = $derived(!fullResVisible)
 
-  // On camId change: capture a fresh window, reset playhead to the oldest
-  // edge (play from there forward), clear any prior player error, and pull
-  // the recordings summary for the scrubber cells.
+  // On camId change: capture a fresh window, reset to scrubbing at the oldest
+  // edge, drop any loaded chunk, and pull the summary for the scrubber cells.
   $effect(() => {
     const id = camId
     if (!id) return
@@ -69,26 +87,53 @@
       windowEnd = end
       windowStart = end - WINDOW_SECONDS
       position = windowStart
+      mode = 'scrubbing'
+      chunkSrc = ''
+      chunkStart = null
+      chunkEnd = null
+      previewDuration = 0
+      showFullRes = false
+      pendingPlay = false
+      chunkEnded = false
       playerError = false
+      paused = true
       void timelineStore.load(id)
     })
   })
 
-  // Playback ↔ scrubber binding. timeupdate echoes currentTime back into the
-  // wall-clock position UNLESS a user seek happened very recently — the
-  // scrubber already ignores the prop mid-drag; this guard covers the brief
-  // settle window after release. play/pause events keep `paused` in sync.
+  // Show the preview frame at the current wall-clock position. The preview's
+  // own duration is much shorter than the window, so we map the window
+  // fraction onto preview.currentTime. Cheap — no throttle needed.
+  function seekPreview() {
+    const el = previewEl
+    if (!el || previewDuration <= 0) return
+    el.currentTime = timeToFraction(position, windowStart, windowEnd) * previewDuration
+  }
+
+  // Preview metadata: capture duration, then show the resting frame at the
+  // current position. Fires again whenever previewSrc swaps (new window).
+  $effect(() => {
+    const el = previewEl
+    if (!el) return
+    const onMeta = () => {
+      previewDuration = Number.isFinite(el.duration) ? el.duration : 0
+      seekPreview()
+    }
+    el.addEventListener('loadedmetadata', onMeta)
+    return () => el.removeEventListener('loadedmetadata', onMeta)
+  })
+
+  // Full-res chunk element listeners. videoEl is stable across chunk reloads
+  // (HlsVideo only swaps src), so these attach once.
   $effect(() => {
     const el = videoEl
     if (!el) return
     const onTime = () => {
+      if (mode !== 'playback' || chunkStart === null) return
       if (performance.now() - lastSeekAt < SEEK_SETTLE_MS) return
-      // Time mapping (decision 2) is a LINEAR approximation: Frigate's VOD
-      // playlist carries no EXT-X-PROGRAM-DATE-TIME and the summary is
-      // hour-granular, so master.m3u8 concatenates only existing segments —
-      // within a window that contains gaps the playhead drifts from true
-      // wall-clock. Gap-aware mapping is a later concern.
-      position = windowStart + el.currentTime
+      // Accurate, drift-bounded mapping: a chunk's currentTime 0 == its
+      // wall-clock chunkStart, and the chunk spans at most CHUNK_SECONDS.
+      position = chunkStart + el.currentTime
     }
     const onPlay = () => {
       paused = false
@@ -96,64 +141,104 @@
     const onPause = () => {
       paused = true
     }
+    const onReady = () => {
+      // First frame of the (re)loaded chunk is available — swap the poster
+      // out and honour any deferred play request.
+      showFullRes = true
+      if (pendingPlay) {
+        pendingPlay = false
+        void el.play().catch(() => {})
+      }
+    }
+    const onEnded = () => {
+      // Chunk boundary. Stop and hint; do NOT auto-advance (that is 2b-iv-b-2).
+      paused = true
+      chunkEnded = true
+    }
     el.addEventListener('timeupdate', onTime)
     el.addEventListener('play', onPlay)
     el.addEventListener('pause', onPause)
+    el.addEventListener('canplay', onReady)
+    el.addEventListener('playing', onReady)
+    el.addEventListener('ended', onEnded)
     return () => {
       el.removeEventListener('timeupdate', onTime)
       el.removeEventListener('play', onPlay)
       el.removeEventListener('pause', onPause)
+      el.removeEventListener('canplay', onReady)
+      el.removeEventListener('playing', onReady)
+      el.removeEventListener('ended', onEnded)
     }
   })
 
-  // The heavy currentTime assignment. Clamp into [0, duration] so a seek into
-  // a gap lands on the nearest available footage instead of overrunning the
-  // concatenated duration. duration is NaN until metadata loads — the ||
-  // fallback (window span) covers that.
-  function applySeek(tSec: number) {
+  // Ensure full-res plays at wall-clock T: reuse the loaded chunk when T is
+  // inside it (cheap currentTime seek), else load a fresh <=5-min chunk
+  // starting at T. Either way switch to playback and start playing.
+  function ensurePlaybackAt(t: number) {
     const el = videoEl
-    if (!el) return
-    const dur = el.duration || windowEnd - windowStart
-    const target = tSec - windowStart
-    el.currentTime = target < 0 ? 0 : target > dur ? dur : target
+    chunkEnded = false
+    const within =
+      chunkStart !== null &&
+      chunkEnd !== null &&
+      chunkSrc !== '' &&
+      t >= chunkStart &&
+      t <= chunkEnd
+    if (within && el) {
+      lastSeekAt = performance.now()
+      el.currentTime = t - chunkStart!
+      void el.play().catch(() => {})
+    } else {
+      const cs = t
+      const ce = Math.min(t + CHUNK_SECONDS, windowEnd)
+      chunkStart = cs
+      chunkEnd = ce
+      showFullRes = false // hold the preview frame as a poster until first frame
+      playerError = false
+      pendingPlay = true // play() deferred to canplay (async HlsVideo attach)
+      lastSeekAt = performance.now()
+      chunkSrc = timelineMasterURL(camId, cs, ce)
+    }
+    mode = 'playback'
   }
 
-  // onSeek from the scrubber. Decision 3: at most one heavy seek per
-  // ~200ms during a continuous drag, plus a trailing assignment carrying the
-  // final value. position is updated immediately (cheap) so the playhead
-  // stays continuous at drag release.
+  // Scrubber drag started: drop to the preview layer and pause full-res.
+  function handleScrubStart() {
+    mode = 'scrubbing'
+    chunkEnded = false
+    const el = videoEl
+    if (el && !el.paused) el.pause()
+  }
+
+  // Continuous drag value. Preview-only — cheap, no throttle, no full-res.
   function handleSeek(t: number) {
     const clamped = t < windowStart ? windowStart : t > windowEnd ? windowEnd : t
     position = clamped
-    lastSeekAt = performance.now()
-
-    pendingSeek = clamped
-    const now = performance.now()
-    if (now - lastThrottleRun >= SEEK_THROTTLE_MS) {
-      lastThrottleRun = now
-      applySeek(clamped)
-      pendingSeek = null
-    } else if (throttleTimer === null) {
-      const wait = SEEK_THROTTLE_MS - (now - lastThrottleRun)
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null
-        lastThrottleRun = performance.now()
-        if (pendingSeek !== null) {
-          applySeek(pendingSeek)
-          pendingSeek = null
-        }
-      }, wait)
-    }
+    chunkEnded = false
+    if (mode === 'scrubbing') seekPreview()
   }
 
+  // Drag released: settle to full-res at the landed position.
+  function handleScrubEnd() {
+    ensurePlaybackAt(position)
+  }
+
+  // Play button. From scrubbing, or when the playhead is outside the loaded
+  // chunk, settle+play; otherwise toggle the loaded chunk.
   function togglePlay() {
     const el = videoEl
-    if (!el) return
-    if (el.paused) {
-      void el.play().catch(() => {})
-    } else {
-      el.pause()
+    const within =
+      chunkStart !== null &&
+      chunkEnd !== null &&
+      chunkSrc !== '' &&
+      position >= chunkStart &&
+      position <= chunkEnd
+    if (mode === 'scrubbing' || !within) {
+      ensurePlaybackAt(position)
+      return
     }
+    if (!el) return
+    if (el.paused) void el.play().catch(() => {})
+    else el.pause()
   }
 
   function pad(n: number): string {
@@ -163,13 +248,6 @@
   const clock = $derived.by(() => {
     const d = new Date(position * 1000)
     return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  })
-
-  onDestroy(() => {
-    if (throttleTimer !== null) {
-      clearTimeout(throttleTimer)
-      throttleTimer = null
-    }
   })
 </script>
 
@@ -188,7 +266,26 @@
   </header>
 
   <div class="frame">
-    <HlsVideo bind:video={videoEl} {src} onError={() => (playerError = true)} />
+    <video
+      bind:this={previewEl}
+      src={previewSrc || undefined}
+      muted
+      playsinline
+      preload="auto"
+      class="layer preview"
+      style:opacity={previewVisible ? 1 : 0}
+    ></video>
+
+    <div class="layer fullres" style:opacity={fullResVisible ? 1 : 0}>
+      <HlsVideo bind:video={videoEl} src={chunkSrc} onError={() => (playerError = true)} />
+    </div>
+
+    {#if chunkEnded}
+      <div class="frame-hint">
+        <Mono size={11} color="rgba(255,255,255,0.85)">{ui.timelineChunkEnd}</Mono>
+      </div>
+    {/if}
+
     {#if playerError}
       <div class="frame-overlay">
         <Mono size={12} color="rgba(255,255,255,0.82)">{ui.timelineNoRecording}</Mono>
@@ -217,6 +314,8 @@
       {windowEnd}
       {position}
       onSeek={handleSeek}
+      onScrubStart={handleScrubStart}
+      onScrubEnd={handleScrubEnd}
     />
 
     {#if timelineStore.loading}
@@ -287,6 +386,37 @@
     border-radius: var(--r);
     overflow: hidden;
     background: var(--feed);
+  }
+  /* Two stacked players. Opacity swaps between the low-res preview and the
+     full-res chunk; the short fade hides the seam without a hard cut. */
+  .layer {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transition: opacity 80ms ease;
+  }
+  .preview {
+    object-fit: contain;
+    background: var(--feed);
+    display: block;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .layer {
+      transition: none;
+    }
+  }
+  .frame-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    pointer-events: none;
   }
   .frame-overlay {
     position: absolute;

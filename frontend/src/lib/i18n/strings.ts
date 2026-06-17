@@ -237,6 +237,7 @@ export const ui = {
   timelineSummaryError: 'Could not load the timeline summary',
   timelineEmpty: 'No recordings in this window',
   timelineNoRecording: 'No recording available for this range',
+  timelineChunkEnd: 'Scrub to keep watching',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',
