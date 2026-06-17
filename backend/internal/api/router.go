@@ -36,6 +36,7 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Method(http.MethodHead, "/cameras/{id}/vod/{start}/{end}/*", http.HandlerFunc(h.handleTimelineVOD))
 		r.Method(http.MethodGet, "/cameras/{id}/preview.mp4", http.HandlerFunc(h.handleTimelinePreview))
 		r.Method(http.MethodHead, "/cameras/{id}/preview.mp4", http.HandlerFunc(h.handleTimelinePreview))
+		r.Get("/cameras/{id}/preview-frames", h.handleTimelinePreviewFrames)
 		r.Get("/cameras/{id}/recordings-summary", h.handleRecordingsSummary)
 		r.Post("/webrtc/{cam_id}/whep", h.handleWhep)
 		r.Get("/prefs", h.handleGetPrefs)

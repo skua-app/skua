@@ -823,4 +823,39 @@ type CameraOrderErrorBody = {
 //     - other upstream / transport       → 502 upstream_error
 //   Frigate's preview endpoint may return 416 / 503 / etc. directly;
 //   those statuses are passed through verbatim.
+
+// GET /api/cameras/{id}/preview-frames?start=&end=
+//   The real covered wall-clock span (unix seconds) of Frigate's
+//   preview bucket for [start,end), derived from its preview-frames
+//   list (/api/preview/{cam}/start/{start}/end/{end}/frames). The
+//   scrubber uses it to map a scrub position within an hour's preview
+//   accurately instead of assuming the preview spans the full clock
+//   hour.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds (the FE sends clock-hour-aligned
+//     bucket bounds). end must be > start.
+//
+//   The BFF reads the upstream JSON array of frame filenames
+//   ("preview_<cam>-<unixSeconds.frac>.webp", capped at a few MiB),
+//   parses the FIRST and LAST names into timestamps (the substring
+//   after the last '-' so hyphenated camera ids parse), and returns
+//   ONLY a reduced envelope — the full array never reaches the client:
+//
+//     { "start": <float64>, "end": <float64>, "count": <int> }
+//
+//   start/end are 0 when count is 0 or the first/last filename failed
+//   to parse; the FE checks count > 0 && end > start before trusting
+//   them. Cache-Control: no-store (the current bucket's frame list
+//   grows as footage accrues).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport, or
+//       undecodable upstream body        → 502 upstream_error
+//   A non-2xx upstream status is passed through with a zero-count body
+//   so the FE degrades to the clock-hour assumption.
 ```

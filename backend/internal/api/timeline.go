@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -313,6 +314,144 @@ func (h *Handler) handleTimelinePreview(w http.ResponseWriter, r *http.Request) 
 	if _, err := io.Copy(w, upstream.Body); err != nil {
 		h.logger.Debug("stream timeline preview", "cam", id, "error", err)
 	}
+}
+
+// previewFramesMaxBytes caps the upstream preview-frames JSON the BFF
+// will read. A busy clock-hour bucket lists a few hundred KB of
+// filenames; 4 MiB is a generous ceiling that still bounds a runaway or
+// hostile upstream response.
+const previewFramesMaxBytes = 4 << 20
+
+// previewBounds is the reduced shape served by handleTimelinePreviewFrames:
+// the real covered wall-clock span of a Frigate preview bucket plus the
+// frame count. Start / End are unix seconds (float, Frigate timestamps
+// carry subseconds) and are 0 when Count is 0 or the first/last filename
+// failed to parse — the FE checks Count > 0 && End > Start before trusting
+// them. The full frames array is intentionally NOT surfaced.
+type previewBounds struct {
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+	Count int     `json:"count"`
+}
+
+// parsePreviewFrameTs extracts the unix-second timestamp from a Frigate
+// preview-frame filename like "preview_<cam>-<unixSeconds.frac>.webp".
+// The timestamp is the substring after the LAST '-' and before the
+// trailing ".webp" — splitting on the last '-' so hyphenated camera ids
+// (e.g. "front-door") parse correctly. ok is false on any malformed name.
+func parsePreviewFrameTs(name string) (float64, bool) {
+	dash := strings.LastIndex(name, "-")
+	if dash < 0 || dash+1 >= len(name) {
+		return 0, false
+	}
+	ts := strings.TrimSuffix(name[dash+1:], ".webp")
+	v, err := strconv.ParseFloat(ts, 64)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
+// handleTimelinePreviewFrames serves GET
+// /api/cameras/{id}/preview-frames?start=&end= — the real covered
+// wall-clock span of Frigate's preview bucket for [start,end), derived
+// from its preview-frames list
+// (/api/preview/{cam}/start/{start}/end/{end}/frames). The scrubber uses
+// it to map a scrub position within an hour's preview accurately instead
+// of assuming the preview spans the full clock hour.
+//
+// Unlike the preview.mp4 / VOD start-end slots, these are integer unix
+// seconds only (the FE sends clock-hour-aligned bucket bounds), validated
+// with validUnixSeconds. The BFF reads the upstream JSON array of frame
+// filenames (capped at previewFramesMaxBytes), parses the first and last
+// names into timestamps, and returns only {start, end, count}. The full
+// array never reaches the client.
+//
+// Errors:
+//   - invalid camera id → 400 invalid_id.
+//   - camera not in registry → 404 not_found.
+//   - missing / non-numeric start or end, or end <= start → 400
+//     invalid_range.
+//   - client-cancelled request → Debug + return (no error written).
+//   - context deadline → 504 upstream_timeout.
+//   - any other upstream / transport failure, or undecodable upstream
+//     body → 502 upstream_error.
+//   - a non-2xx upstream status is passed through with a zero-count body
+//     so the FE degrades to the clock-hour assumption.
+func (h *Handler) handleTimelinePreviewFrames(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid camera id", nil)
+		return
+	}
+	if _, ok := h.cameras.Find(id); !ok {
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
+		return
+	}
+
+	q := r.URL.Query()
+	start := q.Get("start")
+	end := q.Get("end")
+	startN, errStart := strconv.ParseInt(start, 10, 64)
+	endN, errEnd := strconv.ParseInt(end, 10, 64)
+	if !validUnixSeconds(start) || !validUnixSeconds(end) || errStart != nil || errEnd != nil || endN <= startN {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_range", "start and end must be integer unix seconds with end > start", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), timelineVODTimeout)
+	defer cancel()
+
+	upstream, err := h.frigate.GetPreviewFrames(ctx, id, start, end)
+	if err != nil {
+		// Mirror handleTimelinePreview's client-disconnect branch: a
+		// cancelled request context is not an upstream error and there is
+		// no one to receive a 502. Check Canceled BEFORE DeadlineExceeded.
+		if errors.Is(err, context.Canceled) && r.Context().Err() == context.Canceled {
+			h.logger.Debug("timeline preview frames cancelled by client", "cam", id)
+			return
+		}
+		status := http.StatusBadGateway
+		code := "upstream_error"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
+		}
+		writeError(w, h.logger, status, code, "preview frames upstream error", err)
+		return
+	}
+	defer func() { _ = upstream.Body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+
+	// Non-2xx upstream: pass the status through with a zero-count body so
+	// the FE degrades to assuming the preview spans the full clock hour.
+	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		w.WriteHeader(upstream.StatusCode)
+		_ = json.NewEncoder(w).Encode(previewBounds{})
+		return
+	}
+
+	var frames []string
+	if err := json.NewDecoder(io.LimitReader(upstream.Body, previewFramesMaxBytes)).Decode(&frames); err != nil {
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "decode preview frames", err)
+		return
+	}
+
+	out := previewBounds{Count: len(frames)}
+	if len(frames) > 0 {
+		// Only trust the span when BOTH ends parse — a single malformed
+		// filename leaves zero bounds (with the real count) so the FE
+		// falls back to the clock-hour assumption.
+		if first, okFirst := parsePreviewFrameTs(frames[0]); okFirst {
+			if last, okLast := parsePreviewFrameTs(frames[len(frames)-1]); okLast {
+				out.Start = first
+				out.End = last
+			}
+		}
+	}
+	_ = json.NewEncoder(w).Encode(out)
 }
 
 // handleRecordingsSummary serves GET

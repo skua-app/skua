@@ -156,6 +156,32 @@ func (c *Client) OpenVOD(ctx context.Context, method, cam, start, end, rest, ran
 	return resp, nil
 }
 
+// GetPreviewFrames fetches the list of preview-frame filenames Frigate
+// has rendered for a camera over the [start, end] bucket from its
+// /api/preview/{cam}/start/{start}/end/{end}/frames endpoint (note the
+// /api/preview/ prefix — distinct from the preview.mp4 path). start and
+// end are integer unix-seconds STRINGS passed verbatim (the handler
+// validates them as digit-only before calling). Returns the raw upstream
+// *http.Response so the BFF handler can read and reduce the body; the
+// caller owns the body and is responsible for closing it. Any status
+// code is returned to the caller; non-2xx is not treated as an error
+// here (same contract as OpenVOD / GetRecordingsSummary).
+func (c *Client) GetPreviewFrames(ctx context.Context, cam, start, end string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/preview/" + url.PathEscape(cam) +
+		"/start/" + start +
+		"/end/" + end +
+		"/frames"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview frames: %w", err)
+	}
+	return resp, nil
+}
+
 // GetRecordingsSummary fetches the per-day recordings summary for a
 // camera from Frigate's /api/{cam}/recordings/summary endpoint. The
 // optional timezone query parameter is forwarded only when non-empty
