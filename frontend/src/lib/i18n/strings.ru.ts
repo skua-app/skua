@@ -230,6 +230,14 @@ export const ui = {
   connUnknown: 'Что-то пошло не так при подключении к серверу.',
   connHint: 'Проверьте VPN и что вы в одной сети с сервером.',
   connBannerStale: 'Нет связи с сервером — показано последнее состояние',
+  // recording timeline (phase 2b)
+  timelineLiveBack: 'Эфир',
+  timelinePlay: 'Воспроизвести',
+  timelinePause: 'Пауза',
+  timelineLoading: 'Загрузка таймлайна…',
+  timelineSummaryError: 'Не удалось загрузить сводку таймлайна',
+  timelineEmpty: 'Нет записей в этом окне',
+  timelineNoRecording: 'Нет записи для этого диапазона',
   // theme (device-local)
   themeLabel: 'Тема',
   themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',

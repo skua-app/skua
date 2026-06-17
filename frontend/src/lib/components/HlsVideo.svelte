@@ -6,12 +6,18 @@
   interface Props {
     src: string
     muted?: boolean
+    // controls defaults OFF: 2b-i relied on native controls for smoke
+    // testing, but the real timeline screen (2b-iii) supplies its own
+    // play/pause + scrubber, so the element renders chromeless by default.
+    controls?: boolean
+    // Bindable so a parent can drive the element directly (currentTime
+    // seeks, play/pause, timeupdate listeners). The attach/teardown effect
+    // below reads this same element.
+    video?: HTMLVideoElement | null
     onError?: (msg: string) => void
   }
 
-  let { src, muted = true, onError }: Props = $props()
-
-  let videoEl = $state<HTMLVideoElement | null>(null)
+  let { src, muted = true, controls = false, video = $bindable(null), onError }: Props = $props()
 
   // Attach runs client-side only — $effect never fires during SSR/prerender.
   // hls.js is dynamic-imported so Safari/iOS (which take the native path)
@@ -19,8 +25,8 @@
   // `closed` guard: a teardown that races the async import must not attach
   // a stale Hls instance.
   $effect(() => {
-    const video = videoEl
-    if (!video || !src) return
+    const el = video
+    if (!el || !src) return
 
     type HlsModule = typeof import('hls.js')
     let hls: Hls | null = null
@@ -28,8 +34,8 @@
     let onHlsError: ((event: Events.ERROR, data: ErrorData) => void) | null = null
     let disposed = false
 
-    if (supportsNativeHls(video)) {
-      video.src = src
+    if (supportsNativeHls(el)) {
+      el.src = src
     } else {
       void import('hls.js').then((mod) => {
         if (disposed) return
@@ -58,7 +64,7 @@
         }
         instance.on(Ctor.Events.ERROR, onHlsError)
         instance.loadSource(src)
-        instance.attachMedia(video)
+        instance.attachMedia(el)
       })
     }
 
@@ -71,17 +77,16 @@
       }
       // Native path teardown: clear the URL and force the element to
       // release its loaded resource. Mirrors whep.ts's srcObject = null.
-      video.removeAttribute('src')
-      video.load()
+      el.removeAttribute('src')
+      el.load()
     }
   })
 </script>
 
-<!-- controls=on for 2b-i: native scrub is how recordings get smoke-tested on
-     iOS and Android before the custom scrubber arrives in 2b-iii.
-     object-fit: contain — recordings are true aspect ratio; the fill rule
-     is the live anamorphic-substream invariant only and must not leak. -->
-<video bind:this={videoEl} playsinline controls {muted} class="hls-video"></video>
+<!-- controls default OFF (see Props): the timeline screen supplies its own
+     chrome. object-fit: contain — recordings are true aspect ratio; the fill
+     rule is the live anamorphic-substream invariant only and must not leak. -->
+<video bind:this={video} playsinline {controls} {muted} class="hls-video"></video>
 
 <style>
   .hls-video {

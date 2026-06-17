@@ -229,6 +229,14 @@ export const ui = {
   connUnknown: 'Something went wrong reaching the server.',
   connHint: "Check your VPN or that you're on the same network as the server.",
   connBannerStale: "Can't reach the server — showing last known state",
+  // recording timeline (phase 2b)
+  timelineLiveBack: 'Live',
+  timelinePlay: 'Play',
+  timelinePause: 'Pause',
+  timelineLoading: 'Loading timeline…',
+  timelineSummaryError: 'Could not load the timeline summary',
+  timelineEmpty: 'No recordings in this window',
+  timelineNoRecording: 'No recording available for this range',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',
