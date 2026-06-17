@@ -191,8 +191,13 @@
   // the loaded bucket. The preview file covers only its clock hour and its
   // own duration is much shorter than 3600s, so the fraction is computed
   // BUCKET-relative: against the real covered span when known, else the full
-  // clock hour. Cheap, but a fast drag fires many times per frame, so
-  // coalesce to one assignment per animation frame using the latest position.
+  // clock hour. The frames-derived span is CLAMPED to the bucket's clock-hour
+  // window — Frigate's frames endpoint can report a span wider than the
+  // requested hour while the preview.mp4 covers only that one clock hour, so
+  // an unclamped span would collapse the within-hour fraction and freeze the
+  // scrub inside an hour. Cheap, but a fast drag fires many times per frame,
+  // so coalesce to one assignment per animation frame using the latest
+  // position.
   function seekPreview() {
     const el = previewEl
     if (!el || previewDuration <= 0 || !bucket) return
@@ -202,8 +207,8 @@
       const e = previewEl
       const b = bucket
       if (!e || previewDuration <= 0 || !b) return
-      const lo = bucketBounds ? bucketBounds.first : b.start
-      const hi = bucketBounds ? bucketBounds.last : b.end
+      const lo = bucketBounds ? Math.max(bucketBounds.first, b.start) : b.start
+      const hi = bucketBounds ? Math.min(bucketBounds.last, b.end) : b.end
       const raw = hi > lo ? (position - lo) / (hi - lo) : 0
       const frac = raw < 0 ? 0 : raw > 1 ? 1 : raw
       e.currentTime = frac * previewDuration
