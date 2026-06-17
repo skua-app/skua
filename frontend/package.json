@@ -38,6 +38,7 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
+    "hls.js": "^1.6.16",
     "svelte-dnd-action": "0.9.70"
   }
 }
