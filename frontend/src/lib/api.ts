@@ -733,3 +733,47 @@ export async function restartRuntimeConfig(): Promise<void> {
   const res = await fetch('/api/runtime-config/restart', { method: 'POST' })
   if (!res.ok) throw await parseRuntimeConfigError(res)
 }
+
+// Recording timeline (Phase 2a). The recordings-summary shape is owned by
+// Frigate upstream and passed through verbatim by the BFF — no reshape, no
+// re-typing on the server. These types mirror the captured payload so the
+// frontend can consume it directly. `hour` is a two-digit local-hour
+// string "00".."23"; `duration` is seconds of recording in that wall-clock
+// hour, 0..3600. Frigate returns days newest-first and hours within a day
+// descending — consumers must not assume any order.
+export type RecordingHour = {
+  hour: string
+  events: number
+  motion: number
+  objects: number
+  duration: number
+}
+
+export type RecordingDay = {
+  day: string
+  events: number
+  hours: RecordingHour[]
+}
+
+export type RecordingsSummary = RecordingDay[]
+
+export async function fetchRecordingsSummary(
+  camId: string,
+  timezone?: string
+): Promise<RecordingsSummary> {
+  const params = new URLSearchParams()
+  if (timezone) params.set('timezone', timezone)
+  const qs = params.toString()
+  return apiFetch<RecordingsSummary>(
+    `/api/cameras/${encodeURIComponent(camId)}/recordings-summary${qs ? `?${qs}` : ''}`
+  )
+}
+
+// timelineMasterURL is the only URL the player needs to start playback for
+// a [start,end) recording window. The child index/init/segment URIs inside
+// Frigate's HLS playlists are relative, so they resolve back through this
+// same /vod/{start}/{end}/ prefix — the start/end values survive in the
+// path without any cookie or query-string state.
+export function timelineMasterURL(camId: string, start: number, end: number): string {
+  return `/api/cameras/${encodeURIComponent(camId)}/vod/${start}/${end}/master.m3u8`
+}

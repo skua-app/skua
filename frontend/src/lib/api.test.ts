@@ -9,6 +9,7 @@ import {
   fetchCameras,
   fetchGlance,
   fetchPrefs,
+  fetchRecordingsSummary,
   fetchStreamOverrides,
   markGlanceSeen,
   refreshCameras,
@@ -16,11 +17,13 @@ import {
   saveRuntimeConfig,
   setCameraName,
   setStreamOverride,
+  timelineMasterURL,
   updateGroup,
   updatePrefs,
   type Camera,
   type GlanceResponse,
-  type Prefs
+  type Prefs,
+  type RecordingsSummary
 } from './api'
 
 function mockFetchOnce(response: Response): void {
@@ -268,6 +271,57 @@ describe('glance', () => {
     const thrown = await markGlanceSeen(['evt-1']).catch((e: unknown) => e)
     expect(thrown).toBeInstanceOf(Error)
     expect((thrown as Error).message).toContain('502 Bad Gateway')
+  })
+})
+
+describe('recordings timeline', () => {
+  it('fetchRecordingsSummary parses the captured summary verbatim', async () => {
+    const body: RecordingsSummary = [
+      {
+        day: '2026-06-17',
+        events: 12,
+        hours: [
+          { hour: '14', events: 5, motion: 8, objects: 3, duration: 2480 },
+          { hour: '13', events: 7, motion: 9, objects: 4, duration: 3600 }
+        ]
+      }
+    ]
+    mockFetchOnce(jsonResponse(body))
+    await expect(fetchRecordingsSummary('cam8')).resolves.toEqual(body)
+  })
+
+  it('fetchRecordingsSummary forwards the timezone query when supplied', async () => {
+    const fn = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse([]))
+    vi.stubGlobal('fetch', fn)
+    await fetchRecordingsSummary('cam8', 'Europe/Riga')
+    const [url] = fn.mock.calls[0]!
+    expect(url).toBe('/api/cameras/cam8/recordings-summary?timezone=Europe%2FRiga')
+  })
+
+  it('fetchRecordingsSummary omits the timezone query when not supplied', async () => {
+    const fn = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse([]))
+    vi.stubGlobal('fetch', fn)
+    await fetchRecordingsSummary('cam8')
+    const [url] = fn.mock.calls[0]!
+    expect(url).toBe('/api/cameras/cam8/recordings-summary')
+  })
+
+  it('fetchRecordingsSummary surfaces the JSON error message on a non-ok response', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'upstream_error', message: 'frigate VOD unreachable' },
+        { status: 502, statusText: 'Bad Gateway' }
+      )
+    )
+    const thrown = await fetchRecordingsSummary('cam8').catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toContain('frigate VOD unreachable')
+  })
+
+  it('timelineMasterURL builds the BFF VOD master path', () => {
+    expect(timelineMasterURL('cam8', 1718635200, 1718638800)).toBe(
+      '/api/cameras/cam8/vod/1718635200/1718638800/master.m3u8'
+    )
   })
 })
 
