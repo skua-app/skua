@@ -777,3 +777,14 @@ export async function fetchRecordingsSummary(
 export function timelineMasterURL(camId: string, start: number, end: number): string {
   return `/api/cameras/${encodeURIComponent(camId)}/vod/${start}/${end}/master.m3u8`
 }
+
+// timelinePreviewURL builds the BFF passthrough for Frigate's low-res
+// H.264 preview timelapse of the whole [start,end) window — one small,
+// fully seekable file. The scrubber uses it for fast scrubbing: the
+// preview's own duration is much shorter than the wall-clock span, so the
+// consumer maps a scrub fraction onto preview.currentTime at runtime
+// rather than treating currentTime as wall-clock. Mirrors the
+// timelineMasterURL builder style.
+export function timelinePreviewURL(camId: string, start: number, end: number): string {
+  return `/api/cameras/${encodeURIComponent(camId)}/preview.mp4?start=${start}&end=${end}`
+}

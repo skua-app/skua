@@ -18,6 +18,7 @@ import (
 
 	"github.com/skua-app/skua/internal/cameras"
 	"github.com/skua-app/skua/internal/config"
+	"github.com/skua-app/skua/internal/events"
 	"github.com/skua-app/skua/internal/frigate"
 	applog "github.com/skua-app/skua/internal/log"
 	"github.com/skua-app/skua/internal/sse"
@@ -30,6 +31,10 @@ var vodPathRE = regexp.MustCompile(`^/vod/([^/]+)/start/([0-9]+)/end/([0-9]+)/([
 
 // recordingsSummaryRE matches Frigate's recordings summary path.
 var recordingsSummaryRE = regexp.MustCompile(`^/api/([^/]+)/recordings/summary$`)
+
+// The preview path (/api/{cam}/start/{start}/end/{end}/preview.mp4) is
+// matched with previewPathRE, declared in glance_preview_test.go (same
+// package) — the timeline preview proxy rides the same upstream URL.
 
 // frigateTimelineFake captures the requests the BFF sends so tests
 // can assert passthrough behaviour (Range, timezone) and so the
@@ -44,6 +49,9 @@ type frigateTimelineFake struct {
 	segmentRangeReply bool // when true, honour Range on segment fetches with 206
 	summaryBody       []byte
 	summaryStatus     int
+	previewHits       int32
+	gotPreviewRange   string
+	previewBody       []byte
 }
 
 func (f *frigateTimelineFake) handler(t *testing.T) http.Handler {
@@ -96,6 +104,40 @@ func (f *frigateTimelineFake) handler(t *testing.T) http.Handler {
 			return
 		}
 
+		if previewPathRE.MatchString(r.URL.Path) {
+			atomic.AddInt32(&f.previewHits, 1)
+			f.mu.Lock()
+			f.gotPreviewRange = r.Header.Get("Range")
+			f.mu.Unlock()
+
+			w.Header().Set("Content-Type", "video/mp4")
+			w.Header().Set("Accept-Ranges", "bytes")
+			// Frigate's preview.mp4 sends attachment; the BFF must drop it.
+			w.Header().Set("Content-Disposition", "attachment; filename=preview.mp4")
+
+			if rng := r.Header.Get("Range"); rng != "" {
+				var rs, re int
+				if _, err := fmt.Sscanf(rng, "bytes=%d-%d", &rs, &re); err == nil &&
+					rs >= 0 && re < len(f.previewBody) && rs <= re {
+					slice := f.previewBody[rs : re+1]
+					w.Header().Set("Content-Range",
+						fmt.Sprintf("bytes %d-%d/%d", rs, re, len(f.previewBody)))
+					w.Header().Set("Content-Length", strconv.Itoa(len(slice)))
+					w.WriteHeader(http.StatusPartialContent)
+					if r.Method != http.MethodHead {
+						_, _ = w.Write(slice)
+					}
+					return
+				}
+			}
+			w.Header().Set("Content-Length", strconv.Itoa(len(f.previewBody)))
+			w.WriteHeader(http.StatusOK)
+			if r.Method != http.MethodHead {
+				_, _ = w.Write(f.previewBody)
+			}
+			return
+		}
+
 		if recordingsSummaryRE.MatchString(r.URL.Path) {
 			f.mu.Lock()
 			f.gotTimezone = r.URL.Query().Get("timezone")
@@ -119,6 +161,7 @@ func newTimelineFake() *frigateTimelineFake {
 		playlistBody: []byte("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-STREAM-INF:BANDWIDTH=1\nindex-0.m3u8\n"),
 		segmentBody:  []byte("SEG-M4S-BODY-0123456789-ABCDEFGHIJ"),
 		summaryBody:  []byte(`[{"day":"2026-06-15","events":3,"hours":[{"hour":"00","events":1}]}]`),
+		previewBody:  []byte("PREVIEW-MP4-BODY-0123456789-ABCDEFGHIJ"),
 	}
 }
 
@@ -132,12 +175,14 @@ func timelineRouter(t *testing.T, fake *frigateTimelineFake) http.Handler {
 
 	logger := applog.New("error", "text")
 	frigateClient := frigate.NewClient(frigateSrv.URL, &http.Client{})
+	eventsClient := events.NewClient(frigateSrv.URL, &http.Client{}, 0)
 	camSpecs := []config.CameraSpec{
 		{ID: "cam1", Name: "Cam 1", StreamMain: "cam1_main", StreamSub: "cam1_sub"},
 	}
 	h := NewHandler(HandlerDeps{
 		Logger:     logger,
 		Frigate:    frigateClient,
+		Events:     eventsClient,
 		Cameras:    cameras.NewForTest(camSpecs),
 		HTTPClient: &http.Client{},
 	})
@@ -458,5 +503,131 @@ func TestHandleTimelineVOD_UpstreamFailure_Still502(t *testing.T) {
 	}
 	if body["error"] != "upstream_error" {
 		t.Errorf("error = %q, want upstream_error", body["error"])
+	}
+}
+
+func TestHandleTimelinePreview_Passthrough(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview.mp4?start=1779310000&end=1779310600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "video/mp4" {
+		t.Errorf("Content-Type = %q, want video/mp4", ct)
+	}
+	// Frigate sends Content-Disposition: attachment; the BFF drops it so
+	// the preview plays inline in a <video src>.
+	if cd := w.Header().Get("Content-Disposition"); cd != "" {
+		t.Errorf("Content-Disposition = %q, want it stripped (empty)", cd)
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", cc)
+	}
+	got, _ := io.ReadAll(w.Body)
+	if string(got) != string(fake.previewBody) {
+		t.Errorf("body = %q, want %q", got, fake.previewBody)
+	}
+}
+
+func TestHandleTimelinePreview_RangeForwarded(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview.mp4?start=1779310000&end=1779310600", nil)
+	req.Header.Set("Range", "bytes=4-9")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusPartialContent {
+		t.Fatalf("want 206, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	fake.mu.Lock()
+	gotRange := fake.gotPreviewRange
+	fake.mu.Unlock()
+	if gotRange != "bytes=4-9" {
+		t.Errorf("upstream got Range = %q, want bytes=4-9 (verbatim forward)", gotRange)
+	}
+	if cr := w.Header().Get("Content-Range"); cr == "" {
+		t.Errorf("Content-Range missing, want passthrough")
+	} else if want := fmt.Sprintf("bytes 4-9/%d", len(fake.previewBody)); cr != want {
+		t.Errorf("Content-Range = %q, want %q", cr, want)
+	}
+	got, _ := io.ReadAll(w.Body)
+	if string(got) != string(fake.previewBody[4:10]) {
+		t.Errorf("body = %q, want %q", got, fake.previewBody[4:10])
+	}
+}
+
+func TestHandleTimelinePreview_InvalidStart_BadRequest(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview.mp4?start=abc&end=1779310600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "invalid_range" {
+		t.Errorf("error = %q, want invalid_range", body["error"])
+	}
+	if atomic.LoadInt32(&fake.previewHits) != 0 {
+		t.Errorf("upstream hit on invalid_range: %d", fake.previewHits)
+	}
+}
+
+func TestHandleTimelinePreview_EndNotAfterStart_BadRequest(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview.mp4?start=1779310600&end=1779310600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "invalid_range" {
+		t.Errorf("error = %q, want invalid_range", body["error"])
+	}
+	if atomic.LoadInt32(&fake.previewHits) != 0 {
+		t.Errorf("upstream hit on end <= start: %d", fake.previewHits)
+	}
+}
+
+func TestHandleTimelinePreview_UnknownCamera_NotFound(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/camX/preview.mp4?start=1779310000&end=1779310600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "not_found" {
+		t.Errorf("error = %q, want not_found", body["error"])
+	}
+	if atomic.LoadInt32(&fake.previewHits) != 0 {
+		t.Errorf("upstream hit on unknown camera: %d", fake.previewHits)
 	}
 }

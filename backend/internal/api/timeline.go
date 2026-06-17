@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -184,6 +185,133 @@ func (h *Handler) handleTimelineVOD(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := io.Copy(w, upstream.Body); err != nil {
 		h.logger.Debug("stream timeline vod", "cam", id, "rest", rest, "error", err)
+	}
+}
+
+// parseWindowSeconds parses one of the start / end query values of the
+// preview route. The FE sends integer unix seconds, but Frigate's own
+// preview path formats the window with a decimal suffix, so a single
+// decimal point is accepted. The value must be non-empty and contain
+// only digits with at most one '.', which keeps strconv.ParseFloat from
+// admitting exponents, signs, "Inf", or "NaN" — any of those would
+// format into a malformed (or remotely surprising) upstream URL. ok is
+// false on any rejection.
+func parseWindowSeconds(s string) (float64, bool) {
+	if s == "" {
+		return 0, false
+	}
+	dots := 0
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= '0' && c <= '9':
+		case c == '.':
+			dots++
+			if dots > 1 {
+				return 0, false
+			}
+		default:
+			return 0, false
+		}
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, false
+	}
+	return v, true
+}
+
+// handleTimelinePreview serves GET / HEAD
+// /api/cameras/{id}/preview.mp4?start=&end= — a thin reverse proxy in
+// front of Frigate's arbitrary-window preview endpoint
+// (/api/{cam}/start/{start}/end/{end}/preview.mp4), the low-res H.264
+// timelapse the timeline scrubber uses for fast seeking. It reuses the
+// same events.OpenPreview path the glance moment preview rides on, but
+// takes the camera + window straight from the request instead of
+// resolving a review id.
+//
+// The proxy mirrors handleTimelineVOD: Range is forwarded verbatim and
+// the upstream status code plus the byte-range / caching headers
+// (Content-Type, Content-Length, Content-Range, Accept-Ranges, ETag)
+// are passed through; HEAD skips the body copy. Two deliberate
+// differences from the VOD path:
+//   - Content-Disposition is dropped. Frigate's preview.mp4 sends
+//     `attachment`; not forwarding it keeps the clip playing inline in a
+//     `<video src>` rather than triggering a download.
+//   - Cache-Control is "no-store". A window ending at "now" keeps
+//     growing as footage accrues, so caching it would serve a stale,
+//     short preview; keeping it simple and uncached is correct for the
+//     MVP.
+//
+// Errors:
+//   - invalid camera id → 400 invalid_id.
+//   - camera not in registry → 404 not_found.
+//   - missing / unparseable start or end, or end <= start → 400
+//     invalid_range (a preview needs a real span).
+//   - client-cancelled request → Debug + return (no error written; the
+//     scrubber abandons in-flight previews as the finger moves).
+//   - context deadline → 504 upstream_timeout.
+//   - any other upstream / transport failure → 502 upstream_error.
+//   - Frigate's preview endpoint may return 416 / 503 / etc. directly;
+//     those statuses are passed through verbatim.
+func (h *Handler) handleTimelinePreview(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid camera id", nil)
+		return
+	}
+	if _, ok := h.cameras.Find(id); !ok {
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
+		return
+	}
+
+	q := r.URL.Query()
+	start, okStart := parseWindowSeconds(q.Get("start"))
+	end, okEnd := parseWindowSeconds(q.Get("end"))
+	if !okStart || !okEnd || end <= start {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_range", "start and end must be numbers with end > start", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), timelineVODTimeout)
+	defer cancel()
+
+	upstream, err := h.events.OpenPreview(ctx, r.Method, id, start, end, r.Header.Get("Range"))
+	if err != nil {
+		// Mirror handleTimelineVOD's client-disconnect branch: the
+		// scrubber abandons in-flight previews as the finger keeps
+		// moving, cancelling the request context. There is no client
+		// left to receive a 502, so log at Debug and bail. Check Canceled
+		// BEFORE DeadlineExceeded — our own timeout also cancels the
+		// derived ctx and would otherwise be misclassified.
+		if errors.Is(err, context.Canceled) && r.Context().Err() == context.Canceled {
+			h.logger.Debug("timeline preview cancelled by client", "cam", id)
+			return
+		}
+		status := http.StatusBadGateway
+		code := "upstream_error"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
+		}
+		writeError(w, h.logger, status, code, "preview upstream error", err)
+		return
+	}
+	defer func() { _ = upstream.Body.Close() }()
+
+	for _, hdr := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag"} {
+		if v := upstream.Header.Get(hdr); v != "" {
+			w.Header().Set(hdr, v)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(upstream.StatusCode)
+
+	if r.Method == http.MethodHead {
+		return
+	}
+	if _, err := io.Copy(w, upstream.Body); err != nil {
+		h.logger.Debug("stream timeline preview", "cam", id, "error", err)
 	}
 }
 

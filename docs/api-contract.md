@@ -792,4 +792,35 @@ type CameraOrderErrorBody = {
 //
 //   Errors mirror the VOD path: invalid_id (400), not_found (404),
 //   upstream_timeout (504), upstream_error (502).
+
+// GET  /api/cameras/{id}/preview.mp4?start=&end=
+// HEAD /api/cameras/{id}/preview.mp4?start=&end=
+//   Thin passthrough for Frigate's arbitrary-window preview endpoint
+//   (/api/{cam}/start/{start}/end/{end}/preview.mp4) — the low-res
+//   H.264 timelapse the timeline scrubber uses for fast seeking. Reuses
+//   the same upstream path as the glance moment preview, but takes the
+//   camera + window straight from the request instead of resolving a
+//   review id.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  unix seconds — non-empty, digits with at most one '.'
+//     (the FE sends integers; Frigate's own preview URL uses a decimal
+//     suffix, so a fractional value is accepted). end must be > start.
+//
+//   Range is forwarded verbatim; the upstream status code,
+//   Content-Type, Content-Length, Content-Range, Accept-Ranges, and
+//   ETag pass through; HEAD skips the body copy. Two differences from
+//   the VOD path: Content-Disposition is dropped (Frigate sends
+//   attachment; dropping it keeps the clip playing inline in a
+//   <video src>), and Cache-Control is "no-store" (a window ending at
+//   "now" keeps growing as footage accrues).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / unparseable start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport       → 502 upstream_error
+//   Frigate's preview endpoint may return 416 / 503 / etc. directly;
+//   those statuses are passed through verbatim.
 ```
