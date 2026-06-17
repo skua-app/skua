@@ -44,9 +44,17 @@
   let mode = $state<'scrubbing' | 'playback'>('scrubbing')
 
   // Low-res preview layer (the whole window in one short seekable file). We
-  // only ever set its currentTime — never play() it.
+  // only ever set its currentTime during scrubbing — never let it run. But a
+  // <video> on iOS/mobile won't decode or paint a frame from a bare
+  // currentTime assignment until it has been played at least once (preload
+  // is not honoured for data on mobile), which read as a black scrub. So we
+  // prime it with one muted play()/pause() cycle; previewPrimed gates that to
+  // once per loaded file.
   let previewEl = $state<HTMLVideoElement | null>(null)
   let previewDuration = $state(0)
+  let previewPrimed = $state(false)
+  // Coalesces rapid drag seeks to one currentTime assignment per frame.
+  let previewSeekRaf: number | null = null
   const previewSrc = $derived(
     windowEnd > 0 ? timelinePreviewURL(camId, windowStart, windowEnd) : ''
   )
@@ -92,6 +100,8 @@
       chunkStart = null
       chunkEnd = null
       previewDuration = 0
+      // New window swaps previewSrc, so the new file must be re-primed.
+      previewPrimed = false
       showFullRes = false
       pendingPlay = false
       chunkEnded = false
@@ -101,13 +111,38 @@
     })
   })
 
+  // One-time decoder prime: a muted play()/pause() cycle so subsequent
+  // currentTime seeks actually decode and paint. No-op once primed. If
+  // autoplay is blocked (iOS Low-Power, no gesture) the play() promise
+  // rejects and we leave previewPrimed false — handleScrubStart retries the
+  // prime from a real user gesture, which is always allowed.
+  function primePreview() {
+    const el = previewEl
+    if (previewPrimed || !el) return
+    el.play()
+      .then(() => {
+        el.pause()
+        previewPrimed = true
+        seekPreview()
+      })
+      .catch(() => {})
+  }
+
   // Show the preview frame at the current wall-clock position. The preview's
   // own duration is much shorter than the window, so we map the window
-  // fraction onto preview.currentTime. Cheap — no throttle needed.
+  // fraction onto preview.currentTime. Cheap, but a fast drag fires many
+  // times per frame, so coalesce to one assignment per animation frame using
+  // the latest position.
   function seekPreview() {
     const el = previewEl
     if (!el || previewDuration <= 0) return
-    el.currentTime = timeToFraction(position, windowStart, windowEnd) * previewDuration
+    if (previewSeekRaf !== null) return
+    previewSeekRaf = requestAnimationFrame(() => {
+      previewSeekRaf = null
+      const e = previewEl
+      if (!e || previewDuration <= 0) return
+      e.currentTime = timeToFraction(position, windowStart, windowEnd) * previewDuration
+    })
   }
 
   // Preview metadata: capture duration, then show the resting frame at the
@@ -117,6 +152,9 @@
     if (!el) return
     const onMeta = () => {
       previewDuration = Number.isFinite(el.duration) ? el.duration : 0
+      // Best-effort prime on load so the resting frame at windowStart paints
+      // without waiting for a scrub. primePreview seeks once primed.
+      primePreview()
       seekPreview()
     }
     el.addEventListener('loadedmetadata', onMeta)
@@ -203,6 +241,9 @@
 
   // Scrubber drag started: drop to the preview layer and pause full-res.
   function handleScrubStart() {
+    // Prime from this user gesture — guarantees decoding on iOS/Low-Power
+    // where the on-load prime's autoplay was blocked. No-op once primed.
+    primePreview()
     mode = 'scrubbing'
     chunkEnded = false
     const el = videoEl
