@@ -182,6 +182,58 @@ func (c *Client) GetPreviewFrames(ctx context.Context, cam, start, end string) (
 	return resp, nil
 }
 
+// ListPreviewClips fetches the list of preview CLIPS Frigate has for a
+// camera over the [start, end] window from its
+// /api/preview/{cam}/start/{start}/end/{end} endpoint (note: NO trailing
+// /frames — this is the clips list, distinct from GetPreviewFrames). It
+// returns a JSON array of {camera, src, type, start, end} entries — the
+// same source Frigate's own History timeline scrubs against. start and
+// end are integer unix-seconds STRINGS passed verbatim (the handler
+// validates them as digit-only before calling). Returns the raw upstream
+// *http.Response so the BFF handler can read and reduce the body; the
+// caller owns the body and is responsible for closing it. Any status code
+// is returned to the caller; non-2xx is not treated as an error here
+// (same contract as OpenVOD / GetPreviewFrames).
+func (c *Client) ListPreviewClips(ctx context.Context, cam, start, end string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/preview/" + url.PathEscape(cam) +
+		"/start/" + start +
+		"/end/" + end
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview clips: %w", err)
+	}
+	return resp, nil
+}
+
+// OpenPreviewClip issues a request for an individual static preview clip
+// file from Frigate's /clips/previews/{cam}/{file} path (a static file
+// path, NOT under /api — built like OpenVOD's /vod/ prefix). file is the
+// already-validated clip filename ("{firstTs}-{lastTs}.mp4"); method is
+// the caller's HTTP method (GET or HEAD). When rangeHeader is non-empty
+// it is forwarded as the upstream Range header so byte-range playback
+// flows end-to-end. The caller owns the returned response body and is
+// responsible for closing it. Any status code is returned to the caller;
+// non-2xx is not treated as an error here (same contract as OpenVOD).
+func (c *Client) OpenPreviewClip(ctx context.Context, method, cam, file, rangeHeader string) (*http.Response, error) {
+	reqURL := c.baseURL + "/clips/previews/" + url.PathEscape(cam) + "/" + file
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview clip: %w", err)
+	}
+	return resp, nil
+}
+
 // GetRecordingsSummary fetches the per-day recordings summary for a
 // camera from Frigate's /api/{cam}/recordings/summary endpoint. The
 // optional timezone query parameter is forwarded only when non-empty

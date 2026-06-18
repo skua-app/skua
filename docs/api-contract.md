@@ -858,4 +858,59 @@ type CameraOrderErrorBody = {
 //       undecodable upstream body        → 502 upstream_error
 //   A non-2xx upstream status is passed through with a zero-count body
 //   so the FE degrades to the clock-hour assumption.
+
+// GET /api/cameras/{id}/preview-clips?start=&end=
+//   The list of real preview CLIPS Frigate has for [start,end) — the same
+//   source Frigate's own History timeline scrubs against (distinct from
+//   the degenerate single preview.mp4 concat). The BFF reads Frigate's
+//   clips list (/api/preview/{cam}/start/{start}/end/{end}) and re-emits a
+//   reduced array, one entry per clip:
+//
+//     [ { "start": <float64>, "end": <float64>, "src": <string> }, ... ]
+//
+//   src is REWRITTEN to the BFF route
+//   "/api/cameras/{id}/preview-clip/{file}" — the client never reaches
+//   Frigate's /clips/previews path directly. Entries whose filename fails
+//   the traversal whitelist (validPreviewClip) are dropped. Ordering is
+//   preserved from upstream.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store (the current hour's clip list grows).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport, or
+//       undecodable upstream body        → 502 upstream_error
+//   A non-2xx upstream status is passed through with an empty JSON array
+//   so the FE degrades to "no preview".
+
+// GET  /api/cameras/{id}/preview-clip/{file}
+// HEAD /api/cameras/{id}/preview-clip/{file}
+//   Thin passthrough for an individual static Frigate preview clip file
+//   (/clips/previews/{cam}/{file}). {file} is the clip name
+//   "{firstTs}-{lastTs}.mp4" (digits, dots, hyphens, .mp4 suffix only),
+//   gated by the traversal whitelist — the SSRF surface for the static
+//   file route.
+//   {id}    camera id (must be present in the camera registry).
+//
+//   Range is forwarded verbatim; the upstream status code, Content-Type,
+//   Content-Length, Content-Range, Accept-Ranges, and ETag pass through;
+//   HEAD skips the body. Content-Disposition is dropped (Frigate sends
+//   attachment; dropping it keeps the clip playing inline in a
+//   <video src>). Cache-Control: no-store (the current hour's clip is
+//   still being written).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - malformed {file} (traversal,
+//       slash, bad bytes, wrong suffix)  → 404 not_found
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport       → 502 upstream_error
+//   Frigate's static endpoint may return 416 / 404 / etc. directly; those
+//   statuses are passed through verbatim.
 ```

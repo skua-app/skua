@@ -58,6 +58,41 @@ func validVODPart(s string) bool {
 	return true
 }
 
+// validPreviewClip reports whether s is a safe preview-clip filename to
+// interpolate into the static Frigate /clips/previews/{cam}/{file} URL.
+// Like validVODPart this is the SSRF / path-traversal guard, but tighter
+// for the clip-name grammar: Frigate emits "{firstTs}-{lastTs}.mp4"
+// (e.g. 1781748000.109578-1781751600.190408.mp4) — digits, dots, hyphens,
+// and the .mp4 suffix only. "", ".", "..", and any name containing '/'
+// or '\' are rejected; the stem (name minus ".mp4") must be non-empty and
+// contain only [0-9.-]. A malformed name can never resolve to a real clip
+// and is surfaced as not_found without leaking which check failed.
+func validPreviewClip(s string) bool {
+	if s == "" || s == "." || s == ".." {
+		return false
+	}
+	if strings.ContainsAny(s, "/\\") {
+		return false
+	}
+	if !strings.HasSuffix(s, ".mp4") {
+		return false
+	}
+	stem := strings.TrimSuffix(s, ".mp4")
+	if stem == "" {
+		return false
+	}
+	for i := 0; i < len(stem); i++ {
+		c := stem[i]
+		switch {
+		case c >= '0' && c <= '9':
+		case c == '.' || c == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // validUnixSeconds reports whether s is a non-empty digit-only string
 // suitable for the integer-unix-seconds slots in Frigate's VOD URL
 // (/vod/{cam}/start/{start}/end/{end}/...). The validity of the time
@@ -452,6 +487,218 @@ func (h *Handler) handleTimelinePreviewFrames(w http.ResponseWriter, r *http.Req
 		}
 	}
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// previewClipsMaxBytes caps the upstream preview-clips JSON the BFF will
+// read. A clock-hour window lists at most a handful of clip entries; 1 MiB
+// is a generous ceiling that still bounds a runaway or hostile upstream
+// response.
+const previewClipsMaxBytes = 1 << 20
+
+// frigatePreviewClip is one entry of Frigate's preview-clips list
+// (/api/preview/{cam}/start/{start}/end/{end}). Only the fields the BFF
+// reduces are decoded.
+type frigatePreviewClip struct {
+	Camera string  `json:"camera"`
+	Src    string  `json:"src"`
+	Type   string  `json:"type"`
+	Start  float64 `json:"start"`
+	End    float64 `json:"end"`
+}
+
+// previewClip is one entry of the reduced list the BFF serves: the clip's
+// covered span plus a Src REWRITTEN to the BFF /preview-clip route so the
+// client never reaches Frigate's /clips/previews path directly.
+type previewClip struct {
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+	Src   string  `json:"src"`
+}
+
+// handleTimelinePreviewClips serves GET
+// /api/cameras/{id}/preview-clips?start=&end= — the list of real preview
+// CLIPS Frigate has for [start,end), the same source its own History
+// timeline scrubs against (distinct from the degenerate single
+// preview.mp4 concat). The BFF reads Frigate's clips list
+// (/api/preview/{cam}/start/{start}/end/{end}), and for each entry derives
+// the clip filename from src's path base, drops any name that fails the
+// traversal whitelist, and re-emits {start, end, src} with src REWRITTEN
+// to "/api/cameras/{id}/preview-clip/{file}" so the client only ever
+// reaches Frigate's static clip path through the BFF proxy below.
+//
+// start/end are integer unix seconds (validUnixSeconds, end > start).
+//
+// Errors:
+//   - invalid camera id → 400 invalid_id.
+//   - camera not in registry → 404 not_found.
+//   - missing / non-numeric start or end, or end <= start → 400
+//     invalid_range.
+//   - client-cancelled request → Debug + return (no error written).
+//   - context deadline → 504 upstream_timeout.
+//   - any other upstream / transport failure, or undecodable upstream
+//     body → 502 upstream_error.
+//   - a non-2xx upstream status is passed through with an empty JSON array
+//     so the FE degrades to "no preview" rather than erroring.
+func (h *Handler) handleTimelinePreviewClips(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid camera id", nil)
+		return
+	}
+	if _, ok := h.cameras.Find(id); !ok {
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
+		return
+	}
+
+	q := r.URL.Query()
+	start := q.Get("start")
+	end := q.Get("end")
+	startN, errStart := strconv.ParseInt(start, 10, 64)
+	endN, errEnd := strconv.ParseInt(end, 10, 64)
+	if !validUnixSeconds(start) || !validUnixSeconds(end) || errStart != nil || errEnd != nil || endN <= startN {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_range", "start and end must be integer unix seconds with end > start", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), timelineVODTimeout)
+	defer cancel()
+
+	upstream, err := h.frigate.ListPreviewClips(ctx, id, start, end)
+	if err != nil {
+		// Mirror handleTimelinePreview's client-disconnect branch: a
+		// cancelled request context is not an upstream error and there is
+		// no one to receive a 502. Check Canceled BEFORE DeadlineExceeded.
+		if errors.Is(err, context.Canceled) && r.Context().Err() == context.Canceled {
+			h.logger.Debug("timeline preview clips cancelled by client", "cam", id)
+			return
+		}
+		status := http.StatusBadGateway
+		code := "upstream_error"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
+		}
+		writeError(w, h.logger, status, code, "preview clips upstream error", err)
+		return
+	}
+	defer func() { _ = upstream.Body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+
+	// Non-2xx upstream: pass the status through with an empty array body so
+	// the FE degrades to "no preview" rather than erroring.
+	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		w.WriteHeader(upstream.StatusCode)
+		_ = json.NewEncoder(w).Encode([]previewClip{})
+		return
+	}
+
+	var clips []frigatePreviewClip
+	if err := json.NewDecoder(io.LimitReader(upstream.Body, previewClipsMaxBytes)).Decode(&clips); err != nil {
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "decode preview clips", err)
+		return
+	}
+
+	// Rewrite every src to the BFF /preview-clip route — the client must
+	// never reach Frigate's /clips/previews path directly. Entries whose
+	// filename fails the traversal whitelist are dropped defensively.
+	out := []previewClip{}
+	for _, c := range clips {
+		file := c.Src
+		if i := strings.LastIndex(file, "/"); i >= 0 {
+			file = file[i+1:]
+		}
+		if !validPreviewClip(file) {
+			continue
+		}
+		out = append(out, previewClip{
+			Start: c.Start,
+			End:   c.End,
+			Src:   "/api/cameras/" + id + "/preview-clip/" + file,
+		})
+	}
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// handleTimelinePreviewClip serves GET / HEAD
+// /api/cameras/{id}/preview-clip/{file} — a thin reverse proxy in front of
+// Frigate's static preview clip files (/clips/previews/{cam}/{file}). The
+// {file} slot is the SSRF / path-traversal surface, gated by
+// validPreviewClip; a malformed name is surfaced as 404 not_found without
+// leaking which check failed (mirrors the VOD segment reasoning).
+//
+// Range is forwarded verbatim and the upstream status code plus the
+// byte-range headers (Content-Type, Content-Length, Content-Range,
+// Accept-Ranges, ETag) pass through; HEAD skips the body. Content-Disposition
+// is dropped so the clip plays inline in a <video src> rather than
+// triggering a download. Cache-Control is "no-store" — the current hour's
+// clip is still being written.
+//
+// Errors:
+//   - invalid camera id → 400 invalid_id.
+//   - camera not in registry → 404 not_found.
+//   - malformed {file} (traversal, slash, non-allowed bytes, wrong
+//     suffix) → 404 not_found.
+//   - client-cancelled request → Debug + return (no error written).
+//   - context deadline → 504 upstream_timeout.
+//   - any other upstream / transport failure → 502 upstream_error.
+//   - Frigate's static endpoint may return 416 / 404 / etc. directly;
+//     those statuses are passed through verbatim.
+func (h *Handler) handleTimelinePreviewClip(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid camera id", nil)
+		return
+	}
+	if _, ok := h.cameras.Find(id); !ok {
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
+		return
+	}
+
+	file := chi.URLParam(r, "file")
+	if !validPreviewClip(file) {
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "clip not found", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), timelineVODTimeout)
+	defer cancel()
+
+	upstream, err := h.frigate.OpenPreviewClip(ctx, r.Method, id, file, r.Header.Get("Range"))
+	if err != nil {
+		// Mirror handleTimelineVOD's client-disconnect branch: the scrubber
+		// abandons in-flight clips as the finger keeps moving, cancelling
+		// the request context. Check Canceled BEFORE DeadlineExceeded.
+		if errors.Is(err, context.Canceled) && r.Context().Err() == context.Canceled {
+			h.logger.Debug("timeline preview clip cancelled by client", "cam", id, "file", file)
+			return
+		}
+		status := http.StatusBadGateway
+		code := "upstream_error"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
+		}
+		writeError(w, h.logger, status, code, "preview clip upstream error", err)
+		return
+	}
+	defer func() { _ = upstream.Body.Close() }()
+
+	for _, hdr := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag"} {
+		if v := upstream.Header.Get(hdr); v != "" {
+			w.Header().Set(hdr, v)
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(upstream.StatusCode)
+
+	if r.Method == http.MethodHead {
+		return
+	}
+	if _, err := io.Copy(w, upstream.Body); err != nil {
+		h.logger.Debug("stream timeline preview clip", "cam", id, "file", file, "error", err)
+	}
 }
 
 // handleRecordingsSummary serves GET
