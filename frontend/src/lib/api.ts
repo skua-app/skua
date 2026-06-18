@@ -816,3 +816,28 @@ export async function fetchPreviewBounds(
     `/api/cameras/${encodeURIComponent(camId)}/preview-frames?start=${start}&end=${end}`
   )
 }
+
+// PreviewClip is one entry of the preview-clips list: a real Frigate
+// preview clip's wall-clock span plus its BFF /preview-clip src URL. This
+// is the same clip model Frigate's own History timeline scrubs against —
+// the scrubber plays the clip whose [start,end] contains the playhead and
+// maps the position within that span onto the clip's currentTime.
+export type PreviewClip = {
+  start: number
+  end: number
+  src: string
+}
+
+// fetchPreviewClips returns the preview clips covering [start,end) for a
+// camera, each with a BFF /preview-clip src (the client never reaches
+// Frigate's /clips/previews path directly). On an empty window the array
+// is empty; callers degrade to a blank preview.
+export async function fetchPreviewClips(
+  camId: string,
+  start: number,
+  end: number
+): Promise<PreviewClip[]> {
+  return apiFetch<PreviewClip[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/preview-clips?start=${start}&end=${end}`
+  )
+}
