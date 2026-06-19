@@ -224,8 +224,10 @@
         class="em-btn em-btn-secondary"
         href={timelineHref}
         onclick={(e) => {
+          // Navigate FIRST; the route change unmounts this modal. Do NOT call
+          // onClose() here — nulling the modal mid-click would tear it down
+          // synchronously while its $derived re-reads event.* (see MomentModal).
           e.preventDefault()
-          onClose()
           void goto(timelineHref)
         }}
       >

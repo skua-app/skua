@@ -212,8 +212,11 @@
         class="mm-btn mm-btn-secondary"
         href={timelineHref}
         onclick={(e) => {
+          // Navigate FIRST and let the route change unmount the peek/modal
+          // (GlancePeek closes on path change). Do NOT call onClose() here:
+          // nulling the modal mid-click tears it down synchronously, and the
+          // dying modal's $derived would re-read moment.* on a now-null prop.
           e.preventDefault()
-          onClose()
           void goto(timelineHref)
         }}
       >

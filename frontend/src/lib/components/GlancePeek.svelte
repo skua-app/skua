@@ -2,6 +2,7 @@
   import { fade } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import { goto } from '$app/navigation'
+  import { page } from '$app/state'
   import type { GlanceMoment } from '$lib/api'
   import { eventThumbnailURL } from '$lib/api'
   import Icon from '$lib/components/Icon.svelte'
@@ -59,6 +60,23 @@
   // Local-only modal: a row tap opens MomentModal on top of the surface so
   // the user can review the cluster and switch between detections inside it.
   let modalMoment = $state<GlanceMoment | null>(null)
+
+  // GlancePeek lives in the persistent root layout, so navigating away (e.g.
+  // a moment's "See on timeline" → /cam/[id]/timeline) does NOT unmount it.
+  // Tear down the peek surface and any open moment modal on a route change so
+  // they don't strand over the new screen. The modal/peek are closed AFTER
+  // navigation has committed (a fresh reactive flush), not synchronously
+  // inside the dying modal's click handler, which avoids the null-prop
+  // deref race. Guard the initial mount by seeding lastPath from the current
+  // path so the first run is a no-op.
+  let lastPath = page.url.pathname
+  $effect(() => {
+    const path = page.url.pathname
+    if (path === lastPath) return
+    lastPath = path
+    if (modalMoment) modalMoment = null
+    if (glanceStore.peekOpen) glanceStore.closePeek()
+  })
 
   // One-minute tick so "5 min ago" doesn't drift while the surface is open.
   let now = $state(new Date())
