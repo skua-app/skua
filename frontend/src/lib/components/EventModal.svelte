@@ -142,12 +142,11 @@
   }
 
   // Deep-link to this camera's recording timeline, centred on the event start.
-  // In-app SvelteKit nav (not the external Frigate link), so close first.
-  function seeOnTimeline() {
-    const ts = Math.floor(new Date(event.started_at).getTime() / 1000)
-    onClose()
-    void goto(`/cam/${encodeURIComponent(event.cam_id)}/timeline?t=${ts}`)
-  }
+  // Computed reactively from the (non-null while mounted) event prop — mirrors
+  // deepLink — so the click handler never dereferences a stale/null event.
+  const timelineHref = $derived(
+    `/cam/${encodeURIComponent(event.cam_id)}/timeline?t=${Math.floor(new Date(event.started_at).getTime() / 1000)}`
+  )
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -221,10 +220,18 @@
           <Icon name="download" size={20} />
         </a>
       {/if}
-      <button type="button" class="em-btn em-btn-secondary" onclick={seeOnTimeline}>
+      <a
+        class="em-btn em-btn-secondary"
+        href={timelineHref}
+        onclick={(e) => {
+          e.preventDefault()
+          onClose()
+          void goto(timelineHref)
+        }}
+      >
         <Icon name="history" size={16} />
         {ui.timelineSeeOnTimeline}
-      </button>
+      </a>
       {#if deepLink}
         <a class="em-btn em-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
           <Icon name="link" size={16} />

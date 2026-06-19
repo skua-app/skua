@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fade, fly } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
+  import { goto } from '$app/navigation'
   import type { GlanceMoment } from '$lib/api'
   import { eventSnapshotURL, momentClipURL } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
@@ -49,6 +50,12 @@
     configStore.frigateUIURL
       ? `${configStore.frigateUIURL}/review?id=${encodeURIComponent(moment.id)}`
       : ''
+  )
+  // In-app deep-link to this camera's recording timeline, centred on the
+  // moment start. Computed reactively from the moment prop so the click
+  // handler never dereferences a stale/null value.
+  const timelineHref = $derived(
+    `/cam/${encodeURIComponent(moment.cam_id)}/timeline?t=${Math.floor(new Date(moment.started_at).getTime() / 1000)}`
   )
   const titleText = $derived(`${ui.glanceMomentTitle} · ${camName}`)
 
@@ -201,6 +208,18 @@
           <Icon name="download" size={20} />
         </a>
       {/if}
+      <a
+        class="mm-btn mm-btn-secondary"
+        href={timelineHref}
+        onclick={(e) => {
+          e.preventDefault()
+          onClose()
+          void goto(timelineHref)
+        }}
+      >
+        <Icon name="history" size={18} />
+        {ui.timelineSeeOnTimeline}
+      </a>
       {#if deepLink}
         <a class="mm-btn mm-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
           <Icon name="link" size={16} />
