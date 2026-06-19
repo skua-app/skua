@@ -241,6 +241,8 @@ export const ui = {
   timelineChunkEnd: 'Перемотайте, чтобы продолжить',
   timelineHistory: 'История',
   timelineSeeOnTimeline: 'Показать на таймлайне',
+  timelineMute: 'Звук выкл.',
+  timelineUnmute: 'Звук вкл.',
   // theme (device-local)
   themeLabel: 'Тема',
   themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',

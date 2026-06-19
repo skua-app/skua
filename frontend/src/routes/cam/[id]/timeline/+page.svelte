@@ -104,6 +104,11 @@
   // HlsVideo error (e.g. Frigate 400 on an empty chunk range).
   let playerError = $state(false)
 
+  // Full-res mute. Muted by default so the one-shot entry autoplay is never
+  // blocked; the user opts into audio via the control button. HlsVideo's
+  // element is muted by default too — we drive el.muted directly.
+  let fullResMuted = $state(true)
+
   let lastSeekAt = 0
 
   // Layer visibility: the preview holds until full-res has a frame, then the
@@ -121,11 +126,19 @@
   // resting at the oldest edge. Read the raw t param in the tracked scope so a
   // same-camera deep-link with a new t re-captures the window.
   const tParam = $derived(page.url.searchParams.get('t'))
+  // Fires the heavy reset + one-shot autoplay once per real (camId, t) change.
+  // The effect also re-runs on unrelated page.url churn (tParam is derived from
+  // page.url); the key compare keeps a spurious re-run from wiping
+  // chunkSrc/mode mid-playback, which would freeze on the preview poster.
+  let lastCaptureKey: string | null = null
   $effect(() => {
     const id = camId
     const rawT = tParam
     if (!id) return
+    const key = `${id}|${rawT ?? ''}`
+    if (key === lastCaptureKey) return
     untrack(() => {
+      lastCaptureKey = key
       const now = Math.floor(Date.now() / 1000)
       // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
       // the default last-3h window, never NaN.
@@ -171,6 +184,11 @@
       frameSrc = ''
       void timelineStore.load(id)
       void loadClips(id)
+      // One-shot muted autoplay on entry / deep-link: settle full-res at the
+      // initial position. The full-res element is muted by default (HlsVideo)
+      // so autoplay is never blocked; scrubbing still drops to preview and a
+      // settle resumes playback. Audio is opt-in via the mute button.
+      ensurePlaybackAt(position)
     })
   })
 
@@ -322,6 +340,22 @@
     return () => el.removeEventListener('loadedmetadata', onMeta)
   })
 
+  // Reveal the full-res layer and honour any deferred play once the loaded
+  // chunk is decodable. Idempotent + guarded to the current playback so it is
+  // safe to call from both the media events AND the imperative readyState
+  // backstop below. Relying on a single canplay/playing event is racy: a
+  // camera whose first frame is already decoded (or whose event fires during
+  // the async hls.js import / native src attach) would never reveal the layer.
+  function markReadyIfPlayable() {
+    const el = videoEl
+    if (!el || mode !== 'playback') return
+    showFullRes = true
+    if (pendingPlay) {
+      pendingPlay = false
+      void el.play().catch(() => {})
+    }
+  }
+
   // Full-res chunk element listeners. videoEl is stable across chunk reloads
   // (HlsVideo only swaps src), so these attach once.
   $effect(() => {
@@ -340,15 +374,7 @@
     const onPause = () => {
       paused = true
     }
-    const onReady = () => {
-      // First frame of the (re)loaded chunk is available — swap the poster
-      // out and honour any deferred play request.
-      showFullRes = true
-      if (pendingPlay) {
-        pendingPlay = false
-        void el.play().catch(() => {})
-      }
-    }
+    const onReady = () => markReadyIfPlayable()
     const onEnded = () => {
       // Chunk boundary. Stop and hint; do NOT auto-advance (that is 2b-iv-b-2).
       paused = true
@@ -367,6 +393,35 @@
       el.removeEventListener('canplay', onReady)
       el.removeEventListener('playing', onReady)
       el.removeEventListener('ended', onEnded)
+    }
+  })
+
+  // Imperative readiness backstop for the missed-event race (root cause 1).
+  // When a new chunk src is assigned it attaches inside HlsVideo (native
+  // el.src, or after the async hls.js import), so canplay/playing can fire
+  // outside the window our listeners observe. Poll readyState briefly and
+  // reveal the layer as soon as the chunk is decodable; the persistent
+  // listeners above still cover a later-arriving first frame.
+  $effect(() => {
+    const src = chunkSrc
+    if (!src) return
+    let raf = 0
+    let tries = 0
+    const check = () => {
+      raf = 0
+      const el = videoEl
+      if (!el) return
+      if (el.readyState >= el.HAVE_CURRENT_DATA) {
+        markReadyIfPlayable()
+        return
+      }
+      // ~3s of frames: enough to catch an already-decodable chunk without
+      // spinning forever (a slow chunk is handled by the canplay listener).
+      if (tries++ < 180) raf = requestAnimationFrame(check)
+    }
+    raf = requestAnimationFrame(check)
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
     }
   })
 
@@ -454,6 +509,13 @@
     else el.pause()
   }
 
+  // Mute toggle for the full-res element. The first tap is a user gesture, so
+  // subsequent programmatic play() on the same element stays allowed.
+  function toggleFullResMute() {
+    fullResMuted = !fullResMuted
+    if (videoEl) videoEl.muted = fullResMuted
+  }
+
   function pad(n: number): string {
     return String(n).padStart(2, '0')
   }
@@ -521,6 +583,14 @@
       aria-label={paused ? ui.timelinePlay : ui.timelinePause}
     >
       <Icon name={paused ? 'play' : 'pause'} size={20} />
+    </button>
+    <button
+      type="button"
+      class="livebtn"
+      onclick={toggleFullResMute}
+      aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
+    >
+      <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
     </button>
     <span class="clock">
       <Mono size={13} weight={500} color="var(--text)" letterSpacing={0.3}>{clock}</Mono>

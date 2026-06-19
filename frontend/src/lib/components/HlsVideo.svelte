@@ -32,10 +32,18 @@
     let hls: Hls | null = null
     let HlsCtor: HlsModule['default'] | null = null
     let onHlsError: ((event: Events.ERROR, data: ErrorData) => void) | null = null
+    let onNativeError: (() => void) | null = null
     let disposed = false
 
     if (supportsNativeHls(el)) {
       el.src = src
+      // Native path had no error surfacing: a 404 / unsupported manifest
+      // would hang silently with the parent stuck on its poster. Report it.
+      onNativeError = () => {
+        if (disposed) return
+        onError?.(el.error ? `media_error_${el.error.code}` : 'media_error')
+      }
+      el.addEventListener('error', onNativeError)
     } else {
       void import('hls.js').then((mod) => {
         if (disposed) return
@@ -47,12 +55,36 @@
         HlsCtor = Ctor
         const instance = new Ctor()
         hls = instance
+        // A fatal NETWORK_ERROR on the manifest/level (e.g. a 404 on an empty
+        // chunk range) will never recover by reloading, and a bare
+        // startLoad() loop retries it forever without ever surfacing. Treat
+        // manifest/level load failures as terminal, and cap transient
+        // (fragment) network retries before giving up.
+        let networkRetries = 0
+        const MAX_NETWORK_RETRIES = 2
+        const terminalNetworkDetails = new Set<string>([
+          Ctor.ErrorDetails.MANIFEST_LOAD_ERROR,
+          Ctor.ErrorDetails.MANIFEST_LOAD_TIMEOUT,
+          Ctor.ErrorDetails.MANIFEST_PARSING_ERROR,
+          Ctor.ErrorDetails.LEVEL_LOAD_ERROR,
+          Ctor.ErrorDetails.LEVEL_LOAD_TIMEOUT
+        ])
         onHlsError = (_evt, data) => {
           if (!data.fatal) {
             console.debug('[hls] non-fatal error:', data.type, data.details)
             return
           }
           if (data.type === Ctor.ErrorTypes.NETWORK_ERROR) {
+            const terminal =
+              (data.details != null && terminalNetworkDetails.has(data.details)) ||
+              networkRetries >= MAX_NETWORK_RETRIES
+            if (terminal) {
+              instance.destroy()
+              hls = null
+              onError?.(data.details ?? data.type ?? 'hls_network_fatal')
+              return
+            }
+            networkRetries++
             instance.startLoad()
           } else if (data.type === Ctor.ErrorTypes.MEDIA_ERROR) {
             instance.recoverMediaError()
@@ -70,6 +102,12 @@
 
     return () => {
       disposed = true
+      // Remove the native error listener BEFORE clearing src + load(), so the
+      // teardown's own emptied/error churn can't fire a spurious onError.
+      if (onNativeError) {
+        el.removeEventListener('error', onNativeError)
+        onNativeError = null
+      }
       if (hls) {
         if (HlsCtor && onHlsError) hls.off(HlsCtor.Events.ERROR, onHlsError)
         hls.destroy()

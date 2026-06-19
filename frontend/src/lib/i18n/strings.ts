@@ -240,6 +240,8 @@ export const ui = {
   timelineChunkEnd: 'Scrub to keep watching',
   timelineHistory: 'History',
   timelineSeeOnTimeline: 'See on timeline',
+  timelineMute: 'Mute',
+  timelineUnmute: 'Unmute',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',
