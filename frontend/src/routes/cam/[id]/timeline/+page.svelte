@@ -59,6 +59,8 @@
   let previewPrimed = $state(false)
   // Coalesces rapid drag seeks to one currentTime assignment per frame.
   let previewSeekRaf: number | null = null
+  // Same coalescing for the open-tail webp <img> swap (one src per frame).
+  let frameRaf: number | null = null
   // The clip list for the window (sorted by start) and the clip currently
   // loaded into previewEl. previewSrc is the active clip's BFF /preview-clip
   // URL, '' when no clip covers the playhead (blank preview for that span).
@@ -247,7 +249,7 @@
       const list = await fetchPreviewFrameList(id, Math.floor(end), windowEnd)
       if (camId !== id || framesKey !== key) return
       frames = [...list].sort((a, b) => a.ts - b.ts)
-      pickFrame(position)
+      pickFrame()
     } catch {
       if (camId !== id || framesKey !== key) return
       frames = []
@@ -258,18 +260,24 @@
   // Show the open tail's preview frame nearest the current wall-clock position.
   // frames are sorted by ts; pick the nearest by absolute ts distance. The
   // <img> swaps instantly — each immutable webp is browser-cached after first
-  // fetch. No-op (keeps the current frame) when the list is empty.
-  function pickFrame(t: number) {
-    let best: PreviewFrame | null = null
-    let bestDist = Infinity
-    for (const f of frames) {
-      const d = Math.abs(f.ts - t)
-      if (d < bestDist) {
-        best = f
-        bestDist = d
+  // fetch. A fast drag fires this many times per frame, so coalesce to one src
+  // swap per animation frame reading the LATEST position (symmetric with
+  // seekPreview). No-op (keeps the current frame) when the list is empty.
+  function pickFrame() {
+    if (frameRaf !== null) return
+    frameRaf = requestAnimationFrame(() => {
+      frameRaf = null
+      let best: PreviewFrame | null = null
+      let bestDist = Infinity
+      for (const f of frames) {
+        const d = Math.abs(f.ts - position)
+        if (d < bestDist) {
+          best = f
+          bestDist = d
+        }
       }
-    }
-    if (best) frameSrc = best.src
+      if (best) frameSrc = best.src
+    })
   }
 
   // Preview metadata: capture duration, then show the resting frame at the
@@ -391,7 +399,7 @@
       // scrub by webp frame. loadFramesTail is lazy-once; pickFrame is cheap and
       // network-free (the browser fetches+caches each nearest webp on demand).
       void loadFramesTail()
-      pickFrame(position)
+      pickFrame()
     } else if (mode === 'scrubbing') {
       seekPreview()
     }
