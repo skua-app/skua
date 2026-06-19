@@ -10,8 +10,8 @@
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
-  import { timelineMasterURL, fetchPreviewClips } from '$lib/api'
-  import type { PreviewClip } from '$lib/api'
+  import { timelineMasterURL, fetchPreviewClips, fetchPreviewFrameList } from '$lib/api'
+  import type { PreviewClip, PreviewFrame } from '$lib/api'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
   import Icon from '$lib/components/Icon.svelte'
@@ -64,7 +64,20 @@
   // URL, '' when no clip covers the playhead (blank preview for that span).
   let clips = $state<PreviewClip[]>([])
   let activeClip = $state<PreviewClip | null>(null)
-  const previewSrc = $derived(activeClip ? activeClip.src : '')
+  // The open current hour's preview clip extends past the captured window end
+  // (its [start,end] runs to "now+"). Its mp4 is still being assembled, so the
+  // clip-video scrub freezes on it — we scrub it by webp frame instead.
+  const isOpenClip = $derived(activeClip != null && activeClip.end > windowEnd)
+  // Gate previewSrc to '' for the open clip so the dead (unassembled) mp4 is
+  // never even fetched; the webp frame layer drives the picture there.
+  const previewSrc = $derived(activeClip && !isOpenClip ? activeClip.src : '')
+
+  // Open-hour webp frame layer. frames is the open clip's frame list (sorted
+  // by ts); framesClipSrc keys which clip's frames are loaded (load once per
+  // open clip + staleness guard); frameSrc is the current nearest-frame src.
+  let frames = $state<PreviewFrame[]>([])
+  let framesClipSrc = $state<string | null>(null)
+  let frameSrc = $state('')
 
   // Full-res chunk layer (HlsVideo). chunkSrc is '' until a chunk is loaded,
   // so no full-res network on mount.
@@ -90,7 +103,10 @@
   // Layer visibility: the preview holds until full-res has a frame, then the
   // swap happens. In scrubbing mode the preview is always the visible layer.
   const fullResVisible = $derived(mode === 'playback' && showFullRes)
-  const previewVisible = $derived(!fullResVisible)
+  // The webp frame layer wins over the video preview while scrubbing the open
+  // hour; full-res still wins over both during playback.
+  const framesVisible = $derived(isOpenClip && mode === 'scrubbing' && frameSrc !== '')
+  const previewVisible = $derived(!fullResVisible && !framesVisible)
 
   // On camId change: capture a fresh window, reset to scrubbing at the oldest
   // edge, drop any loaded chunk, and pull the summary for the scrubber cells.
@@ -118,6 +134,10 @@
       // for the window and pick the clip at the oldest window edge.
       clips = []
       activeClip = null
+      // Drop any open-hour frame state captured for the previous camera.
+      frames = []
+      framesClipSrc = null
+      frameSrc = ''
       void timelineStore.load(id)
       void loadClips(id)
     })
@@ -201,6 +221,46 @@
       const frac = raw < 0 ? 0 : raw > 1 ? 1 : raw
       e.currentTime = frac * previewDuration
     })
+  }
+
+  // Lazily load the open clip's webp preview frame list, once per open clip.
+  // The open current hour has no assembled mp4, so we scrub it frame-by-frame.
+  // framesClipSrc is set to clip.src immediately so a fast drag firing this
+  // repeatedly does not spawn duplicate fetches (and an error never retry-
+  // loops). On resolve, guard against a stale camId AND a stale activeClip
+  // (the user may have scrubbed off the open clip before the list lands); on
+  // error the list stays empty (the layer shows the feed background).
+  async function loadFrames(clip: PreviewClip) {
+    if (framesClipSrc === clip.src) return
+    framesClipSrc = clip.src
+    const id = camId
+    try {
+      const list = await fetchPreviewFrameList(id, Math.floor(clip.start), Math.floor(clip.end))
+      if (camId !== id || activeClip?.src !== clip.src) return
+      frames = [...list].sort((a, b) => a.ts - b.ts)
+      pickFrame(position)
+    } catch {
+      if (camId !== id || activeClip?.src !== clip.src) return
+      frames = []
+      frameSrc = ''
+    }
+  }
+
+  // Show the open hour's preview frame nearest the current wall-clock position.
+  // frames are sorted by ts; pick the nearest by absolute ts distance. The
+  // <img> swaps instantly — each immutable webp is browser-cached after first
+  // fetch. No-op (keeps the current frame) when the list is empty.
+  function pickFrame(t: number) {
+    let best: PreviewFrame | null = null
+    let bestDist = Infinity
+    for (const f of frames) {
+      const d = Math.abs(f.ts - t)
+      if (d < bestDist) {
+        best = f
+        bestDist = d
+      }
+    }
+    if (best) frameSrc = best.src
   }
 
   // Preview metadata: capture duration, then show the resting frame at the
@@ -317,7 +377,15 @@
     position = clamped
     chunkEnded = false
     pickClip(position)
-    if (mode === 'scrubbing') seekPreview()
+    if (isOpenClip) {
+      // Open current hour: the mp4 preview is dead, so scrub by webp frame.
+      // loadFrames is lazy-once; pickFrame is cheap and network-free (the
+      // browser fetches+caches each nearest webp on demand).
+      void loadFrames(activeClip!)
+      pickFrame(position)
+    } else if (mode === 'scrubbing') {
+      seekPreview()
+    }
   }
 
   // Drag released: settle to full-res at the landed position.
@@ -378,6 +446,13 @@
       class="layer preview"
       style:opacity={previewVisible ? 1 : 0}
     ></video>
+
+    <img
+      class="layer frames"
+      src={frameSrc || undefined}
+      alt=""
+      style:opacity={framesVisible ? 1 : 0}
+    />
 
     <div class="layer fullres" style:opacity={fullResVisible ? 1 : 0}>
       <HlsVideo bind:video={videoEl} src={chunkSrc} onError={() => (playerError = true)} />
@@ -503,6 +578,14 @@
     object-fit: contain;
     background: var(--feed);
     display: block;
+  }
+  /* Open-hour webp frame layer. Same fit/background as .preview; the <img>
+     must not capture pointer events so the scrubber/controls are unaffected. */
+  .frames {
+    object-fit: contain;
+    background: var(--feed);
+    display: block;
+    pointer-events: none;
   }
   @media (prefers-reduced-motion: reduce) {
     .layer {

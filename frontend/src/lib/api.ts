@@ -841,3 +841,28 @@ export async function fetchPreviewClips(
     `/api/cameras/${encodeURIComponent(camId)}/preview-clips?start=${start}&end=${end}`
   )
 }
+
+// PreviewFrame is one entry of the preview-frame list: a single Frigate
+// preview frame's wall-clock timestamp (unix seconds) plus its BFF
+// /preview-frame src URL. The open current hour has no assembled mp4
+// preview clip yet, so the scrubber seeks it frame-by-frame — picking the
+// frame whose ts is nearest the playhead and swapping the <img> src.
+export type PreviewFrame = {
+  ts: number
+  src: string
+}
+
+// fetchPreviewFrameList returns the chronological preview frames covering
+// [start,end) for a camera, each with a BFF /preview-frame src (the client
+// never reaches Frigate's /api/preview path directly). Used to scrub the
+// open current hour before its mp4 preview clip exists. On an empty window
+// the array is empty; callers degrade to a blank frame.
+export async function fetchPreviewFrameList(
+  camId: string,
+  start: number,
+  end: number
+): Promise<PreviewFrame[]> {
+  return apiFetch<PreviewFrame[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/preview-frame-list?start=${start}&end=${end}`
+  )
+}
