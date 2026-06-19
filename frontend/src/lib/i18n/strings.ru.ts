@@ -231,7 +231,6 @@ export const ui = {
   connHint: 'Проверьте VPN и что вы в одной сети с сервером.',
   connBannerStale: 'Нет связи с сервером — показано последнее состояние',
   // recording timeline (phase 2b)
-  timelineLiveBack: 'Эфир',
   timelinePlay: 'Воспроизвести',
   timelinePause: 'Пауза',
   timelineLoading: 'Загрузка таймлайна…',

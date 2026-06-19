@@ -538,10 +538,20 @@
   }
 
   // Mute toggle for the full-res element. The first tap is a user gesture, so
-  // subsequent programmatic play() on the same element stays allowed.
+  // subsequent programmatic play() on the same element stays allowed. Flip the
+  // state only — the muted={fullResMuted} prop on HlsVideo drives el.muted
+  // reactively, so the choice survives chunk swaps / re-renders (an imperative
+  // el.muted write here would be reset by the next render's prop).
   function toggleFullResMute() {
     fullResMuted = !fullResMuted
-    if (videoEl) videoEl.muted = fullResMuted
+  }
+
+  // Smart back: the timeline is entered from focus, grid, AND events, so return
+  // to wherever the user came from when there is in-app history; fall back to
+  // this camera's focus screen on a fresh/direct load (no history to pop).
+  function goBack() {
+    if (typeof history !== 'undefined' && history.length > 1) history.back()
+    else goto(`/cam/${camId}`)
   }
 
   function pad(n: number): string {
@@ -556,14 +566,9 @@
 
 <div class="page">
   <header class="bar">
-    <button
-      type="button"
-      class="back"
-      onclick={() => goto(`/cam/${camId}`)}
-      aria-label={ui.backLabel}
-    >
+    <button type="button" class="back" onclick={goBack} aria-label={ui.backLabel}>
       <Icon name="back" size={20} />
-      <span>{ui.timelineLiveBack}</span>
+      <span>{ui.backLabel}</span>
     </button>
     <span class="title">{camera?.name ?? camId}</span>
   </header>
@@ -587,7 +592,12 @@
     />
 
     <div class="layer fullres" style:opacity={fullResVisible ? 1 : 0}>
-      <HlsVideo bind:video={videoEl} src={chunkSrc} onError={() => (playerError = true)} />
+      <HlsVideo
+        bind:video={videoEl}
+        src={chunkSrc}
+        muted={fullResMuted}
+        onError={() => (playerError = true)}
+      />
     </div>
 
     {#if chunkEnded}

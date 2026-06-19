@@ -67,13 +67,16 @@
   // they don't strand over the new screen. The modal/peek are closed AFTER
   // navigation has committed (a fresh reactive flush), not synchronously
   // inside the dying modal's click handler, which avoids the null-prop
-  // deref race. Guard the initial mount by seeding lastPath from the current
-  // path so the first run is a no-op.
-  let lastPath = page.url.pathname
+  // deref race. Guard the initial mount by seeding lastUrl from the current
+  // URL so the first run is a no-op. Track pathname AND search so a
+  // same-camera deep-link that only changes the query (a moment's "See on
+  // timeline": /cam/x/timeline → /cam/x/timeline?t=NNN) still counts as a
+  // navigation and tears the peek/modal down.
+  let lastUrl = `${page.url.pathname}${page.url.search}`
   $effect(() => {
-    const path = page.url.pathname
-    if (path === lastPath) return
-    lastPath = path
+    const url = `${page.url.pathname}${page.url.search}`
+    if (url === lastUrl) return
+    lastUrl = url
     if (modalMoment) modalMoment = null
     if (glanceStore.peekOpen) glanceStore.closePeek()
   })

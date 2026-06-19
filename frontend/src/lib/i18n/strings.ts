@@ -230,7 +230,6 @@ export const ui = {
   connHint: "Check your VPN or that you're on the same network as the server.",
   connBannerStale: "Can't reach the server — showing last known state",
   // recording timeline (phase 2b)
-  timelineLiveBack: 'Live',
   timelinePlay: 'Play',
   timelinePause: 'Pause',
   timelineLoading: 'Loading timeline…',
