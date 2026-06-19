@@ -340,19 +340,37 @@
     return () => el.removeEventListener('loadedmetadata', onMeta)
   })
 
-  // Reveal the full-res layer and honour any deferred play once the loaded
-  // chunk is decodable. Idempotent + guarded to the current playback so it is
-  // safe to call from both the media events AND the imperative readyState
-  // backstop below. Relying on a single canplay/playing event is racy: a
-  // camera whose first frame is already decoded (or whose event fires during
-  // the async hls.js import / native src attach) would never reveal the layer.
+  // Chunk-scoped readiness poll handle (see the effect below). Its lifetime is
+  // the current chunk, NOT a timeout — it retries play() until playback truly
+  // begins, then stops.
+  let readyPoll: ReturnType<typeof setInterval> | null = null
+  function stopReadyPoll() {
+    if (readyPoll !== null) {
+      clearInterval(readyPoll)
+      readyPoll = null
+    }
+  }
+
+  // Reveal the full-res layer and (re)attempt the deferred play once the loaded
+  // chunk has a decodable frame. REVEAL is unconditional: as soon as a frame
+  // exists the layer is shown, independent of whether playback has actually
+  // started. PLAY-START is best-effort and retry-safe: pendingPlay is cleared
+  // ONLY on a confirmed start (the play() success, or the 'playing' event) —
+  // a rejected/interrupted early play() leaves pendingPlay true so the poll
+  // retries. Calling play() on a paused native element is also what makes a
+  // slow manifest fetch its next segment and advance, so retrying past the old
+  // ~3s cap is what breaks the native paused-deadlock.
   function markReadyIfPlayable() {
     const el = videoEl
     if (!el || mode !== 'playback') return
     showFullRes = true
-    if (pendingPlay) {
-      pendingPlay = false
-      void el.play().catch(() => {})
+    if (pendingPlay && el.paused) {
+      void el
+        .play()
+        .then(() => {
+          pendingPlay = false
+        })
+        .catch(() => {})
     }
   }
 
@@ -375,6 +393,15 @@
       paused = true
     }
     const onReady = () => markReadyIfPlayable()
+    // Definitive "started" signal: clear the deferred-play flag and stop the
+    // readiness poll. 'play' only means play() was requested; 'playing' means
+    // frames are actually advancing.
+    const onPlaying = () => {
+      showFullRes = true
+      pendingPlay = false
+      paused = false
+      stopReadyPoll()
+    }
     const onEnded = () => {
       // Chunk boundary. Stop and hint; do NOT auto-advance (that is 2b-iv-b-2).
       paused = true
@@ -384,45 +411,46 @@
     el.addEventListener('play', onPlay)
     el.addEventListener('pause', onPause)
     el.addEventListener('canplay', onReady)
-    el.addEventListener('playing', onReady)
+    el.addEventListener('playing', onPlaying)
     el.addEventListener('ended', onEnded)
     return () => {
       el.removeEventListener('timeupdate', onTime)
       el.removeEventListener('play', onPlay)
       el.removeEventListener('pause', onPause)
       el.removeEventListener('canplay', onReady)
-      el.removeEventListener('playing', onReady)
+      el.removeEventListener('playing', onPlaying)
       el.removeEventListener('ended', onEnded)
+      // Element teardown also tears down the poll bound to its chunk.
+      stopReadyPoll()
     }
   })
 
-  // Imperative readiness backstop for the missed-event race (root cause 1).
-  // When a new chunk src is assigned it attaches inside HlsVideo (native
+  // Chunk-scoped readiness poll. A fresh chunk attaches inside HlsVideo (native
   // el.src, or after the async hls.js import), so canplay/playing can fire
-  // outside the window our listeners observe. Poll readyState briefly and
-  // reveal the layer as soon as the chunk is decodable; the persistent
-  // listeners above still cover a later-arriving first frame.
+  // outside the window our listeners observe — and on a paused native element a
+  // slow manifest may never advance to canplay on its own. Its lifetime is the
+  // CHUNK, not a timeout: while the chunk is loaded and playback is still
+  // pending, keep revealing + retrying play() until the element actually
+  // starts. markReadyIfPlayable is a no-op once playing (el.paused is false),
+  // and the 'playing' listener clears pendingPlay + stops this poll. A fresh
+  // chunkSrc (or element teardown) cancels the prior poll, so only one runs per
+  // chunk. No time/frame cap — that cap is exactly what stranded slow cameras.
   $effect(() => {
     const src = chunkSrc
+    stopReadyPoll()
     if (!src) return
-    let raf = 0
-    let tries = 0
-    const check = () => {
-      raf = 0
-      const el = videoEl
-      if (!el) return
-      if (el.readyState >= el.HAVE_CURRENT_DATA) {
-        markReadyIfPlayable()
+    readyPoll = setInterval(() => {
+      // Terminal: playback started (pendingPlay cleared) or we left playback.
+      if (mode !== 'playback' || !pendingPlay) {
+        stopReadyPoll()
         return
       }
-      // ~3s of frames: enough to catch an already-decodable chunk without
-      // spinning forever (a slow chunk is handled by the canplay listener).
-      if (tries++ < 180) raf = requestAnimationFrame(check)
-    }
-    raf = requestAnimationFrame(check)
-    return () => {
-      if (raf) cancelAnimationFrame(raf)
-    }
+      // A not-yet-bound element just skips this tick (it binds shortly); do
+      // NOT stop the poll, or initial entry would strand before the bind.
+      const el = videoEl
+      if (el && el.readyState >= el.HAVE_CURRENT_DATA) markReadyIfPlayable()
+    }, 250)
+    return () => stopReadyPoll()
   })
 
   // Ensure full-res plays at wall-clock T: reuse the loaded chunk when T is
