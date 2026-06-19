@@ -913,4 +913,36 @@ type CameraOrderErrorBody = {
 //     - other upstream / transport       → 502 upstream_error
 //   Frigate's static endpoint may return 416 / 404 / etc. directly; those
 //   statuses are passed through verbatim.
+
+// GET  /api/cameras/{id}/preview-frame/{file}
+// HEAD /api/cameras/{id}/preview-frame/{file}
+//   Thin passthrough for a single static Frigate preview FRAME image
+//   (/api/preview/{file}/thumbnail.webp → image/webp). Used to scrub the
+//   open (in-progress) current hour by webp frame before that hour's mp4
+//   preview clip has been assembled. {file} is the frame name
+//   "preview_{cam}-{unix.frac}.webp" (must start "preview_", end ".webp",
+//   bytes in [A-Za-z0-9._-] only), gated by the traversal whitelist
+//   (validPreviewFrame) — the SSRF surface for the static frame route. The
+//   camera is NOT a separate upstream path segment; the filename already
+//   encodes it, so {id} is used only for auth / registry consistency with
+//   the other camera-scoped routes.
+//   {id}    camera id (must be present in the camera registry).
+//
+//   Range is forwarded verbatim; the upstream status code, Content-Type,
+//   Content-Length, Content-Range, Accept-Ranges, and ETag pass through;
+//   HEAD skips the body. Content-Disposition is dropped (renders inline).
+//   Cache-Control: public, max-age=31536000, immutable — a given frame
+//   file is content-addressed by its timestamp and never changes (UNLIKE
+//   the no-store clip / list routes).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - malformed {file} (traversal,
+//       slash, bad bytes, wrong
+//       prefix/suffix)                   → 404 not_found
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport       → 502 upstream_error
+//   Frigate's static endpoint may return 416 / 404 / etc. directly; those
+//   statuses are passed through verbatim.
 ```

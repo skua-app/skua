@@ -44,6 +44,11 @@ var previewClipsListPathRE = regexp.MustCompile(`^/api/preview/([^/]+)/start/([0
 // (/clips/previews/{cam}/{file}).
 var previewClipFilePathRE = regexp.MustCompile(`^/clips/previews/([^/]+)/([^/]+)$`)
 
+// previewFramePathRE matches Frigate's single preview-frame image path
+// (/api/preview/{file}/thumbnail.webp). The camera is NOT a separate
+// segment — it is encoded in the frame filename.
+var previewFramePathRE = regexp.MustCompile(`^/api/preview/([^/]+)/thumbnail\.webp$`)
+
 // The preview path (/api/{cam}/start/{start}/end/{end}/preview.mp4) is
 // matched with previewPathRE, declared in glance_preview_test.go (same
 // package) — the timeline preview proxy rides the same upstream URL.
@@ -73,6 +78,8 @@ type frigateTimelineFake struct {
 	clipFileHits      int32
 	gotClipRange      string
 	clipFileBody      []byte
+	frameFileHits     int32
+	frameFileBody     []byte
 }
 
 func (f *frigateTimelineFake) handler(t *testing.T) http.Handler {
@@ -183,6 +190,22 @@ func (f *frigateTimelineFake) handler(t *testing.T) http.Handler {
 			return
 		}
 
+		if previewFramePathRE.MatchString(r.URL.Path) {
+			atomic.AddInt32(&f.frameFileHits, 1)
+			w.Header().Set("Content-Type", "image/webp")
+			w.Header().Set("Accept-Ranges", "bytes")
+			// Frigate marks these immutable; the BFF replaces Cache-Control.
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			// Frigate's static frame may send attachment; the BFF must drop it.
+			w.Header().Set("Content-Disposition", "attachment; filename=thumbnail.webp")
+			w.Header().Set("Content-Length", strconv.Itoa(len(f.frameFileBody)))
+			w.WriteHeader(http.StatusOK)
+			if r.Method != http.MethodHead {
+				_, _ = w.Write(f.frameFileBody)
+			}
+			return
+		}
+
 		if previewPathRE.MatchString(r.URL.Path) {
 			atomic.AddInt32(&f.previewHits, 1)
 			f.mu.Lock()
@@ -237,11 +260,12 @@ func (f *frigateTimelineFake) handler(t *testing.T) http.Handler {
 
 func newTimelineFake() *frigateTimelineFake {
 	return &frigateTimelineFake{
-		playlistBody: []byte("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-STREAM-INF:BANDWIDTH=1\nindex-0.m3u8\n"),
-		segmentBody:  []byte("SEG-M4S-BODY-0123456789-ABCDEFGHIJ"),
-		summaryBody:  []byte(`[{"day":"2026-06-15","events":3,"hours":[{"hour":"00","events":1}]}]`),
-		previewBody:  []byte("PREVIEW-MP4-BODY-0123456789-ABCDEFGHIJ"),
-		clipFileBody: []byte("PREVIEW-CLIP-BODY-0123456789-ABCDEFGHIJ"),
+		playlistBody:  []byte("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-STREAM-INF:BANDWIDTH=1\nindex-0.m3u8\n"),
+		segmentBody:   []byte("SEG-M4S-BODY-0123456789-ABCDEFGHIJ"),
+		summaryBody:   []byte(`[{"day":"2026-06-15","events":3,"hours":[{"hour":"00","events":1}]}]`),
+		previewBody:   []byte("PREVIEW-MP4-BODY-0123456789-ABCDEFGHIJ"),
+		clipFileBody:  []byte("PREVIEW-CLIP-BODY-0123456789-ABCDEFGHIJ"),
+		frameFileBody: []byte("RIFF....WEBP-FRAME-BODY-0123456789"),
 	}
 }
 
@@ -1108,5 +1132,96 @@ func TestHandleTimelinePreviewClip_InvalidFilename_NotFound(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHandleTimelinePreviewFrame_Passthrough(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame/preview_cam1-1781852889.819418.webp", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if atomic.LoadInt32(&fake.frameFileHits) != 1 {
+		t.Errorf("upstream hits = %d, want 1", fake.frameFileHits)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "image/webp" {
+		t.Errorf("Content-Type = %q, want image/webp", ct)
+	}
+	// Frigate sends Content-Disposition: attachment; the BFF drops it.
+	if cd := w.Header().Get("Content-Disposition"); cd != "" {
+		t.Errorf("Content-Disposition = %q, want it stripped (empty)", cd)
+	}
+	// A single frame is content-addressed by timestamp — immutable long-cache,
+	// NOT no-store like the clip / list routes.
+	if cc := w.Header().Get("Cache-Control"); cc != "public, max-age=31536000, immutable" {
+		t.Errorf("Cache-Control = %q, want immutable long-cache", cc)
+	}
+	got, _ := io.ReadAll(w.Body)
+	if string(got) != string(fake.frameFileBody) {
+		t.Errorf("body = %q, want %q", got, fake.frameFileBody)
+	}
+}
+
+func TestHandleTimelinePreviewFrame_InvalidFilename_NotFound(t *testing.T) {
+	// Single-segment names that reach the handler and are rejected by the
+	// validPreviewFrame whitelist (envelope), plus traversal/slash shapes
+	// that never route to the handler at all (router 404, no envelope). All
+	// must be 404 with NO upstream hit.
+	cases := []struct {
+		name     string
+		file     string
+		envelope bool
+	}{
+		{"wrongSuffix", "preview_x.txt", true},
+		{"missingPrefix", "nope.webp", true},
+		{"parentTraversal", "../x", false},
+		{"slashInside", "a/b.webp", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := newTimelineFake()
+			router := timelineRouter(t, fake)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame/"+tc.file, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("file=%q: want 404, got %d (body=%s)", tc.file, w.Code, w.Body.String())
+			}
+			if atomic.LoadInt32(&fake.frameFileHits) != 0 {
+				t.Errorf("file=%q: upstream was hit (%d), want zero", tc.file, fake.frameFileHits)
+			}
+			if tc.envelope {
+				var body map[string]string
+				if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+					t.Fatalf("file=%q: decode: %v", tc.file, err)
+				}
+				if body["error"] != "not_found" {
+					t.Errorf("file=%q: error = %q, want not_found", tc.file, body["error"])
+				}
+			}
+		})
+	}
+}
+
+func TestHandleTimelinePreviewFrame_UnknownCamera_NotFound(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/camX/preview-frame/preview_camX-1781852889.819418.webp", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if atomic.LoadInt32(&fake.frameFileHits) != 0 {
+		t.Errorf("upstream hit on unknown camera: %d", fake.frameFileHits)
 	}
 }

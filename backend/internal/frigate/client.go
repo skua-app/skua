@@ -234,6 +234,34 @@ func (c *Client) OpenPreviewClip(ctx context.Context, method, cam, file, rangeHe
 	return resp, nil
 }
 
+// OpenPreviewFrame issues a request for a single static preview FRAME
+// image from Frigate's /api/preview/{file}/thumbnail.webp path. Unlike the
+// preview-clip / frames-list paths, the camera is NOT a separate path
+// segment — the frame filename itself already encodes it (Frigate names
+// these "preview_{cam}-{unix.frac}.webp", e.g.
+// preview_cam2-1781852889.819418.webp), so only the file is interpolated.
+// file is the already-validated frame filename; method is the caller's
+// HTTP method (GET or HEAD). When rangeHeader is non-empty it is forwarded
+// as the upstream Range header (defensive — these images are small). The
+// caller owns the returned response body and is responsible for closing it.
+// Any status code is returned to the caller; non-2xx is not treated as an
+// error here (same contract as OpenPreviewClip).
+func (c *Client) OpenPreviewFrame(ctx context.Context, method, file, rangeHeader string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/preview/" + url.PathEscape(file) + "/thumbnail.webp"
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview frame: %w", err)
+	}
+	return resp, nil
+}
+
 // GetRecordingsSummary fetches the per-day recordings summary for a
 // camera from Frigate's /api/{cam}/recordings/summary endpoint. The
 // optional timezone query parameter is forwarded only when non-empty
