@@ -64,19 +64,23 @@
   // URL, '' when no clip covers the playhead (blank preview for that span).
   let clips = $state<PreviewClip[]>([])
   let activeClip = $state<PreviewClip | null>(null)
-  // The open current hour's preview clip extends past the captured window end
-  // (its [start,end] runs to "now+"). Its mp4 is still being assembled, so the
-  // clip-video scrub freezes on it — we scrub it by webp frame instead.
-  const isOpenClip = $derived(activeClip != null && activeClip.end > windowEnd)
-  // Gate previewSrc to '' for the open clip so the dead (unassembled) mp4 is
-  // never even fetched; the webp frame layer drives the picture there.
-  const previewSrc = $derived(activeClip && !isOpenClip ? activeClip.src : '')
+  // Frigate omits the open current hour from the preview-clips list entirely —
+  // its mp4 is still being assembled — so the newest available coverage ends at
+  // the last clip's end (clips are sorted by start). The live tail is the span
+  // after that, up to capture-time now.
+  const lastClipEnd = $derived(clips.at(-1)?.end ?? null)
+  // Open tail = the playhead sits past the last available clip, in the live,
+  // not-yet-clipped span. Detected by POSITION, not by any clip (there is none).
+  const isOpenTail = $derived(lastClipEnd != null && position > lastClipEnd)
+  // Gate previewSrc to '' on the open tail (no mp4 to scrub there); the webp
+  // frame layer drives the picture. Closed hours keep the clip-video src.
+  const previewSrc = $derived(activeClip && !isOpenTail ? activeClip.src : '')
 
-  // Open-hour webp frame layer. frames is the open clip's frame list (sorted
-  // by ts); framesClipSrc keys which clip's frames are loaded (load once per
-  // open clip + staleness guard); frameSrc is the current nearest-frame src.
+  // Open-tail webp frame layer. frames is the tail's frame list (sorted by ts);
+  // framesKey keys which tail span's frames are loaded (load once per tail +
+  // staleness guard); frameSrc is the current nearest-frame src.
   let frames = $state<PreviewFrame[]>([])
-  let framesClipSrc = $state<string | null>(null)
+  let framesKey = $state<string | null>(null)
   let frameSrc = $state('')
 
   // Full-res chunk layer (HlsVideo). chunkSrc is '' until a chunk is loaded,
@@ -104,8 +108,8 @@
   // swap happens. In scrubbing mode the preview is always the visible layer.
   const fullResVisible = $derived(mode === 'playback' && showFullRes)
   // The webp frame layer wins over the video preview while scrubbing the open
-  // hour; full-res still wins over both during playback.
-  const framesVisible = $derived(isOpenClip && mode === 'scrubbing' && frameSrc !== '')
+  // live tail; full-res still wins over both during playback.
+  const framesVisible = $derived(isOpenTail && mode === 'scrubbing' && frameSrc !== '')
   const previewVisible = $derived(!fullResVisible && !framesVisible)
 
   // On camId change: capture a fresh window, reset to scrubbing at the oldest
@@ -134,9 +138,9 @@
       // for the window and pick the clip at the oldest window edge.
       clips = []
       activeClip = null
-      // Drop any open-hour frame state captured for the previous camera.
+      // Drop any open-tail frame state captured for the previous camera.
       frames = []
-      framesClipSrc = null
+      framesKey = null
       frameSrc = ''
       void timelineStore.load(id)
       void loadClips(id)
@@ -223,30 +227,35 @@
     })
   }
 
-  // Lazily load the open clip's webp preview frame list, once per open clip.
-  // The open current hour has no assembled mp4, so we scrub it frame-by-frame.
-  // framesClipSrc is set to clip.src immediately so a fast drag firing this
-  // repeatedly does not spawn duplicate fetches (and an error never retry-
-  // loops). On resolve, guard against a stale camId AND a stale activeClip
-  // (the user may have scrubbed off the open clip before the list lands); on
-  // error the list stays empty (the layer shows the feed background).
-  async function loadFrames(clip: PreviewClip) {
-    if (framesClipSrc === clip.src) return
-    framesClipSrc = clip.src
+  // Lazily load the open live tail's webp preview frame list, once per tail
+  // span. The tail spans [lastClipEnd, windowEnd] — the live, not-yet-clipped
+  // footage after the newest preview clip, which has no assembled mp4, so we
+  // scrub it frame-by-frame. framesKey is set to String(lastClipEnd)
+  // immediately so a fast drag firing this repeatedly does not spawn duplicate
+  // fetches (and an error never retry-loops; the key only changes when a new
+  // clip closes). On resolve, guard against a stale camId AND a stale tail span
+  // (the user may have scrubbed off the tail, or a new clip closed, before the
+  // list lands); on error the list stays empty (the layer shows the feed bg).
+  async function loadFramesTail() {
+    const end = lastClipEnd
+    if (end == null) return
+    const key = String(end)
+    if (framesKey === key) return
+    framesKey = key
     const id = camId
     try {
-      const list = await fetchPreviewFrameList(id, Math.floor(clip.start), Math.floor(clip.end))
-      if (camId !== id || activeClip?.src !== clip.src) return
+      const list = await fetchPreviewFrameList(id, Math.floor(end), windowEnd)
+      if (camId !== id || framesKey !== key) return
       frames = [...list].sort((a, b) => a.ts - b.ts)
       pickFrame(position)
     } catch {
-      if (camId !== id || activeClip?.src !== clip.src) return
+      if (camId !== id || framesKey !== key) return
       frames = []
       frameSrc = ''
     }
   }
 
-  // Show the open hour's preview frame nearest the current wall-clock position.
+  // Show the open tail's preview frame nearest the current wall-clock position.
   // frames are sorted by ts; pick the nearest by absolute ts distance. The
   // <img> swaps instantly — each immutable webp is browser-cached after first
   // fetch. No-op (keeps the current frame) when the list is empty.
@@ -377,11 +386,11 @@
     position = clamped
     chunkEnded = false
     pickClip(position)
-    if (isOpenClip) {
-      // Open current hour: the mp4 preview is dead, so scrub by webp frame.
-      // loadFrames is lazy-once; pickFrame is cheap and network-free (the
-      // browser fetches+caches each nearest webp on demand).
-      void loadFrames(activeClip!)
+    if (isOpenTail) {
+      // Open live tail (past the last clip): the mp4 preview does not exist, so
+      // scrub by webp frame. loadFramesTail is lazy-once; pickFrame is cheap and
+      // network-free (the browser fetches+caches each nearest webp on demand).
+      void loadFramesTail()
       pickFrame(position)
     } else if (mode === 'scrubbing') {
       seekPreview()
