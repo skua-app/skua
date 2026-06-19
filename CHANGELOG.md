@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 Added
+- Recording timeline. Scrub a camera's recorded history on a 3-hour window with an instant low-res preview as you drag, then release (or press play) to watch the full-resolution recording from any point. Reach it from a camera's focus view with the new History button, or from any event with "See on timeline", which opens the timeline centred on the moment the event began.
 - Recording timeline BFF passthrough. The backend now reverse-proxies Frigate's recording VOD endpoint (HLS fMP4 playlists and segments) and the per-camera recordings-summary JSON through `/api/cameras/{id}/vod/{start}/{end}/*` and `/api/cameras/{id}/recordings-summary`. Single-camera scope, codec-agnostic, no transcode — Range is forwarded verbatim, segment bytes are cached as immutable, and playlists are not cached. Phase 1 of the recording timeline epic; no frontend yet.
 
 ## [0.13.0] — 2026-06-16

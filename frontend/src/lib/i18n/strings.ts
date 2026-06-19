@@ -238,6 +238,8 @@ export const ui = {
   timelineEmpty: 'No recordings in this window',
   timelineNoRecording: 'No recording available for this range',
   timelineChunkEnd: 'Scrub to keep watching',
+  timelineHistory: 'History',
+  timelineSeeOnTimeline: 'See on timeline',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',

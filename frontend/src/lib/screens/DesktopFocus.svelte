@@ -268,6 +268,15 @@
             </button>
           {/if}
           <span class="grow"></span>
+          <button
+            type="button"
+            class="dk-livebtn"
+            onclick={() => camera?.id && goto(`/cam/${camera.id}/timeline`)}
+            disabled={!camera?.id}
+          >
+            <Icon name="history" size={20} />
+            <span>{ui.timelineHistory}</span>
+          </button>
           <button type="button" class="dk-livebtn" onclick={downloadSnapshot}>
             <Icon name="snapshot" size={20} />
             <span>Snapshot</span>

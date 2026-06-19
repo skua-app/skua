@@ -257,6 +257,15 @@
           <Icon name="pip" size={20} />
         </button>
       {/if}
+      <button
+        type="button"
+        class="livebtn"
+        onclick={() => camera?.id && goto(`/cam/${camera.id}/timeline`)}
+        disabled={!camera?.id}
+        aria-label={ui.timelineHistory}
+      >
+        <Icon name="history" size={20} />
+      </button>
       <button type="button" class="livebtn" onclick={toggleFullscreen} aria-label="Fullscreen">
         <Icon name={isFullscreen ? 'exitFull' : 'fullscreen'} size={20} />
       </button>

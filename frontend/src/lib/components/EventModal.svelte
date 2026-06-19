@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly, fade } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
+  import { goto } from '$app/navigation'
   import type { EventItem } from '$lib/api'
   import { eventSnapshotURL, eventClipURL, fetchEventReview } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
@@ -139,6 +140,14 @@
   function onBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) onClose()
   }
+
+  // Deep-link to this camera's recording timeline, centred on the event start.
+  // In-app SvelteKit nav (not the external Frigate link), so close first.
+  function seeOnTimeline() {
+    const ts = Math.floor(new Date(event.started_at).getTime() / 1000)
+    onClose()
+    void goto(`/cam/${encodeURIComponent(event.cam_id)}/timeline?t=${ts}`)
+  }
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -212,6 +221,10 @@
           <Icon name="download" size={20} />
         </a>
       {/if}
+      <button type="button" class="em-btn em-btn-secondary" onclick={seeOnTimeline}>
+        <Icon name="history" size={16} />
+        {ui.timelineSeeOnTimeline}
+      </button>
       {#if deepLink}
         <a class="em-btn em-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
           <Icon name="link" size={16} />

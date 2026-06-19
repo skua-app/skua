@@ -114,16 +114,41 @@
   const framesVisible = $derived(isOpenTail && mode === 'scrubbing' && frameSrc !== '')
   const previewVisible = $derived(!fullResVisible && !framesVisible)
 
-  // On camId change: capture a fresh window, reset to scrubbing at the oldest
-  // edge, drop any loaded chunk, and pull the summary for the scrubber cells.
+  // On camId change: capture a fresh window, reset to scrubbing, drop any
+  // loaded chunk, and pull the summary for the scrubber cells. An optional
+  // ?t=<unix> deep-link (from an event's "See on timeline") centres a 3h
+  // window on t with the playhead at t; without it the window is the last 3h
+  // resting at the oldest edge. Read the raw t param in the tracked scope so a
+  // same-camera deep-link with a new t re-captures the window.
+  const tParam = $derived(page.url.searchParams.get('t'))
   $effect(() => {
     const id = camId
+    const rawT = tParam
     if (!id) return
     untrack(() => {
-      const end = Math.floor(Date.now() / 1000)
-      windowEnd = end
-      windowStart = end - WINDOW_SECONDS
-      position = windowStart
+      const now = Math.floor(Date.now() / 1000)
+      // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
+      // the default last-3h window, never NaN.
+      const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
+      if (Number.isFinite(tSec)) {
+        let end = tSec + WINDOW_SECONDS / 2
+        let start = tSec - WINDOW_SECONDS / 2
+        let pos = tSec
+        // Keep the window from running into the future: if the centred window
+        // overshoots now, shift it back to end at now, preserving the 3h span.
+        if (end > now) {
+          end = now
+          start = now - WINDOW_SECONDS
+          pos = pos < start ? start : pos > end ? end : pos
+        }
+        windowEnd = end
+        windowStart = start
+        position = pos
+      } else {
+        windowEnd = now
+        windowStart = now - WINDOW_SECONDS
+        position = windowStart
+      }
       mode = 'scrubbing'
       chunkSrc = ''
       chunkStart = null
