@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -518,6 +519,131 @@ func (h *Handler) handleTimelinePreviewFrames(w http.ResponseWriter, r *http.Req
 				out.End = last
 			}
 		}
+	}
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// previewFrame is one entry of the reduced list handleTimelinePreviewFrameList
+// serves: the frame's wall-clock timestamp (unix seconds, float — Frigate
+// timestamps carry subseconds) plus a Src REWRITTEN to the BFF
+// /preview-frame route so the client never reaches Frigate's
+// /api/preview/{file}/thumbnail.webp path directly.
+type previewFrame struct {
+	Ts  float64 `json:"ts"`
+	Src string  `json:"src"`
+}
+
+// handleTimelinePreviewFrameList serves GET
+// /api/cameras/{id}/preview-frame-list?start=&end= — the chronological list
+// of preview FRAMES Frigate has rendered for [start,end), each rewritten to
+// the BFF /preview-frame proxy. It is the frame analogue of
+// handleTimelinePreviewClips: the scrubber uses it to seek the open
+// (in-progress) current hour frame-by-frame before that hour's preview mp4
+// clip has been assembled. (handleTimelinePreviewFrames, by contrast,
+// reduces the SAME upstream list to just the covered {start,end,count}
+// bounds — this handler returns the full per-frame array instead.)
+//
+// The BFF reads Frigate's preview-frames list
+// (/api/preview/{cam}/start/{start}/end/{end}/frames, via GetPreviewFrames —
+// the same upstream the bounds endpoint uses), and for each filename parses
+// its timestamp (the unix-seconds float after the LAST '-', minus ".webp")
+// and re-emits {ts, src} with src REWRITTEN to
+// "/api/cameras/{id}/preview-frame/{file}" so the client only ever reaches
+// Frigate's frame path through the BFF proxy. Names that fail the traversal
+// whitelist (validPreviewFrame) are dropped defensively. Upstream order is
+// preserved (it is chronological).
+//
+// start/end are integer unix seconds (validUnixSeconds, end > start).
+//
+// Errors:
+//   - invalid camera id → 400 invalid_id.
+//   - camera not in registry → 404 not_found.
+//   - missing / non-numeric start or end, or end <= start → 400
+//     invalid_range.
+//   - client-cancelled request → Debug + return (no error written).
+//   - context deadline → 504 upstream_timeout.
+//   - any other upstream / transport failure, or undecodable upstream
+//     body → 502 upstream_error.
+//   - a non-2xx upstream status is passed through with an empty JSON array
+//     so the FE degrades to "no frames" rather than erroring.
+func (h *Handler) handleTimelinePreviewFrameList(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validUpstreamID(id) {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_id", "invalid camera id", nil)
+		return
+	}
+	if _, ok := h.cameras.Find(id); !ok {
+		writeError(w, h.logger, http.StatusNotFound, "not_found", "camera not found", nil)
+		return
+	}
+
+	q := r.URL.Query()
+	start := q.Get("start")
+	end := q.Get("end")
+	startN, errStart := strconv.ParseInt(start, 10, 64)
+	endN, errEnd := strconv.ParseInt(end, 10, 64)
+	if !validUnixSeconds(start) || !validUnixSeconds(end) || errStart != nil || errEnd != nil || endN <= startN {
+		writeError(w, h.logger, http.StatusBadRequest, "invalid_range", "start and end must be integer unix seconds with end > start", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), timelineVODTimeout)
+	defer cancel()
+
+	upstream, err := h.frigate.GetPreviewFrames(ctx, id, start, end)
+	if err != nil {
+		// Mirror handleTimelinePreviewFrames's client-disconnect branch: a
+		// cancelled request context is not an upstream error and there is no
+		// one to receive a 502. Check Canceled BEFORE DeadlineExceeded.
+		if errors.Is(err, context.Canceled) && r.Context().Err() == context.Canceled {
+			h.logger.Debug("timeline preview frame list cancelled by client", "cam", id)
+			return
+		}
+		status := http.StatusBadGateway
+		code := "upstream_error"
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+			code = "upstream_timeout"
+		}
+		writeError(w, h.logger, status, code, "preview frame list upstream error", err)
+		return
+	}
+	defer func() { _ = upstream.Body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+
+	// Non-2xx upstream: pass the status through with an empty array body so
+	// the FE degrades to "no frames" rather than erroring.
+	if upstream.StatusCode < 200 || upstream.StatusCode >= 300 {
+		w.WriteHeader(upstream.StatusCode)
+		_ = json.NewEncoder(w).Encode([]previewFrame{})
+		return
+	}
+
+	var frames []string
+	if err := json.NewDecoder(io.LimitReader(upstream.Body, previewFramesMaxBytes)).Decode(&frames); err != nil {
+		writeError(w, h.logger, http.StatusBadGateway, "upstream_error", "decode preview frames", err)
+		return
+	}
+
+	// Rewrite every frame to the BFF /preview-frame route — the client must
+	// never reach Frigate's /api/preview path directly. Names failing the
+	// traversal whitelist, or whose timestamp does not parse, are dropped
+	// defensively. Upstream order (chronological) is preserved.
+	out := []previewFrame{}
+	for _, name := range frames {
+		if !validPreviewFrame(name) {
+			continue
+		}
+		ts, ok := parsePreviewFrameTs(name)
+		if !ok {
+			continue
+		}
+		out = append(out, previewFrame{
+			Ts:  ts,
+			Src: "/api/cameras/" + id + "/preview-frame/" + url.PathEscape(name),
+		})
 	}
 	_ = json.NewEncoder(w).Encode(out)
 }

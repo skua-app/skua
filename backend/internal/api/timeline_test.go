@@ -1225,3 +1225,195 @@ func TestHandleTimelinePreviewFrame_UnknownCamera_NotFound(t *testing.T) {
 		t.Errorf("upstream hit on unknown camera: %d", fake.frameFileHits)
 	}
 }
+
+// previewFrameResp mirrors the handler's previewFrame envelope for decoding
+// in the preview-frame-list tests.
+type previewFrameResp struct {
+	Ts  float64 `json:"ts"`
+	Src string  `json:"src"`
+}
+
+func TestHandleTimelinePreviewFrameList_RewritesSrc(t *testing.T) {
+	fake := newTimelineFake()
+	fake.previewFramesBody = []byte(`[` +
+		`"preview_cam1-1779310000.0.webp",` +
+		`"preview_cam1-1779310300.5.webp",` +
+		`"preview_cam1-1779310600.0.webp"` +
+		`]`)
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame-list?start=1779310000&end=1779313600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want no-store", cc)
+	}
+	var got []previewFrameResp
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	want := []previewFrameResp{
+		{Ts: 1779310000.0, Src: "/api/cameras/cam1/preview-frame/preview_cam1-1779310000.0.webp"},
+		{Ts: 1779310300.5, Src: "/api/cameras/cam1/preview-frame/preview_cam1-1779310300.5.webp"},
+		{Ts: 1779310600.0, Src: "/api/cameras/cam1/preview-frame/preview_cam1-1779310600.0.webp"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d entries, want %d (%+v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i].Ts != want[i].Ts {
+			t.Errorf("entry %d ts = %v, want %v", i, got[i].Ts, want[i].Ts)
+		}
+		if got[i].Src != want[i].Src {
+			t.Errorf("entry %d src = %q, want %q", i, got[i].Src, want[i].Src)
+		}
+	}
+}
+
+func TestHandleTimelinePreviewFrameList_HyphenatedCameraID(t *testing.T) {
+	// The timestamp is the substring after the LAST '-', so a hyphenated
+	// camera id baked into the filename ("front-door") parses correctly.
+	fake := newTimelineFake()
+	fake.previewFramesBody = []byte(`[` +
+		`"preview_front-door-1779310000.0.webp",` +
+		`"preview_front-door-1779310600.0.webp"` +
+		`]`)
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame-list?start=1779310000&end=1779313600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var got []previewFrameResp
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d entries, want 2 (%+v)", len(got), got)
+	}
+	if got[0].Ts != 1779310000.0 || got[1].Ts != 1779310600.0 {
+		t.Errorf("ts = [%v %v], want [1779310000 1779310600]", got[0].Ts, got[1].Ts)
+	}
+	if got[0].Src != "/api/cameras/cam1/preview-frame/preview_front-door-1779310000.0.webp" {
+		t.Errorf("entry 0 src = %q, want hyphenated frame rewrite", got[0].Src)
+	}
+}
+
+func TestHandleTimelinePreviewFrameList_DropsInvalidEntry(t *testing.T) {
+	// A name failing validPreviewFrame (wrong suffix) is dropped; the valid
+	// neighbour survives with order preserved.
+	fake := newTimelineFake()
+	fake.previewFramesBody = []byte(`[` +
+		`"preview_cam1-1779310000.0.webp",` +
+		`"notes.txt"` +
+		`]`)
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame-list?start=1779310000&end=1779313600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var got []previewFrameResp
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d entries, want 1 (invalid dropped) (%+v)", len(got), got)
+	}
+	if got[0].Src != "/api/cameras/cam1/preview-frame/preview_cam1-1779310000.0.webp" {
+		t.Errorf("entry 0 src = %q, want valid frame rewrite", got[0].Src)
+	}
+}
+
+func TestHandleTimelinePreviewFrameList_EmptyArray(t *testing.T) {
+	fake := newTimelineFake()
+	fake.previewFramesBody = []byte(`[]`)
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame-list?start=1779310000&end=1779313600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var got []previewFrameResp
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %d entries, want empty array", len(got))
+	}
+}
+
+func TestHandleTimelinePreviewFrameList_InvalidStart_BadRequest(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame-list?start=abc&end=1779313600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "invalid_range" {
+		t.Errorf("error = %q, want invalid_range", body["error"])
+	}
+	if atomic.LoadInt32(&fake.previewFramesHits) != 0 {
+		t.Errorf("upstream hit on invalid_range: %d", fake.previewFramesHits)
+	}
+}
+
+func TestHandleTimelinePreviewFrameList_EndNotAfterStart_BadRequest(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/cam1/preview-frame-list?start=1779313600&end=1779313600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] != "invalid_range" {
+		t.Errorf("error = %q, want invalid_range", body["error"])
+	}
+	if atomic.LoadInt32(&fake.previewFramesHits) != 0 {
+		t.Errorf("upstream hit on invalid_range: %d", fake.previewFramesHits)
+	}
+}
+
+func TestHandleTimelinePreviewFrameList_UnknownCamera_NotFound(t *testing.T) {
+	fake := newTimelineFake()
+	router := timelineRouter(t, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cameras/camX/preview-frame-list?start=1779310000&end=1779313600", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	if atomic.LoadInt32(&fake.previewFramesHits) != 0 {
+		t.Errorf("upstream hit on unknown camera: %d", fake.previewFramesHits)
+	}
+}

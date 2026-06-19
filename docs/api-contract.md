@@ -859,6 +859,41 @@ type CameraOrderErrorBody = {
 //   A non-2xx upstream status is passed through with a zero-count body
 //   so the FE degrades to the clock-hour assumption.
 
+// GET /api/cameras/{id}/preview-frame-list?start=&end=
+//   The chronological list of preview FRAMES Frigate has rendered for
+//   [start,end), each rewritten to the BFF /preview-frame proxy. The
+//   frame analogue of /preview-clips and the full-list counterpart to
+//   /preview-frames (which reduces the SAME upstream list to just its
+//   {start,end,count} bounds). The scrubber uses it to seek the open
+//   (in-progress) current hour frame-by-frame before that hour's preview
+//   mp4 clip has been assembled. The BFF reads Frigate's preview-frames
+//   list (/api/preview/{cam}/start/{start}/end/{end}/frames) and re-emits
+//   a reduced array, one entry per frame:
+//
+//     [ { "ts": <float64>, "src": <string> }, ... ]
+//
+//   ts is the frame's wall-clock timestamp (unix seconds, parsed from the
+//   substring after the filename's last '-' so hyphenated camera ids
+//   parse). src is REWRITTEN to the BFF route
+//   "/api/cameras/{id}/preview-frame/{file}" — the client never reaches
+//   Frigate's /api/preview path directly. Entries whose filename fails the
+//   traversal whitelist (validPreviewFrame) or whose timestamp does not
+//   parse are dropped. Upstream order (chronological) is preserved.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store (the open hour's frame list grows).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport, or
+//       undecodable upstream body        → 502 upstream_error
+//   A non-2xx upstream status is passed through with an empty JSON array
+//   so the FE degrades to "no frames".
+
 // GET /api/cameras/{id}/preview-clips?start=&end=
 //   The list of real preview CLIPS Frigate has for [start,end) — the same
 //   source Frigate's own History timeline scrubs against (distinct from

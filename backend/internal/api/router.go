@@ -37,6 +37,7 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Method(http.MethodGet, "/cameras/{id}/preview.mp4", http.HandlerFunc(h.handleTimelinePreview))
 		r.Method(http.MethodHead, "/cameras/{id}/preview.mp4", http.HandlerFunc(h.handleTimelinePreview))
 		r.Get("/cameras/{id}/preview-frames", h.handleTimelinePreviewFrames)
+		r.Get("/cameras/{id}/preview-frame-list", h.handleTimelinePreviewFrameList)
 		r.Get("/cameras/{id}/preview-clips", h.handleTimelinePreviewClips)
 		r.Method(http.MethodGet, "/cameras/{id}/preview-clip/{file}", http.HandlerFunc(h.handleTimelinePreviewClip))
 		r.Method(http.MethodHead, "/cameras/{id}/preview-clip/{file}", http.HandlerFunc(h.handleTimelinePreviewClip))
