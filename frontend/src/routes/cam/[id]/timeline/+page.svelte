@@ -17,7 +17,7 @@
 
 <script lang="ts">
   import { page } from '$app/state'
-  import { untrack } from 'svelte'
+  import { untrack, tick } from 'svelte'
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
@@ -982,7 +982,7 @@
   // Release. Idempotent (pointerup + pointercancel, or the auto-stop, can each
   // fire). Cancel the loop and settle full-res at the landed position via
   // handleScrubEnd (gated off internally when previewOnly).
-  function vhsStop() {
+  async function vhsStop() {
     if (vhsDir === 0) return
     if (vhsRaf !== null) {
       cancelAnimationFrame(vhsRaf)
@@ -990,15 +990,30 @@
     }
     vhsDir = 0
     vhsRate = 0
-    // At high rush rates the preview <video> can't repaint every position, so
-    // it's holding a mid-rush frame while previewReady is still true from
-    // before. Hide that stale frame (previewVisible requires previewReady) so
-    // the neutral feed background posters the settle instead, then re-issue the
-    // seek to the landed position while mode is still 'scrubbing' so the
-    // preview repaints there and its 'seeked' handler flips previewReady back
-    // true on the correct frame. The open-tail webp <img> is content-addressed
-    // (not gated by previewReady), so it keeps showing the landed frame.
+    // At high rush rates pickClip thrashes activeClip every frame and the
+    // preview <video> never finishes loading any clip's metadata, so it stays
+    // on the frame primePreview painted at press time and previewReady is stale.
+    // Just clearing previewReady isn't enough — a late 'seeked' re-flips it and
+    // the element still holds the press-time frame. Force a clean reload of the
+    // landed clip through the reactive src path:
+    //   1. hide whatever the <video> holds (previewVisible needs previewReady),
+    //      so the .frame feed background posters the settle;
+    //   2. null activeClip / reset duration+prime so previewSrc derives to ''
+    //      and the bound src is REMOVED — a real DOM src change even when the
+    //      landed clip equals the loaded one, which is what forces a fresh load;
+    //   3. await tick() so Svelte applies the src removal and the element clears;
+    //   4. handleSeek(position) re-picks the landed clip (activeClip was null, so
+    //      pickClip re-assigns) -> previewSrc set -> the <video> reloads ->
+    //      loadedmetadata -> onMeta primes + seeks -> 'seeked' flips previewReady
+    //      back true on the LANDED frame. On the open tail this drives the webp
+    //      <img> path, which is content-addressed and unaffected.
+    // A pending previewSeekRaf/frameRaf from the rush is safe: its callback
+    // no-ops once activeClip is null / previewDuration is 0.
     previewReady = false
+    activeClip = null
+    previewDuration = 0
+    previewPrimed = false
+    await tick()
     handleSeek(position)
     handleScrubEnd()
   }
