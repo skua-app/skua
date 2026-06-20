@@ -6,14 +6,29 @@
      chunk boundaries with only a soft opacity cut. Playback STOPS only at the
      live edge of the captured window. Muted-only this phase. The 3h full-res
      master URL is gone: full-res is ever only a chunk. -->
+<script module lang="ts">
+  // Resolved per-camera recording-decode capability, shared across mounts and
+  // deep-links so re-entry on the same camera skips the codec probe. true =
+  // full-res decodable on this device, false = preview-only (cannot decode the
+  // recording codec, e.g. H.265 with no hardware decoder). The undetermined
+  // case (probe failed / no CODECS) is never cached.
+  const decodeCache = new Map<string, boolean>()
+</script>
+
 <script lang="ts">
   import { page } from '$app/state'
   import { untrack } from 'svelte'
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
-  import { timelineMasterURL, fetchPreviewClips, fetchPreviewFrameList } from '$lib/api'
+  import {
+    timelineMasterURL,
+    fetchPreviewClips,
+    fetchPreviewFrameList,
+    fetchRecordingCodecs
+  } from '$lib/api'
   import type { PreviewClip, PreviewFrame } from '$lib/api'
+  import { canDecodeRecording } from '$lib/hls'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
   import Icon from '$lib/components/Icon.svelte'
@@ -175,6 +190,20 @@
   // HlsVideo error (e.g. Frigate 400 on an empty chunk range).
   let playerError = $state(false)
 
+  // Preview-only mode: this device cannot decode the camera's recording codec
+  // (e.g. H.265 with no hardware decoder), so full-res is never attempted —
+  // the scrubber + low-res preview stay fully functional and an honest hint
+  // replaces the misleading "No recording" overlay. Resolved proactively from
+  // the master playlist's CODECS (primary) with the HlsVideo decode error as a
+  // backstop. scrubActive is true during an active drag so the hint clears to
+  // reveal the preview frame underneath.
+  let previewOnly = $state(false)
+  let scrubActive = $state(false)
+  // canPlayType/native-vs-MSE probe element. Decode capability is engine-wide,
+  // not per-instance, so a detached element answers identically to the live
+  // player and is always available regardless of bind timing.
+  const probeVideo = typeof document !== 'undefined' ? document.createElement('video') : null
+
   // Full-res mute. Muted by default so the one-shot entry autoplay is never
   // blocked; the user opts into audio via the control button. HlsVideo's
   // element is muted by default too — we drive el.muted directly.
@@ -251,6 +280,9 @@
       chunkEnded = false
       playerError = false
       paused = true
+      // Reset decode-capability gating for the (re-)entered camera.
+      previewOnly = false
+      scrubActive = false
       // Fresh camera: drop the loaded clips/clip, then load the clip list
       // for the window and pick the clip at the oldest window edge.
       clips = []
@@ -261,13 +293,41 @@
       frameSrc = ''
       void timelineStore.load(id)
       void loadClips(id)
-      // One-shot muted autoplay on entry / deep-link: settle full-res at the
-      // initial position. The full-res element is muted by default (HlsVideo)
-      // so autoplay is never blocked; scrubbing still drops to preview and a
-      // settle resumes playback. Audio is opt-in via the mute button.
-      ensurePlaybackAt(position)
+      // Resolve decode capability, then gate the one-shot entry autoplay on it:
+      // play full-res only when this device is known to decode the recording
+      // codec. While capability is still pending we stay on the preview layer
+      // (scrubber already works) so there is no failed-load flash.
+      void resolveCapability(id, position)
     })
   })
+
+  // Decide whether full-res is decodable on this device for the entered camera
+  // and, when so, kick the one-shot entry autoplay. Cache hit applies instantly
+  // (no fetch). On a miss, probe the master playlist's CODECS for a recent
+  // covered window and check it against the path the player will take. A null
+  // codecs string is undetermined: stay previewOnly=false and attempt full-res
+  // anyway, letting the reactive decode-error backstop catch a real mismatch.
+  // Guards against the camera changing during the await before applying.
+  async function resolveCapability(id: string, t: number) {
+    const cached = decodeCache.get(id)
+    if (cached !== undefined) {
+      previewOnly = !cached
+      if (cached) ensurePlaybackAt(t)
+      return
+    }
+    const codecs = await fetchRecordingCodecs(id, windowEnd - 3600, windowEnd)
+    if (camId !== id) return
+    if (codecs === null) {
+      // Undetermined: do NOT cache; rely on the reactive backstop. Attempt
+      // full-res so that backstop can actually fire on a true decode failure.
+      ensurePlaybackAt(t)
+      return
+    }
+    const canDecode = probeVideo ? canDecodeRecording(codecs, probeVideo) : true
+    decodeCache.set(id, canDecode)
+    previewOnly = !canDecode
+    if (canDecode) ensurePlaybackAt(t)
+  }
 
   // Load the preview-clips list for the current window and pick the clip at
   // the playhead. Guard against a stale camId — an in-flight list for a
@@ -655,6 +715,9 @@
   // playing, and clear the idle buffer — any settle invalidates a prefetched
   // continuation, so the next timeupdate re-prefetches afresh.
   function ensurePlaybackAt(t: number) {
+    // Preview-only device: never touch full-res — the scrub/preview path is
+    // the whole experience here.
+    if (previewOnly) return
     chunkEnded = false
     const el = activeEl
     const aStart = activeStart
@@ -682,6 +745,7 @@
     // Prime from this user gesture — guarantees decoding on iOS/Low-Power
     // where the on-load prime's autoplay was blocked. No-op once primed.
     primePreview()
+    scrubActive = true
     mode = 'scrubbing'
     chunkEnded = false
     const el = activeEl
@@ -707,14 +771,19 @@
     }
   }
 
-  // Drag released: settle to full-res at the landed position.
+  // Drag released: settle to full-res at the landed position. The full-res
+  // settle is gated off inside ensurePlaybackAt when previewOnly is true, so
+  // here we only clear the active-drag flag (re-showing the hint).
   function handleScrubEnd() {
+    scrubActive = false
     ensurePlaybackAt(position)
   }
 
   // Play button. From scrubbing, or when the playhead is outside the loaded
   // chunk, settle+play; otherwise toggle the loaded chunk.
   function togglePlay() {
+    // Preview-only device: no full-res to play (the button is hidden too).
+    if (previewOnly) return
     const el = activeEl
     const aStart = activeStart
     const aEnd = activeEnd
@@ -736,6 +805,58 @@
   // el.muted write here would be reset by the next render's prop).
   function toggleFullResMute() {
     fullResMuted = !fullResMuted
+  }
+
+  // Decode-class HlsVideo errors: the player CAN fetch the stream but cannot
+  // decode it. Native path emits media_error_<code> (MEDIA_ERR_DECODE=3,
+  // MEDIA_ERR_SRC_NOT_SUPPORTED=4); the hls.js path emits its data.details —
+  // the incompatible-codecs / buffer-append / fragment-parsing details. These
+  // flip the screen to preview-only. Everything else (empty range / 400 /
+  // manifest or level load failure) is a genuine "no recording" error.
+  const DECODE_ERROR_STRINGS = new Set<string>([
+    'media_error_3',
+    'media_error_4',
+    'manifestIncompatibleCodecsError',
+    'bufferIncompatibleCodecsError',
+    'bufferAppendError',
+    'fragParsingError'
+  ])
+
+  // Drop into preview-only: tear down both full-res buffers, cache the device
+  // as undecodable for this camera, and stay on the scrub/preview layer.
+  function enterPreviewOnly() {
+    previewOnly = true
+    decodeCache.set(camId, false)
+    stopReadyPoll()
+    const a = videoElA
+    const b = videoElB
+    if (a && !a.paused) a.pause()
+    if (b && !b.paused) b.pause()
+    active = 'a'
+    srcA = ''
+    srcB = ''
+    startA = null
+    startB = null
+    endA = null
+    endB = null
+    idlePrimed = false
+    showFullRes = false
+    pendingPlay = false
+    chunkEnded = false
+    playerError = false
+    paused = true
+    mode = 'scrubbing'
+  }
+
+  // Backstop for the proactive codec gate: classify an HlsVideo error and
+  // either fall back to preview-only (decode-class) or surface the genuine
+  // "No recording" overlay (everything else).
+  function handleFullResError(msg: string) {
+    if (DECODE_ERROR_STRINGS.has(msg)) {
+      enterPreviewOnly()
+      return
+    }
+    playerError = true
   }
 
   // Smart back: the timeline is entered from focus, grid, AND events, so return
@@ -788,7 +909,7 @@
         bind:video={videoElA}
         src={srcA}
         muted={fullResMuted}
-        onError={() => (playerError = true)}
+        onError={handleFullResError}
       />
     </div>
     <div class="layer fullres" style:opacity={active === 'b' && fullResVisible ? 1 : 0}>
@@ -796,13 +917,19 @@
         bind:video={videoElB}
         src={srcB}
         muted={fullResMuted}
-        onError={() => (playerError = true)}
+        onError={handleFullResError}
       />
     </div>
 
     {#if chunkEnded}
       <div class="frame-hint">
         <Mono size={11} color="rgba(255,255,255,0.85)">{ui.timelineLiveEnd}</Mono>
+      </div>
+    {/if}
+
+    {#if previewOnly && !scrubActive}
+      <div class="frame-codec">
+        <Mono size={12} color="rgba(255,255,255,0.82)">{ui.timelineCodecUnsupported}</Mono>
       </div>
     {/if}
 
@@ -814,22 +941,24 @@
   </div>
 
   <div class="controls">
-    <button
-      type="button"
-      class="livebtn playpause"
-      onclick={togglePlay}
-      aria-label={paused ? ui.timelinePlay : ui.timelinePause}
-    >
-      <Icon name={paused ? 'play' : 'pause'} size={20} />
-    </button>
-    <button
-      type="button"
-      class="livebtn"
-      onclick={toggleFullResMute}
-      aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
-    >
-      <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
-    </button>
+    {#if !previewOnly}
+      <button
+        type="button"
+        class="livebtn playpause"
+        onclick={togglePlay}
+        aria-label={paused ? ui.timelinePlay : ui.timelinePause}
+      >
+        <Icon name={paused ? 'play' : 'pause'} size={20} />
+      </button>
+      <button
+        type="button"
+        class="livebtn"
+        onclick={toggleFullResMute}
+        aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
+      >
+        <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
+      </button>
+    {/if}
     <span class="clock">
       <Mono size={13} weight={500} color="var(--text)" letterSpacing={0.3}>{clock}</Mono>
     </span>
@@ -965,6 +1094,24 @@
     background: rgba(0, 0, 0, 0.42);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+  /* Preview-only (undecodable codec) hint. A centred pill — distinct from the
+     bottom live-edge .frame-hint and not a full dim like .frame-overlay, so the
+     preview frame underneath stays readable while scrubbing. Never captures
+     pointer events (the scrubber/controls underneath must stay reachable). */
+  .frame-codec {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 80%;
+    padding: 8px 14px;
+    border-radius: var(--r-sm);
+    text-align: center;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     pointer-events: none;
   }
 

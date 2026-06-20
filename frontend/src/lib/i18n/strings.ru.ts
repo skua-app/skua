@@ -238,6 +238,8 @@ export const ui = {
   timelineEmpty: 'Нет записей в этом окне',
   timelineNoRecording: 'Нет записи для этого диапазона',
   timelineLiveEnd: 'Дошли до прямого эфира',
+  timelineCodecUnsupported:
+    'Это устройство не может воспроизвести видео H.265 с этой камеры. Перемотка по таймлайну по-прежнему работает.',
   timelineHistory: 'История',
   timelineSeeOnTimeline: 'Показать на таймлайне',
   timelineMute: 'Звук выкл.',

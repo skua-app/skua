@@ -237,6 +237,8 @@ export const ui = {
   timelineEmpty: 'No recordings in this window',
   timelineNoRecording: 'No recording available for this range',
   timelineLiveEnd: 'Caught up to live',
+  timelineCodecUnsupported:
+    "This device can't play this camera's H.265 video. Scrubbing the timeline still works.",
   timelineHistory: 'History',
   timelineSeeOnTimeline: 'See on timeline',
   timelineMute: 'Mute',

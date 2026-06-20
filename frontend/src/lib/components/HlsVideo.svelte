@@ -69,6 +69,15 @@
           Ctor.ErrorDetails.LEVEL_LOAD_ERROR,
           Ctor.ErrorDetails.LEVEL_LOAD_TIMEOUT
         ])
+        // Incompatible-codecs MEDIA_ERRORs are not recoverable: the device
+        // cannot decode this stream (e.g. H.265 with no hardware decoder).
+        // recoverMediaError would loop forever, so treat them as terminal and
+        // surface the detail — the timeline screen reads it to fall back to
+        // preview-only. Transient media errors keep the recover path below.
+        const incompatibleCodecsDetails = new Set<string>([
+          Ctor.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR,
+          Ctor.ErrorDetails.BUFFER_INCOMPATIBLE_CODECS_ERROR
+        ])
         onHlsError = (_evt, data) => {
           if (!data.fatal) {
             console.debug('[hls] non-fatal error:', data.type, data.details)
@@ -87,6 +96,12 @@
             networkRetries++
             instance.startLoad()
           } else if (data.type === Ctor.ErrorTypes.MEDIA_ERROR) {
+            if (data.details != null && incompatibleCodecsDetails.has(data.details)) {
+              instance.destroy()
+              hls = null
+              onError?.(data.details)
+              return
+            }
             instance.recoverMediaError()
           } else {
             instance.destroy()

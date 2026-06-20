@@ -778,6 +778,43 @@ export function timelineMasterURL(camId: string, start: number, end: number): st
   return `/api/cameras/${encodeURIComponent(camId)}/vod/${start}/${end}/master.m3u8`
 }
 
+// fetchRecordingCodecs reads the CODECS attribute of a recording window's HLS
+// master playlist so the FE can decide, before attempting full-res playback,
+// whether this device can decode the camera's recording codec (e.g. H.265 on
+// a phone with no hardware HEVC decoder). Frigate's master.m3u8 carries it on
+// the first #EXT-X-STREAM-INF line, e.g. CODECS="hev1.1.6.L150.00,mp4a.40.2".
+// Plain text fetch (the master is m3u8, not JSON, so apiFetch does not apply);
+// returns that CODECS string, or null when the fetch is non-2xx, fails, times
+// out, or the body carries no CODECS — callers degrade to preview-only. Never
+// throws.
+export async function fetchRecordingCodecs(
+  camId: string,
+  start: number,
+  end: number
+): Promise<string | null> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(timelineMasterURL(camId, start, end), { signal: ctrl.signal })
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) return null
+  let text: string
+  try {
+    text = await res.text()
+  } catch {
+    return null
+  }
+  const line = text.split('\n').find((l) => l.startsWith('#EXT-X-STREAM-INF'))
+  if (!line) return null
+  const m = line.match(/CODECS="([^"]*)"/)
+  return m && m[1] ? m[1] : null
+}
+
 // timelinePreviewURL builds the BFF passthrough for Frigate's low-res
 // H.264 preview timelapse of a [start,end) preview BUCKET — NOT the whole
 // window. Frigate only ever returns one hourly preview file per request,
