@@ -206,6 +206,13 @@
   // reveal the preview frame underneath.
   let previewOnly = $state(false)
   let scrubActive = $state(false)
+  // True once full-res has been PROVEN decodable on this device for the
+  // currently entered camera this session (cached/probed decodable, or frames
+  // confirmed advancing). Once proven, a later decode-class error is a
+  // transient glitch (e.g. MEDIA_ERR_DECODE while scrubbing or near the live
+  // edge), NOT a real codec incompatibility — the backstop must ignore it
+  // rather than latch into preview-only.
+  let decodeProven = $state(false)
   // canPlayType/native-vs-MSE probe element. Decode capability is engine-wide,
   // not per-instance, so a detached element answers identically to the live
   // player and is always available regardless of bind timing.
@@ -297,6 +304,7 @@
       // Reset decode-capability gating for the (re-)entered camera.
       previewOnly = false
       scrubActive = false
+      decodeProven = false
       // Fresh camera: drop the loaded clips/clip, then load the clip list
       // for the window and pick the clip at the oldest window edge.
       clips = []
@@ -329,7 +337,10 @@
     const cached = decodeCache.get(id)
     if (cached !== undefined) {
       previewOnly = !cached
-      if (cached) ensurePlaybackAt(t)
+      if (cached) {
+        decodeProven = true
+        ensurePlaybackAt(t)
+      }
       return
     }
     const codecs = await fetchRecordingCodecs(id, windowEnd - 3600, windowEnd)
@@ -343,7 +354,10 @@
     const canDecode = probeVideo ? canDecodeRecording(codecs, probeVideo) : true
     decodeCache.set(id, canDecode)
     previewOnly = !canDecode
-    if (canDecode) ensurePlaybackAt(t)
+    if (canDecode) {
+      decodeProven = true
+      ensurePlaybackAt(t)
+    }
   }
 
   // Load the preview-clips list for the current window and pick the clip at
@@ -674,6 +688,9 @@
     // frames are actually advancing.
     const onPlaying = () => {
       if (!isActive()) return
+      // Frames are actually advancing: full-res decodes on this device, so any
+      // later decode-class error is a transient glitch, not a codec mismatch.
+      decodeProven = true
       showFullRes = true
       pendingPlay = false
       paused = false
@@ -837,17 +854,17 @@
 
   // Decode-class HlsVideo errors: the player CAN fetch the stream but cannot
   // decode it. Native path emits media_error_<code> (MEDIA_ERR_DECODE=3,
-  // MEDIA_ERR_SRC_NOT_SUPPORTED=4); the hls.js path emits its data.details —
-  // the incompatible-codecs / buffer-append / fragment-parsing details. These
-  // flip the screen to preview-only. Everything else (empty range / 400 /
-  // manifest or level load failure) is a genuine "no recording" error.
+  // MEDIA_ERR_SRC_NOT_SUPPORTED=4); the hls.js path emits its two
+  // incompatible-codecs details. This set matches EXACTLY what HlsVideo
+  // forwards as decode-class — transient hls.js media errors (bufferAppendError
+  // / fragParsingError) are swallowed by recoverMediaError and never arrive
+  // here. Everything else (empty range / 400 / manifest or level load failure)
+  // is a genuine "no recording" error.
   const DECODE_ERROR_STRINGS = new Set<string>([
     'media_error_3',
     'media_error_4',
     'manifestIncompatibleCodecsError',
-    'bufferIncompatibleCodecsError',
-    'bufferAppendError',
-    'fragParsingError'
+    'bufferIncompatibleCodecsError'
   ])
 
   // Drop into preview-only: tear down both full-res buffers, cache the device
@@ -881,6 +898,10 @@
   // "No recording" overlay (everything else).
   function handleFullResError(msg: string) {
     if (DECODE_ERROR_STRINGS.has(msg)) {
+      // Already proven decodable this session → this is a transient glitch
+      // (decode error while scrubbing / near the live edge), not a real codec
+      // incompatibility. Ignore it: do not latch preview-only, do not error.
+      if (decodeProven) return
       enterPreviewOnly()
       return
     }
