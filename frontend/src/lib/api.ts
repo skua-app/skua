@@ -775,7 +775,12 @@ export async function fetchRecordingsSummary(
 // same /vod/{start}/{end}/ prefix — the start/end values survive in the
 // path without any cookie or query-string state.
 export function timelineMasterURL(camId: string, start: number, end: number): string {
-  return `/api/cameras/${encodeURIComponent(camId)}/vod/${start}/${end}/master.m3u8`
+  // The VOD route slots are integer unix seconds (the BFF rejects a fractional
+  // path as invalid_range). Floor here so no caller can structurally emit a
+  // fractional slot — belt-and-suspenders over the caller's own integer math.
+  const s = Math.floor(start)
+  const e = Math.floor(end)
+  return `/api/cameras/${encodeURIComponent(camId)}/vod/${s}/${e}/master.m3u8`
 }
 
 // fetchRecordingCodecs reads the CODECS attribute of a recording window's HLS

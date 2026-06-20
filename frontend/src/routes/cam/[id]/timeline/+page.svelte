@@ -812,8 +812,16 @@
       el.currentTime = t - aStart!
       void el.play().catch(() => {})
     } else {
-      const cs = t
-      const ce = Math.min(t + CHUNK_SECONDS, windowEnd)
+      // Chunk bounds MUST be integer unix seconds: the BFF's VOD route slots
+      // are integer-only (validUnixSeconds rejects a fractional path as
+      // invalid_range). A VHS rush / full-res timeupdate leaves t fractional,
+      // so floor it. Clamp the start to at most end-1 so a settle at the live
+      // edge can't build an empty (cs==ce) range, and not below the window
+      // start. ce derives from the now-integer cs, so activeStart stays integer
+      // and the position->currentTime mapping does not drift.
+      const end = Math.floor(windowEnd)
+      const cs = Math.max(Math.floor(windowStart), Math.min(Math.floor(t), end - 1))
+      const ce = Math.min(cs + CHUNK_SECONDS, end)
       showFullRes = false // hold the preview frame as a poster until first frame
       playerError = false
       pendingPlay = true // play() deferred to canplay (async HlsVideo attach)
