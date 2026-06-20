@@ -237,7 +237,7 @@ export const ui = {
   timelineSummaryError: 'Не удалось загрузить сводку таймлайна',
   timelineEmpty: 'Нет записей в этом окне',
   timelineNoRecording: 'Нет записи для этого диапазона',
-  timelineChunkEnd: 'Перемотайте, чтобы продолжить',
+  timelineLiveEnd: 'Дошли до прямого эфира',
   timelineHistory: 'История',
   timelineSeeOnTimeline: 'Показать на таймлайне',
   timelineMute: 'Звук выкл.',

@@ -236,7 +236,7 @@ export const ui = {
   timelineSummaryError: 'Could not load the timeline summary',
   timelineEmpty: 'No recordings in this window',
   timelineNoRecording: 'No recording available for this range',
-  timelineChunkEnd: 'Scrub to keep watching',
+  timelineLiveEnd: 'Caught up to live',
   timelineHistory: 'History',
   timelineSeeOnTimeline: 'See on timeline',
   timelineMute: 'Mute',

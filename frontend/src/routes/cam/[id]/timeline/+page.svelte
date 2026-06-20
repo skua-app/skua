@@ -1,9 +1,11 @@
-<!-- Phase 2b-iv-b-1: two-layer recording-timeline screen. Scrubbing rides a
-     single low-res preview timelapse (instant seeking, no network per move);
-     settling loads full-res only as a bounded <=5-min chunk and plays it.
-     Playback STOPS at the chunk end with a hint — continuous gapless
-     cross-chunk playback is 2b-iv-b-2. The 3h full-res master URL is gone:
-     full-res is ever only a chunk. Still URL-reachable only (entry link is 2c). -->
+<!-- Phase 2b-iv-b-2: continuous gapless cross-chunk recording-timeline screen.
+     Scrubbing rides a single low-res preview timelapse (instant seeking, no
+     network per move); settling loads full-res as a bounded 10-min chunk and
+     plays it. Full-res runs on a two-element double buffer: the idle buffer
+     prefetches + primes the contiguous next chunk so playback continues across
+     chunk boundaries with only a soft opacity cut. Playback STOPS only at the
+     live edge of the captured window. Muted-only this phase. The 3h full-res
+     master URL is gone: full-res is ever only a chunk. -->
 <script lang="ts">
   import { page } from '$app/state'
   import { untrack } from 'svelte'
@@ -18,9 +20,12 @@
   import Mono from '$lib/components/Mono.svelte'
   import { ui } from '$lib/i18n/strings'
 
-  // Scrubber window: a fixed 3-hour span per camera. Full-res chunk: 5 min.
+  // Scrubber window: a fixed 3-hour span per camera. Full-res chunk: 10 min.
   const WINDOW_SECONDS = 3 * 3600
-  const CHUNK_SECONDS = 5 * 60
+  const CHUNK_SECONDS = 10 * 60
+  // Prefetch the next chunk into the idle buffer once the active playhead is
+  // within this many seconds of the active chunk's end.
+  const PREFETCH_LEAD_SECONDS = 10
   // After a settle/seek, ignore the full-res timeupdate echo briefly so it
   // doesn't fight the UI right after the assignment.
   const SEEK_SETTLE_MS = 300
@@ -85,12 +90,78 @@
   let framesKey = $state<string | null>(null)
   let frameSrc = $state('')
 
-  // Full-res chunk layer (HlsVideo). chunkSrc is '' until a chunk is loaded,
-  // so no full-res network on mount.
-  let videoEl = $state<HTMLVideoElement | null>(null)
-  let chunkStart = $state<number | null>(null)
-  let chunkEnd = $state<number | null>(null)
-  let chunkSrc = $state('')
+  // Full-res playback runs on a TWO-element double buffer so playback
+  // continues across chunk boundaries without a visible stall: while the
+  // ACTIVE buffer plays its chunk, the IDLE buffer pre-loads and primes the
+  // contiguous next chunk, then a soft opacity cut swaps them on 'ended'.
+  // Each buffer owns an element ref + src + [start,end). Both srcs are ''
+  // until a chunk loads, so no full-res network on mount. Muted-only this
+  // phase — audio continuity across the seam is a later phase.
+  let videoElA = $state<HTMLVideoElement | null>(null)
+  let videoElB = $state<HTMLVideoElement | null>(null)
+  let srcA = $state('')
+  let srcB = $state('')
+  let startA = $state<number | null>(null)
+  let startB = $state<number | null>(null)
+  let endA = $state<number | null>(null)
+  let endB = $state<number | null>(null)
+  // Which buffer currently drives the picture. The other is the prefetch
+  // target. A swap flips this flag; all the active/idle derivations follow.
+  let active = $state<'a' | 'b'>('a')
+  // True once the idle buffer's prefetched chunk has decoded its first frame
+  // (the prime play()/pause() landed) and is ready for an instant swap. Reset
+  // whenever the idle buffer is cleared or reloaded.
+  let idlePrimed = $state(false)
+
+  // Active/idle views over the two buffers. Reads only — writes go through the
+  // set*/clearIdle helpers so they target the correct physical buffer.
+  const activeEl = $derived(active === 'a' ? videoElA : videoElB)
+  const idleEl = $derived(active === 'a' ? videoElB : videoElA)
+  const activeStart = $derived(active === 'a' ? startA : startB)
+  const activeEnd = $derived(active === 'a' ? endA : endB)
+  const activeSrc = $derived(active === 'a' ? srcA : srcB)
+  const idleStart = $derived(active === 'a' ? startB : startA)
+  const idleSrc = $derived(active === 'a' ? srcB : srcA)
+
+  function setActiveChunk(start: number, end: number, src: string) {
+    if (active === 'a') {
+      startA = start
+      endA = end
+      srcA = src
+    } else {
+      startB = start
+      endB = end
+      srcB = src
+    }
+  }
+  function setIdleChunk(start: number, end: number, src: string) {
+    if (active === 'a') {
+      startB = start
+      endB = end
+      srcB = src
+    } else {
+      startA = start
+      endA = end
+      srcA = src
+    }
+    idlePrimed = false
+  }
+  // Clear the idle buffer (drop its src/range) and the prefetch guard. Any
+  // settle invalidates a prefetched continuation, and after a swap the old
+  // active becomes idle and must be freed for the N+2 prefetch.
+  function clearIdle() {
+    if (active === 'a') {
+      srcB = ''
+      startB = null
+      endB = null
+    } else {
+      srcA = ''
+      startA = null
+      endA = null
+    }
+    idlePrimed = false
+  }
+
   let paused = $state(true)
   let chunkEnded = $state(false)
   // Holds false until the freshly loaded chunk has painted its first frame —
@@ -128,8 +199,8 @@
   const tParam = $derived(page.url.searchParams.get('t'))
   // Fires the heavy reset + one-shot autoplay once per real (camId, t) change.
   // The effect also re-runs on unrelated page.url churn (tParam is derived from
-  // page.url); the key compare keeps a spurious re-run from wiping
-  // chunkSrc/mode mid-playback, which would freeze on the preview poster.
+  // page.url); the key compare keeps a spurious re-run from wiping the
+  // buffers/mode mid-playback, which would freeze on the preview poster.
   let lastCaptureKey: string | null = null
   $effect(() => {
     const id = camId
@@ -163,9 +234,15 @@
         position = windowStart
       }
       mode = 'scrubbing'
-      chunkSrc = ''
-      chunkStart = null
-      chunkEnd = null
+      // Reset BOTH buffers and the swap state.
+      active = 'a'
+      srcA = ''
+      srcB = ''
+      startA = null
+      startB = null
+      endA = null
+      endB = null
+      idlePrimed = false
       previewDuration = 0
       // New clip swaps previewSrc, so the new file must be re-primed.
       previewPrimed = false
@@ -361,7 +438,7 @@
   // slow manifest fetch its next segment and advance, so retrying past the old
   // ~3s cap is what breaks the native paused-deadlock.
   function markReadyIfPlayable() {
-    const el = videoEl
+    const el = activeEl
     if (!el || mode !== 'playback') return
     showFullRes = true
     if (pendingPlay && el.paused) {
@@ -374,38 +451,148 @@
     }
   }
 
-  // Full-res chunk element listeners. videoEl is stable across chunk reloads
-  // (HlsVideo only swaps src), so these attach once.
-  $effect(() => {
-    const el = videoEl
-    if (!el) return
+  // Prefetch the contiguous next chunk into the IDLE buffer and prime it, so
+  // an 'ended' swap can reveal a decoded frame instantly. Fired from the
+  // active element's timeupdate once the playhead is within
+  // PREFETCH_LEAD_SECONDS of the active chunk's end. No-op once the idle
+  // buffer already holds the contiguous next chunk (idle start === activeEnd),
+  // or at the live edge of the window (no next chunk).
+  function runPrefetchCheck() {
+    if (mode !== 'playback') return
+    const aEnd = activeEnd
+    if (aEnd === null) return
+    if (aEnd - position > PREFETCH_LEAD_SECONDS) return
+    if (aEnd >= windowEnd) return
+    if (idleStart === aEnd) return
+    const ns = aEnd
+    const ne = Math.min(aEnd + CHUNK_SECONDS, windowEnd)
+    setIdleChunk(ns, ne, timelineMasterURL(camId, ns, ne))
+    primeIdle()
+  }
+
+  // Prime the idle buffer: once its element can play, seek to 0 and run one
+  // muted play()/pause() so the first frame decodes and a little buffers, then
+  // leave it paused and hidden. Captures the primed src so a settle/clear that
+  // reassigns the idle buffer mid-prime (or a swap that turns this element
+  // ACTIVE) cancels the pause()/flag without touching what the buffer now
+  // holds — guarded by the idleSrc compare before any side effect.
+  function primeIdle() {
+    const el = idleEl
+    const src = idleSrc
+    if (!el || !src) return
+    idlePrimed = false
+    const finish = () => {
+      el.removeEventListener('canplay', finish)
+      el.removeEventListener('loadeddata', finish)
+      if (idleSrc !== src) return
+      try {
+        el.currentTime = 0
+      } catch {
+        // some elements reject a pre-metadata seek; play() below still primes
+      }
+      el.muted = true
+      void el
+        .play()
+        .then(() => {
+          el.pause()
+          if (idleSrc === src) idlePrimed = true
+        })
+        .catch(() => {})
+    }
+    el.addEventListener('canplay', finish)
+    el.addEventListener('loadeddata', finish)
+  }
+
+  // Active chunk reached its end. At the window's live edge there is no next
+  // chunk — stop and hint. Otherwise swap to the idle buffer: a clean swap
+  // when it holds the primed contiguous chunk, else a fallback that loads the
+  // next chunk and starts it through pendingPlay (a brief stall, not a freeze).
+  function handleActiveEnded() {
+    const aEnd = activeEnd
+    if (aEnd === null || aEnd >= windowEnd) {
+      paused = true
+      chunkEnded = true
+      return
+    }
+    if (idleStart === aEnd && idlePrimed) {
+      cleanSwap()
+    } else {
+      fallbackSwap(aEnd)
+    }
+  }
+
+  // Clean swap: the idle buffer holds the primed contiguous chunk. Flip
+  // active, reveal the primed (already-decoded) buffer and play it; the old
+  // active becomes idle and is cleared so the next timeupdate can prefetch
+  // N+2 into it. Soft opacity cut via the .layer opacity transition.
+  function cleanSwap() {
+    active = active === 'a' ? 'b' : 'a'
+    chunkEnded = false
+    showFullRes = true
+    pendingPlay = false
+    playerError = false
+    const el = activeEl
+    if (el) void el.play().catch(() => {})
+    clearIdle()
+  }
+
+  // Fallback swap: the prefetch did not land (slow camera) or the idle buffer
+  // is not contiguous. Ensure the idle buffer holds [nextStart, …), flip to
+  // it, and start it through the pendingPlay + readiness-poll path while the
+  // preview poster holds. A brief stall is the accepted fallback.
+  function fallbackSwap(nextStart: number) {
+    if (idleStart !== nextStart || idleSrc === '') {
+      const ne = Math.min(nextStart + CHUNK_SECONDS, windowEnd)
+      setIdleChunk(nextStart, ne, timelineMasterURL(camId, nextStart, ne))
+    }
+    active = active === 'a' ? 'b' : 'a'
+    chunkEnded = false
+    showFullRes = false
+    pendingPlay = true
+    playerError = false
+    idlePrimed = false
+    lastSeekAt = performance.now()
+    clearIdle()
+  }
+
+  // Attach the full-res listeners to ONE buffer element. Every handler is a
+  // no-op unless its element is currently the ACTIVE one, so the idle buffer's
+  // own play/pause/timeupdate churn (from priming) is ignored. videoElA/B are
+  // stable across chunk reloads (HlsVideo only swaps src), so this attaches
+  // once per element.
+  function attachFullRes(el: HTMLVideoElement, which: 'a' | 'b') {
+    const isActive = () => active === which
     const onTime = () => {
-      if (mode !== 'playback' || chunkStart === null) return
+      if (!isActive() || mode !== 'playback') return
+      const start = which === 'a' ? startA : startB
+      if (start === null) return
       if (performance.now() - lastSeekAt < SEEK_SETTLE_MS) return
       // Accurate, drift-bounded mapping: a chunk's currentTime 0 == its
-      // wall-clock chunkStart, and the chunk spans at most CHUNK_SECONDS.
-      position = chunkStart + el.currentTime
+      // wall-clock start, and the chunk spans at most CHUNK_SECONDS.
+      position = start + el.currentTime
+      runPrefetchCheck()
     }
     const onPlay = () => {
-      paused = false
+      if (isActive()) paused = false
     }
     const onPause = () => {
-      paused = true
+      if (isActive()) paused = true
     }
-    const onReady = () => markReadyIfPlayable()
+    const onReady = () => {
+      if (isActive()) markReadyIfPlayable()
+    }
     // Definitive "started" signal: clear the deferred-play flag and stop the
     // readiness poll. 'play' only means play() was requested; 'playing' means
     // frames are actually advancing.
     const onPlaying = () => {
+      if (!isActive()) return
       showFullRes = true
       pendingPlay = false
       paused = false
       stopReadyPoll()
     }
     const onEnded = () => {
-      // Chunk boundary. Stop and hint; do NOT auto-advance (that is 2b-iv-b-2).
-      paused = true
-      chunkEnded = true
+      if (isActive()) handleActiveEnded()
     }
     el.addEventListener('timeupdate', onTime)
     el.addEventListener('play', onPlay)
@@ -420,23 +607,32 @@
       el.removeEventListener('canplay', onReady)
       el.removeEventListener('playing', onPlaying)
       el.removeEventListener('ended', onEnded)
-      // Element teardown also tears down the poll bound to its chunk.
-      stopReadyPoll()
     }
+  }
+  $effect(() => {
+    const el = videoElA
+    if (!el) return
+    return attachFullRes(el, 'a')
+  })
+  $effect(() => {
+    const el = videoElB
+    if (!el) return
+    return attachFullRes(el, 'b')
   })
 
-  // Chunk-scoped readiness poll. A fresh chunk attaches inside HlsVideo (native
-  // el.src, or after the async hls.js import), so canplay/playing can fire
-  // outside the window our listeners observe — and on a paused native element a
-  // slow manifest may never advance to canplay on its own. Its lifetime is the
-  // CHUNK, not a timeout: while the chunk is loaded and playback is still
-  // pending, keep revealing + retrying play() until the element actually
-  // starts. markReadyIfPlayable is a no-op once playing (el.paused is false),
-  // and the 'playing' listener clears pendingPlay + stops this poll. A fresh
-  // chunkSrc (or element teardown) cancels the prior poll, so only one runs per
-  // chunk. No time/frame cap — that cap is exactly what stranded slow cameras.
+  // Chunk-scoped readiness poll, rekeyed on the ACTIVE buffer's src. A fresh
+  // chunk attaches inside HlsVideo (native el.src, or after the async hls.js
+  // import), so canplay/playing can fire outside the window our listeners
+  // observe — and on a paused native element a slow manifest may never advance
+  // to canplay on its own. Its lifetime is the CHUNK, not a timeout: while the
+  // chunk is loaded and playback is still pending, keep revealing + retrying
+  // play() until the element actually starts. markReadyIfPlayable is a no-op
+  // once playing (el.paused is false), and the 'playing' listener clears
+  // pendingPlay + stops this poll. After a clean swap the new active is already
+  // primed so this usually no-ops; it stays the safety net for the fallback
+  // path. A fresh active src cancels the prior poll, so only one runs at a time.
   $effect(() => {
-    const src = chunkSrc
+    const src = activeSrc
     stopReadyPoll()
     if (!src) return
     readyPoll = setInterval(() => {
@@ -447,39 +643,37 @@
       }
       // A not-yet-bound element just skips this tick (it binds shortly); do
       // NOT stop the poll, or initial entry would strand before the bind.
-      const el = videoEl
+      const el = activeEl
       if (el && el.readyState >= el.HAVE_CURRENT_DATA) markReadyIfPlayable()
     }, 250)
     return () => stopReadyPoll()
   })
 
-  // Ensure full-res plays at wall-clock T: reuse the loaded chunk when T is
-  // inside it (cheap currentTime seek), else load a fresh <=5-min chunk
-  // starting at T. Either way switch to playback and start playing.
+  // Ensure full-res plays at wall-clock T on the ACTIVE buffer: reuse the
+  // loaded chunk when T is inside it (cheap currentTime seek), else load a
+  // fresh <=10-min chunk starting at T. Either way switch to playback, start
+  // playing, and clear the idle buffer — any settle invalidates a prefetched
+  // continuation, so the next timeupdate re-prefetches afresh.
   function ensurePlaybackAt(t: number) {
-    const el = videoEl
     chunkEnded = false
-    const within =
-      chunkStart !== null &&
-      chunkEnd !== null &&
-      chunkSrc !== '' &&
-      t >= chunkStart &&
-      t <= chunkEnd
+    const el = activeEl
+    const aStart = activeStart
+    const aEnd = activeEnd
+    const within = aStart !== null && aEnd !== null && activeSrc !== '' && t >= aStart && t <= aEnd
     if (within && el) {
       lastSeekAt = performance.now()
-      el.currentTime = t - chunkStart!
+      el.currentTime = t - aStart!
       void el.play().catch(() => {})
     } else {
       const cs = t
       const ce = Math.min(t + CHUNK_SECONDS, windowEnd)
-      chunkStart = cs
-      chunkEnd = ce
       showFullRes = false // hold the preview frame as a poster until first frame
       playerError = false
       pendingPlay = true // play() deferred to canplay (async HlsVideo attach)
       lastSeekAt = performance.now()
-      chunkSrc = timelineMasterURL(camId, cs, ce)
+      setActiveChunk(cs, ce, timelineMasterURL(camId, cs, ce))
     }
+    clearIdle()
     mode = 'playback'
   }
 
@@ -490,7 +684,7 @@
     primePreview()
     mode = 'scrubbing'
     chunkEnded = false
-    const el = videoEl
+    const el = activeEl
     if (el && !el.paused) el.pause()
   }
 
@@ -521,13 +715,11 @@
   // Play button. From scrubbing, or when the playhead is outside the loaded
   // chunk, settle+play; otherwise toggle the loaded chunk.
   function togglePlay() {
-    const el = videoEl
+    const el = activeEl
+    const aStart = activeStart
+    const aEnd = activeEnd
     const within =
-      chunkStart !== null &&
-      chunkEnd !== null &&
-      chunkSrc !== '' &&
-      position >= chunkStart &&
-      position <= chunkEnd
+      aStart !== null && aEnd !== null && activeSrc !== '' && position >= aStart && position <= aEnd
     if (mode === 'scrubbing' || !within) {
       ensurePlaybackAt(position)
       return
@@ -591,10 +783,18 @@
       style:opacity={framesVisible ? 1 : 0}
     />
 
-    <div class="layer fullres" style:opacity={fullResVisible ? 1 : 0}>
+    <div class="layer fullres" style:opacity={active === 'a' && fullResVisible ? 1 : 0}>
       <HlsVideo
-        bind:video={videoEl}
-        src={chunkSrc}
+        bind:video={videoElA}
+        src={srcA}
+        muted={fullResMuted}
+        onError={() => (playerError = true)}
+      />
+    </div>
+    <div class="layer fullres" style:opacity={active === 'b' && fullResVisible ? 1 : 0}>
+      <HlsVideo
+        bind:video={videoElB}
+        src={srcB}
         muted={fullResMuted}
         onError={() => (playerError = true)}
       />
@@ -602,7 +802,7 @@
 
     {#if chunkEnded}
       <div class="frame-hint">
-        <Mono size={11} color="rgba(255,255,255,0.85)">{ui.timelineChunkEnd}</Mono>
+        <Mono size={11} color="rgba(255,255,255,0.85)">{ui.timelineLiveEnd}</Mono>
       </div>
     {/if}
 
