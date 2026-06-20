@@ -990,6 +990,16 @@
     }
     vhsDir = 0
     vhsRate = 0
+    // At high rush rates the preview <video> can't repaint every position, so
+    // it's holding a mid-rush frame while previewReady is still true from
+    // before. Hide that stale frame (previewVisible requires previewReady) so
+    // the neutral feed background posters the settle instead, then re-issue the
+    // seek to the landed position while mode is still 'scrubbing' so the
+    // preview repaints there and its 'seeked' handler flips previewReady back
+    // true on the correct frame. The open-tail webp <img> is content-addressed
+    // (not gated by previewReady), so it keeps showing the landed frame.
+    previewReady = false
+    handleSeek(position)
     handleScrubEnd()
   }
 
