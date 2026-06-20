@@ -793,78 +793,10 @@ type CameraOrderErrorBody = {
 //   Errors mirror the VOD path: invalid_id (400), not_found (404),
 //   upstream_timeout (504), upstream_error (502).
 
-// GET  /api/cameras/{id}/preview.mp4?start=&end=
-// HEAD /api/cameras/{id}/preview.mp4?start=&end=
-//   Thin passthrough for Frigate's arbitrary-window preview endpoint
-//   (/api/{cam}/start/{start}/end/{end}/preview.mp4) — the low-res
-//   H.264 timelapse the timeline scrubber uses for fast seeking. Reuses
-//   the same upstream path as the glance moment preview, but takes the
-//   camera + window straight from the request instead of resolving a
-//   review id.
-//   {id}    camera id (must be present in the camera registry).
-//   start,end  unix seconds — non-empty, digits with at most one '.'
-//     (the FE sends integers; Frigate's own preview URL uses a decimal
-//     suffix, so a fractional value is accepted). end must be > start.
-//
-//   Range is forwarded verbatim; the upstream status code,
-//   Content-Type, Content-Length, Content-Range, Accept-Ranges, and
-//   ETag pass through; HEAD skips the body copy. Two differences from
-//   the VOD path: Content-Disposition is dropped (Frigate sends
-//   attachment; dropping it keeps the clip playing inline in a
-//   <video src>), and Cache-Control is "no-store" (a window ending at
-//   "now" keeps growing as footage accrues).
-//
-//   Errors:
-//     - invalid camera id                → 400 invalid_id
-//     - camera not in registry           → 404 not_found
-//     - missing / unparseable start|end,
-//       or end <= start                  → 400 invalid_range
-//     - context deadline                 → 504 upstream_timeout
-//     - other upstream / transport       → 502 upstream_error
-//   Frigate's preview endpoint may return 416 / 503 / etc. directly;
-//   those statuses are passed through verbatim.
-
-// GET /api/cameras/{id}/preview-frames?start=&end=
-//   The real covered wall-clock span (unix seconds) of Frigate's
-//   preview bucket for [start,end), derived from its preview-frames
-//   list (/api/preview/{cam}/start/{start}/end/{end}/frames). The
-//   scrubber uses it to map a scrub position within an hour's preview
-//   accurately instead of assuming the preview spans the full clock
-//   hour.
-//   {id}    camera id (must be present in the camera registry).
-//   start,end  integer unix seconds (the FE sends clock-hour-aligned
-//     bucket bounds). end must be > start.
-//
-//   The BFF reads the upstream JSON array of frame filenames
-//   ("preview_<cam>-<unixSeconds.frac>.webp", capped at a few MiB),
-//   parses the FIRST and LAST names into timestamps (the substring
-//   after the last '-' so hyphenated camera ids parse), and returns
-//   ONLY a reduced envelope — the full array never reaches the client:
-//
-//     { "start": <float64>, "end": <float64>, "count": <int> }
-//
-//   start/end are 0 when count is 0 or the first/last filename failed
-//   to parse; the FE checks count > 0 && end > start before trusting
-//   them. Cache-Control: no-store (the current bucket's frame list
-//   grows as footage accrues).
-//
-//   Errors:
-//     - invalid camera id                → 400 invalid_id
-//     - camera not in registry           → 404 not_found
-//     - missing / non-numeric start|end,
-//       or end <= start                  → 400 invalid_range
-//     - context deadline                 → 504 upstream_timeout
-//     - other upstream / transport, or
-//       undecodable upstream body        → 502 upstream_error
-//   A non-2xx upstream status is passed through with a zero-count body
-//   so the FE degrades to the clock-hour assumption.
-
 // GET /api/cameras/{id}/preview-frame-list?start=&end=
 //   The chronological list of preview FRAMES Frigate has rendered for
 //   [start,end), each rewritten to the BFF /preview-frame proxy. The
-//   frame analogue of /preview-clips and the full-list counterpart to
-//   /preview-frames (which reduces the SAME upstream list to just its
-//   {start,end,count} bounds). The scrubber uses it to seek the open
+//   frame analogue of /preview-clips. The scrubber uses it to seek the open
 //   (in-progress) current hour frame-by-frame before that hour's preview
 //   mp4 clip has been assembled. The BFF reads Frigate's preview-frames
 //   list (/api/preview/{cam}/start/{start}/end/{end}/frames) and re-emits

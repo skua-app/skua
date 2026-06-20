@@ -815,45 +815,6 @@ export async function fetchRecordingCodecs(
   return m && m[1] ? m[1] : null
 }
 
-// timelinePreviewURL builds the BFF passthrough for Frigate's low-res
-// H.264 preview timelapse of a [start,end) preview BUCKET — NOT the whole
-// window. Frigate only ever returns one hourly preview file per request,
-// so the caller passes clock-hour bucket bounds and loads one bucket at a
-// time. The file is one small, fully seekable timelapse whose own
-// duration is much shorter than the bucket's wall-clock span, so the
-// consumer maps a scrub fraction onto preview.currentTime at runtime
-// rather than treating currentTime as wall-clock. Mirrors the
-// timelineMasterURL builder style.
-export function timelinePreviewURL(camId: string, start: number, end: number): string {
-  return `/api/cameras/${encodeURIComponent(camId)}/preview.mp4?start=${start}&end=${end}`
-}
-
-// PreviewBounds is the reduced shape returned by the preview-frames
-// endpoint: the real covered wall-clock span (unix seconds) of a preview
-// bucket plus its frame count. start/end are 0 when count is 0 (or the
-// upstream filenames failed to parse), so callers check count > 0 &&
-// end > start before trusting the span.
-export type PreviewBounds = {
-  start: number
-  end: number
-  count: number
-}
-
-// fetchPreviewBounds returns the real covered span of Frigate's preview
-// bucket for [start,end), derived from its preview-frames list. The
-// scrubber uses it to map a scrub position within an hour's preview
-// accurately; when it is unavailable (count 0 or request failure) the
-// caller falls back to assuming the preview spans the full clock hour.
-export async function fetchPreviewBounds(
-  camId: string,
-  start: number,
-  end: number
-): Promise<PreviewBounds> {
-  return apiFetch<PreviewBounds>(
-    `/api/cameras/${encodeURIComponent(camId)}/preview-frames?start=${start}&end=${end}`
-  )
-}
-
 // PreviewClip is one entry of the preview-clips list: a real Frigate
 // preview clip's wall-clock span plus its BFF /preview-clip src URL. This
 // is the same clip model Frigate's own History timeline scrubs against —

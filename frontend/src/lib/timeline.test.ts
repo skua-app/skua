@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RecordingsSummary } from './api'
 import {
-  clockHourBucket,
   flattenSummary,
   fractionToTime,
   hourCells,
@@ -169,37 +168,5 @@ describe('hourCells', () => {
       end
     )
     expect(cells.map((c) => c.x0)).toEqual([...cells.map((c) => c.x0)].sort((a, b) => a - b))
-  })
-})
-
-describe('clockHourBucket', () => {
-  it('returns the local clock-hour containing a mid-hour timestamp', () => {
-    // 14:37:12.500 local → bucket 14:00–15:00 local.
-    const t = Math.floor(new Date(2026, 5, 18, 14, 37, 12, 500).getTime() / 1000)
-    const { start, end } = clockHourBucket(t)
-    expect(end - start).toBe(3600)
-    expect(start).toBeLessThanOrEqual(t)
-    expect(t).toBeLessThan(end)
-    const expectedStart = Math.floor(new Date(2026, 5, 18, 14, 0, 0, 0).getTime() / 1000)
-    expect(start).toBe(expectedStart)
-  })
-
-  it('returns the same hour when the timestamp is exactly on the boundary', () => {
-    const t = Math.floor(new Date(2026, 5, 18, 9, 0, 0, 0).getTime() / 1000)
-    const { start, end } = clockHourBucket(t)
-    expect(start).toBe(t)
-    expect(end).toBe(t + 3600)
-  })
-
-  it('aligns start to the local hour boundary for an arbitrary timestamp', () => {
-    const t = 1779312123
-    const { start, end } = clockHourBucket(t)
-    const back = new Date(start * 1000)
-    expect(back.getMinutes()).toBe(0)
-    expect(back.getSeconds()).toBe(0)
-    expect(back.getMilliseconds()).toBe(0)
-    expect(end - start).toBe(3600)
-    expect(start).toBeLessThanOrEqual(t)
-    expect(t).toBeLessThan(end)
   })
 })
