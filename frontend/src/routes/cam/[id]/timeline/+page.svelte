@@ -104,6 +104,13 @@
   let frames = $state<PreviewFrame[]>([])
   let framesKey = $state<string | null>(null)
   let frameSrc = $state('')
+  // True once the preview-clip <video> has actually PAINTED a frame for the
+  // currently entered camera at the current position (set on its 'seeked'
+  // event). Until then a preview element may still be holding a previous
+  // camera's / pre-seek frame, so the visibility gate hides it and the .frame
+  // feed background shows instead. Reset ONLY on a camId change — NOT per clip
+  // swap, which would flicker the feed background at clip boundaries mid-drag.
+  let previewReady = $state(false)
 
   // Full-res playback runs on a TWO-element double buffer so playback
   // continues across chunk boundaries without a visible stall: while the
@@ -211,13 +218,20 @@
 
   let lastSeekAt = 0
 
-  // Layer visibility: the preview holds until full-res has a frame, then the
-  // swap happens. In scrubbing mode the preview is always the visible layer.
+  // Layer visibility: the settled picture is the poster until full-res paints.
   const fullResVisible = $derived(mode === 'playback' && showFullRes)
-  // The webp frame layer wins over the video preview while scrubbing the open
-  // live tail; full-res still wins over both during playback.
-  const framesVisible = $derived(isOpenTail && mode === 'scrubbing' && frameSrc !== '')
-  const previewVisible = $derived(!fullResVisible && !framesVisible)
+  // Open-tail webp frame: visible whenever full-res has not yet painted (not
+  // just during the drag), so the released webp frame holds as the poster
+  // through the full-res load instead of flashing an empty preview-video frame.
+  const framesVisible = $derived(!fullResVisible && isOpenTail && frameSrc !== '')
+  // Preview <video>: only the fallback when neither full-res nor the webp frame
+  // is showing, AND it actually holds the current camera's painted frame at the
+  // settled position (previewSrc set + previewReady) — otherwise a stale
+  // previous-camera / pre-seek frame is hidden and the .frame feed background
+  // shows as the neutral poster until the correct frame paints.
+  const previewVisible = $derived(
+    !fullResVisible && !framesVisible && previewSrc !== '' && previewReady
+  )
 
   // On camId change: capture a fresh window, reset to scrubbing, drop any
   // loaded chunk, and pull the summary for the scrubber cells. An optional
@@ -291,6 +305,9 @@
       frames = []
       framesKey = null
       frameSrc = ''
+      // Hide the preview <video> until it paints the new camera's frame at the
+      // settled position, so a stale previous-camera frame can't flash.
+      previewReady = false
       void timelineStore.load(id)
       void loadClips(id)
       // Resolve decode capability, then gate the one-shot entry autoplay on it:
@@ -473,8 +490,19 @@
       primePreview()
       seekPreview()
     }
+    // 'seeked' fires after a currentTime assignment has actually painted the
+    // correct position — the moment the preview is the picture at the settled
+    // position and safe to reveal. ('loadeddata' would mark ready on frame 0,
+    // the wrong position.)
+    const onSeeked = () => {
+      previewReady = true
+    }
     el.addEventListener('loadedmetadata', onMeta)
-    return () => el.removeEventListener('loadedmetadata', onMeta)
+    el.addEventListener('seeked', onSeeked)
+    return () => {
+      el.removeEventListener('loadedmetadata', onMeta)
+      el.removeEventListener('seeked', onSeeked)
+    }
   })
 
   // Chunk-scoped readiness poll handle (see the effect below). Its lifetime is
