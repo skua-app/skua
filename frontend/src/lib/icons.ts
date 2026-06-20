@@ -68,6 +68,8 @@ export type IconName =
   | 'edit'
   | 'skipBack'
   | 'skipForward'
+  | 'rewind'
+  | 'fastForward'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -266,5 +268,18 @@ export const ICONS: Record<IconName, IconDef> = {
   // — that glyph is reserved for the VHS rewind/fast-forward pair. Arc plus an
   // arrowhead at the open top corner.
   skipBack: { paths: ['M3 12a9 9 0 1 0 3-6.7L3 8', 'M3 3v5h5'] },
-  skipForward: { paths: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'] }
+  skipForward: { paths: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'] },
+  // VHS rewind / fast-forward: filled double-triangles in the play-glyph idiom
+  // (fill currentColor, stroke none). The skip arrows deliberately left room
+  // for this pair. fastForward points right, rewind points left.
+  fastForward: {
+    paths: ['M4 5.5v13l8-6.5z', 'M12 5.5v13l8-6.5z'],
+    fill: 'currentColor',
+    stroke: 'none'
+  },
+  rewind: {
+    paths: ['M20 5.5v13l-8-6.5z', 'M12 5.5v13l-8-6.5z'],
+    fill: 'currentColor',
+    stroke: 'none'
+  }
 }

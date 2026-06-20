@@ -246,6 +246,8 @@ export const ui = {
   timelineSkipBack: 'Back 10 seconds',
   timelineSkipForward: 'Forward 10 seconds',
   timelineSpeed: 'Playback speed',
+  timelineRewind: 'Rewind',
+  timelineFastForward: 'Fast-forward',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',

@@ -49,6 +49,11 @@
   const SPEED_STEPS = [0.5, 1, 2, 4]
   // Transport skip step, in wall-clock seconds, for the back/forward buttons.
   const SKIP_SECONDS = 10
+  // VHS press-and-hold rush: wall-clock multipliers and the hold-duration ramp
+  // that selects between them. 60x immediately, 240x after 1.2s held, 480x
+  // after 2.5s held — the longer the button is held, the faster the rush.
+  const RUSH_RATES = [60, 240, 480]
+  const RUSH_RAMP_MS = [0, 1200, 2500]
 
   // page.params.id is typed string | undefined; the route only matches when
   // [id] is bound, so the empty fallback never surfaces in practice.
@@ -233,6 +238,19 @@
   // since a fresh chunk src resets the element's rate). A fresh camera starts
   // at normal speed.
   let playbackRate = $state(1)
+
+  // VHS press-and-hold rewind / fast-forward. vhsDir: 0 idle, 1 fast-forward,
+  // -1 rewind. vhsRate is the current wall-clock multiplier shown on the OSD
+  // badge (0 when idle). The rush rides the SAME low-res preview path a manual
+  // drag uses (handleScrubStart / handleSeek / handleScrubEnd) — no separate
+  // seek logic.
+  let vhsDir = $state<0 | 1 | -1>(0)
+  let vhsRate = $state(0)
+  // Non-reactive rush bookkeeping: press timestamp (drives the ramp), last rAF
+  // timestamp (drives dt), and the rAF handle.
+  let vhsHoldStart = 0
+  let vhsLastTs = 0
+  let vhsRaf: number | null = null
 
   let lastSeekAt = 0
 
@@ -906,6 +924,75 @@
     }
   }
 
+  // Rush multiplier for an elapsed hold: walk the ramp thresholds and return
+  // the highest rate whose hold-time has been reached.
+  function rushRateFor(heldMs: number): number {
+    let rate = RUSH_RATES[0] ?? 60
+    for (let i = 0; i < RUSH_RAMP_MS.length; i++) {
+      const threshold = RUSH_RAMP_MS[i]
+      const r = RUSH_RATES[i]
+      if (threshold !== undefined && r !== undefined && heldMs >= threshold) rate = r
+    }
+    return rate
+  }
+
+  // Press-and-hold start. dir: 1 fast-forward, -1 rewind. No-op on preview-only
+  // (the buttons are hidden there too) and when a rush is already running.
+  // handleScrubStart does the exact rush setup: prime the preview from this
+  // user gesture, set scrubActive + mode='scrubbing', and pause full-res. Then
+  // run the rAF rush loop.
+  function vhsStart(dir: 1 | -1) {
+    if (previewOnly || vhsDir !== 0) return
+    vhsHoldStart = vhsLastTs = performance.now()
+    vhsDir = dir
+    handleScrubStart()
+    vhsRaf = requestAnimationFrame(vhsTick)
+  }
+
+  // The rush loop. Advance the playhead by dir * rate * dt of wall-clock and
+  // feed it to the SAME preview path the scrubber's onSeek uses, so closed-hour
+  // clip seeks and open-tail webp frames behave identically to a manual drag.
+  // dt is capped at 0.1s so a stutter / backgrounded tab can't fling the
+  // playhead. Auto-stops when the playhead reaches the window edge it travels
+  // toward.
+  function vhsTick(ts: number) {
+    if (vhsDir === 0) return
+    const dt = Math.min(Math.max((ts - vhsLastTs) / 1000, 0), 0.1)
+    vhsLastTs = ts
+    const rate = rushRateFor(ts - vhsHoldStart)
+    vhsRate = rate
+    const next = position + vhsDir * rate * dt
+    if (vhsDir > 0 ? next >= windowEnd : next <= windowStart) {
+      handleSeek(vhsDir > 0 ? windowEnd : windowStart)
+      vhsStop()
+      return
+    }
+    handleSeek(next)
+    vhsRaf = requestAnimationFrame(vhsTick)
+  }
+
+  // Release. Idempotent (pointerup + pointercancel, or the auto-stop, can each
+  // fire). Cancel the loop and settle full-res at the landed position via
+  // handleScrubEnd (gated off internally when previewOnly).
+  function vhsStop() {
+    if (vhsDir === 0) return
+    if (vhsRaf !== null) {
+      cancelAnimationFrame(vhsRaf)
+      vhsRaf = null
+    }
+    vhsDir = 0
+    vhsRate = 0
+    handleScrubEnd()
+  }
+
+  // Pointer-capture release helper for the VHS buttons: a finger that slid off
+  // the button still counts as held (capture), so release only when this
+  // element actually holds the capture (pointercancel may have released it).
+  function vhsRelease(btn: HTMLButtonElement, pointerId: number) {
+    if (btn.hasPointerCapture(pointerId)) btn.releasePointerCapture(pointerId)
+    vhsStop()
+  }
+
   // Mute toggle for the full-res element. The first tap is a user gesture, so
   // subsequent programmatic play() on the same element stays allowed. Flip the
   // state only — the muted={fullResMuted} prop on HlsVideo drives el.muted
@@ -1050,6 +1137,15 @@
         <Mono size={12} color="rgba(255,255,255,0.82)">{ui.timelineNoRecording}</Mono>
       </div>
     {/if}
+
+    {#if vhsDir !== 0}
+      <!-- Light CRT texture + a top-centre direction/rate badge while rushing. -->
+      <div class="vhs-shimmer" aria-hidden="true"></div>
+      <div class="vhs-badge">
+        <Icon name={vhsDir > 0 ? 'fastForward' : 'rewind'} size={13} />
+        <Mono size={11} weight={500} color="rgba(255,255,255,0.92)">{vhsRate}×</Mono>
+      </div>
+    {/if}
   </div>
 
   <div class="controls">
@@ -1059,6 +1155,31 @@
            will flank play/pause inside .transport. -->
       <span class="edge" aria-hidden="true"></span>
       <div class="transport">
+        <button
+          type="button"
+          class="livebtn vhs"
+          aria-label={ui.timelineRewind}
+          onpointerdown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId)
+            vhsStart(-1)
+          }}
+          onpointerup={(e) => vhsRelease(e.currentTarget, e.pointerId)}
+          onpointercancel={(e) => vhsRelease(e.currentTarget, e.pointerId)}
+          onkeydown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+              e.preventDefault()
+              vhsStart(-1)
+            }
+          }}
+          onkeyup={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              vhsStop()
+            }
+          }}
+        >
+          <Icon name="rewind" size={18} />
+        </button>
         <button
           type="button"
           class="livebtn skip"
@@ -1082,6 +1203,31 @@
           aria-label={ui.timelineSkipForward}
         >
           <Icon name="skipForward" size={18} />
+        </button>
+        <button
+          type="button"
+          class="livebtn vhs"
+          aria-label={ui.timelineFastForward}
+          onpointerdown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId)
+            vhsStart(1)
+          }}
+          onpointerup={(e) => vhsRelease(e.currentTarget, e.pointerId)}
+          onpointercancel={(e) => vhsRelease(e.currentTarget, e.pointerId)}
+          onkeydown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+              e.preventDefault()
+              vhsStart(1)
+            }
+          }}
+          onkeyup={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              vhsStop()
+            }
+          }}
+        >
+          <Icon name="fastForward" size={18} />
         </button>
       </div>
     {/if}
@@ -1260,24 +1406,92 @@
     -webkit-backdrop-filter: blur(8px);
     pointer-events: none;
   }
+  /* Light CRT shimmer over the preview while a VHS rush is held. Sits above the
+     media layers but below the controls (it lives inside .frame). Subtle
+     scanlines plus a faint rolling sheen — texture, not an obstruction. */
+  .vhs-shimmer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 1px,
+      rgba(0, 0, 0, 0.07) 1px,
+      rgba(0, 0, 0, 0.07) 2px
+    );
+  }
+  .vhs-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 100% 40%;
+    background-repeat: no-repeat;
+    animation: vhs-roll 2.4s linear infinite;
+  }
+  @keyframes vhs-roll {
+    from {
+      background-position: 0 -40%;
+    }
+    to {
+      background-position: 0 140%;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .vhs-shimmer::after {
+      animation: none;
+    }
+  }
+  /* VHS OSD badge: top-centre pill, mirrors .frame-hint styling. Direction
+     glyph + the live rush rate. Never captures pointer events. */
+  .vhs-badge {
+    position: absolute;
+    left: 50%;
+    top: 10px;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: rgba(255, 255, 255, 0.92);
+    pointer-events: none;
+  }
+  .vhs-badge :global(svg) {
+    fill: currentColor;
+    stroke: currentColor;
+  }
 
   .controls {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
+    justify-content: center;
+    column-gap: 14px;
+    row-gap: 10px;
   }
   /* Left spacer (= the trailing meta cluster's flex weight) keeps the transport
-     cluster centred in the bar. */
+     cluster centred in the bar on the single-row (desktop) layout. */
   .edge {
     flex: 1 1 0;
   }
-  /* Centred transport cluster: skip-back, play/pause, skip-forward. Tighter
-     internal gap than the bar gap so the three read as one unit. */
+  /* Centred transport cluster: rewind, skip-back, play/pause, skip-forward,
+     fast-forward. Tight internal gap so the five read as one unit. */
   .transport {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex: 0 0 auto;
+    justify-content: center;
+    gap: 8px;
+    flex: 0 1 auto;
   }
   /* Trailing meta cluster: speed chip, mute, clock — pinned to the right. */
   .meta {
@@ -1286,6 +1500,22 @@
     align-items: center;
     justify-content: flex-end;
     gap: 14px;
+  }
+  /* Five transport buttons plus the meta cluster genuinely overflow a phone-
+     width bar, so below this width the meta cluster wraps to its own centred
+     second row and the flex spacer is dropped (it would otherwise push the
+     transport off-centre on the wrapped row). Desktop keeps the single centred
+     row. */
+  @media (max-width: 540px) {
+    .controls {
+      column-gap: 10px;
+    }
+    .edge {
+      display: none;
+    }
+    .meta {
+      flex: 0 0 auto;
+    }
   }
   /* Mirrors MobileFocus .livebtn token styling. */
   .livebtn {
@@ -1310,10 +1540,25 @@
   .livebtn:active {
     transform: translateY(1px);
   }
-  /* Skip buttons sit a touch smaller than play/pause — they flank it. */
-  .livebtn.skip {
+  /* Skip and VHS buttons sit a touch smaller than play/pause — they flank it. */
+  .livebtn.skip,
+  .livebtn.vhs {
     width: 40px;
     height: 40px;
+  }
+  /* Pin fill+stroke to currentColor so the filled double-triangle VHS glyphs
+     render fully (same fix as the play glyph). */
+  .livebtn.vhs :global(svg) {
+    fill: currentColor;
+    stroke: currentColor;
+  }
+  /* Disable the tap-highlight / text-select on a held VHS button so a long
+     touch-hold reads as a transport press, not a selection. */
+  .livebtn.vhs {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
   /* Speed chip: width follows the mono label (e.g. "0.5×") instead of a fixed
      square. */
