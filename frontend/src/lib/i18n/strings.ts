@@ -243,6 +243,9 @@ export const ui = {
   timelineSeeOnTimeline: 'See on timeline',
   timelineMute: 'Mute',
   timelineUnmute: 'Unmute',
+  timelineSkipBack: 'Back 10 seconds',
+  timelineSkipForward: 'Forward 10 seconds',
+  timelineSpeed: 'Playback speed',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',

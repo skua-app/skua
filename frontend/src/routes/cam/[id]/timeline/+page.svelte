@@ -44,6 +44,11 @@
   // After a settle/seek, ignore the full-res timeupdate echo briefly so it
   // doesn't fight the UI right after the assignment.
   const SEEK_SETTLE_MS = 300
+  // Playback-speed cycle for the speed chip. Cycling from 1x runs
+  // 1 -> 2 -> 4 -> 0.5 -> 1 (advance by one, wrapping).
+  const SPEED_STEPS = [0.5, 1, 2, 4]
+  // Transport skip step, in wall-clock seconds, for the back/forward buttons.
+  const SKIP_SECONDS = 10
 
   // page.params.id is typed string | undefined; the route only matches when
   // [id] is bound, so the empty fallback never surfaces in practice.
@@ -223,6 +228,12 @@
   // element is muted by default too — we drive el.muted directly.
   let fullResMuted = $state(true)
 
+  // Full-res playback rate, cycled by the speed chip. Applied to whichever
+  // buffer is active (and re-applied on confirmed start + after each swap,
+  // since a fresh chunk src resets the element's rate). A fresh camera starts
+  // at normal speed.
+  let playbackRate = $state(1)
+
   let lastSeekAt = 0
 
   // Layer visibility: the settled picture is the poster until full-res paints.
@@ -301,6 +312,8 @@
       chunkEnded = false
       playerError = false
       paused = true
+      // Fresh camera starts at normal speed.
+      playbackRate = 1
       // Reset decode-capability gating for the (re-)entered camera.
       previewOnly = false
       scrubActive = false
@@ -563,7 +576,10 @@
     if (mode !== 'playback') return
     const aEnd = activeEnd
     if (aEnd === null) return
-    if (aEnd - position > PREFETCH_LEAD_SECONDS) return
+    // Scale the lead by the playback rate so the real-time prefetch window
+    // stays constant: at 4x the playhead eats the chunk 4x faster, so the
+    // prefetch must start 4x further from the end to keep the seam gapless.
+    if (aEnd - position > PREFETCH_LEAD_SECONDS * playbackRate) return
     if (aEnd >= windowEnd) return
     if (idleStart === aEnd) return
     const ns = aEnd
@@ -634,6 +650,7 @@
     pendingPlay = false
     playerError = false
     const el = activeEl
+    applyPlaybackRate()
     if (el) void el.play().catch(() => {})
     clearIdle()
   }
@@ -654,6 +671,7 @@
     playerError = false
     idlePrimed = false
     lastSeekAt = performance.now()
+    applyPlaybackRate()
     clearIdle()
   }
 
@@ -694,6 +712,9 @@
       showFullRes = true
       pendingPlay = false
       paused = false
+      // A fresh chunk src starts at rate 1; re-apply the chosen rate on the
+      // confirmed start so the seam doesn't reset to normal speed.
+      applyPlaybackRate()
       stopReadyPoll()
     }
     const onEnded = () => {
@@ -841,6 +862,48 @@
     if (!el) return
     if (el.paused) void el.play().catch(() => {})
     else el.pause()
+  }
+
+  // Apply the current playback rate to the active buffer's element. A fresh
+  // chunk src resets an element's rate to 1, so this is re-applied on confirmed
+  // start (onPlaying) and after each buffer swap, not just on a speed change.
+  function applyPlaybackRate() {
+    const el = activeEl
+    if (el) el.playbackRate = playbackRate
+  }
+
+  // Speed chip: advance to the next entry in SPEED_STEPS (wrapping) and apply
+  // it to the active element. From 1x: 1 -> 2 -> 4 -> 0.5 -> 1.
+  function cycleSpeed() {
+    const i = SPEED_STEPS.indexOf(playbackRate)
+    playbackRate = SPEED_STEPS[(i + 1) % SPEED_STEPS.length] ?? 1
+    applyPlaybackRate()
+  }
+
+  // Transport skip by deltaSeconds (called with +/-SKIP_SECONDS). Clamp the
+  // target to the window. When the target stays inside the loaded active chunk
+  // and we're in playback, a cheap currentTime seek preserves the current
+  // play/pause state (no forced play, no pause). When it crosses the active
+  // chunk boundary or we're not in playback, settle a fresh chunk at the target
+  // and play. Full-res control: a no-op on preview-only devices.
+  function skip(deltaSeconds: number) {
+    if (previewOnly) return
+    const raw = position + deltaSeconds
+    const target = raw < windowStart ? windowStart : raw > windowEnd ? windowEnd : raw
+    const el = activeEl
+    const aStart = activeStart
+    const aEnd = activeEnd
+    const within =
+      aStart !== null && aEnd !== null && activeSrc !== '' && target >= aStart && target <= aEnd
+    if (mode === 'playback' && within && el) {
+      el.currentTime = target - aStart!
+      lastSeekAt = performance.now()
+      position = target
+      // Preserve the current play/pause state — the element keeps playing if it
+      // was playing and stays paused if it was paused.
+    } else {
+      ensurePlaybackAt(target)
+    }
   }
 
   // Mute toggle for the full-res element. The first tap is a user gesture, so
@@ -991,26 +1054,60 @@
 
   <div class="controls">
     {#if !previewOnly}
-      <button
-        type="button"
-        class="livebtn playpause"
-        onclick={togglePlay}
-        aria-label={paused ? ui.timelinePlay : ui.timelinePause}
-      >
-        <Icon name={paused ? 'play' : 'pause'} size={20} />
-      </button>
-      <button
-        type="button"
-        class="livebtn"
-        onclick={toggleFullResMute}
-        aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
-      >
-        <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
-      </button>
+      <!-- Left flex spacer balances the trailing meta cluster so the transport
+           stays centred in the bar. The VHS rewind/fast-forward pair (C-ii)
+           will flank play/pause inside .transport. -->
+      <span class="edge" aria-hidden="true"></span>
+      <div class="transport">
+        <button
+          type="button"
+          class="livebtn skip"
+          onclick={() => skip(-SKIP_SECONDS)}
+          aria-label={ui.timelineSkipBack}
+        >
+          <Icon name="skipBack" size={18} />
+        </button>
+        <button
+          type="button"
+          class="livebtn playpause"
+          onclick={togglePlay}
+          aria-label={paused ? ui.timelinePlay : ui.timelinePause}
+        >
+          <Icon name={paused ? 'play' : 'pause'} size={20} />
+        </button>
+        <button
+          type="button"
+          class="livebtn skip"
+          onclick={() => skip(SKIP_SECONDS)}
+          aria-label={ui.timelineSkipForward}
+        >
+          <Icon name="skipForward" size={18} />
+        </button>
+      </div>
     {/if}
-    <span class="clock">
-      <Mono size={13} weight={500} color="var(--text)" letterSpacing={0.3}>{clock}</Mono>
-    </span>
+    <div class="meta">
+      {#if !previewOnly}
+        <button
+          type="button"
+          class="livebtn speed"
+          onclick={cycleSpeed}
+          aria-label={ui.timelineSpeed}
+        >
+          <Mono size={13} weight={500} color="var(--text)">{playbackRate}×</Mono>
+        </button>
+        <button
+          type="button"
+          class="livebtn"
+          onclick={toggleFullResMute}
+          aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
+        >
+          <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
+        </button>
+      {/if}
+      <span class="clock">
+        <Mono size={13} weight={500} color="var(--text)" letterSpacing={0.3}>{clock}</Mono>
+      </span>
+    </div>
   </div>
 
   <div class="scrub">
@@ -1169,6 +1266,27 @@
     align-items: center;
     gap: 14px;
   }
+  /* Left spacer (= the trailing meta cluster's flex weight) keeps the transport
+     cluster centred in the bar. */
+  .edge {
+    flex: 1 1 0;
+  }
+  /* Centred transport cluster: skip-back, play/pause, skip-forward. Tighter
+     internal gap than the bar gap so the three read as one unit. */
+  .transport {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+  /* Trailing meta cluster: speed chip, mute, clock — pinned to the right. */
+  .meta {
+    flex: 1 1 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+  }
   /* Mirrors MobileFocus .livebtn token styling. */
   .livebtn {
     width: 46px;
@@ -1191,6 +1309,18 @@
   }
   .livebtn:active {
     transform: translateY(1px);
+  }
+  /* Skip buttons sit a touch smaller than play/pause — they flank it. */
+  .livebtn.skip {
+    width: 40px;
+    height: 40px;
+  }
+  /* Speed chip: width follows the mono label (e.g. "0.5×") instead of a fixed
+     square. */
+  .livebtn.speed {
+    width: auto;
+    min-width: 46px;
+    padding: 0 12px;
   }
   /* Pin fill+stroke to currentColor so the filled-triangle play glyph and
      the two-bar pause glyph both render fully (same fix as MobileFocus). */

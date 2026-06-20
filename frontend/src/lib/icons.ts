@@ -66,6 +66,8 @@ export type IconName =
   | 'themeAuto'
   | 'grip'
   | 'edit'
+  | 'skipBack'
+  | 'skipForward'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -258,5 +260,11 @@ export const ICONS: Record<IconName, IconDef> = {
       'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7',
       'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'
     ]
-  }
+  },
+  // Skip-back / skip-forward: a rounded circular arrow (counter-clockwise for
+  // back, clockwise for forward), deliberately distinct from a double-triangle
+  // — that glyph is reserved for the VHS rewind/fast-forward pair. Arc plus an
+  // arrowhead at the open top corner.
+  skipBack: { paths: ['M3 12a9 9 0 1 0 3-6.7L3 8', 'M3 3v5h5'] },
+  skipForward: { paths: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'] }
 }

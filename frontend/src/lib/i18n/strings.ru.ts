@@ -244,6 +244,9 @@ export const ui = {
   timelineSeeOnTimeline: 'Показать на таймлайне',
   timelineMute: 'Звук выкл.',
   timelineUnmute: 'Звук вкл.',
+  timelineSkipBack: 'Назад на 10 секунд',
+  timelineSkipForward: 'Вперёд на 10 секунд',
+  timelineSpeed: 'Скорость воспроизведения',
   // theme (device-local)
   themeLabel: 'Тема',
   themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',
