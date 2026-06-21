@@ -17,7 +17,7 @@
 
 <script lang="ts">
   import { page } from '$app/state'
-  import { untrack, tick } from 'svelte'
+  import { untrack } from 'svelte'
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
@@ -982,7 +982,7 @@
   // Release. Idempotent (pointerup + pointercancel, or the auto-stop, can each
   // fire). Cancel the loop and settle full-res at the landed position via
   // handleScrubEnd (gated off internally when previewOnly).
-  async function vhsStop() {
+  function vhsStop() {
     if (vhsDir === 0) return
     if (vhsRaf !== null) {
       cancelAnimationFrame(vhsRaf)
@@ -990,40 +990,20 @@
     }
     vhsDir = 0
     vhsRate = 0
-    // At high rush rates pickClip thrashes activeClip every frame and the
-    // preview <video> never finishes loading any clip's metadata, so it stays
-    // on the frame primePreview painted at press time and previewReady is stale.
-    // Clearing previewReady / toggling the reactive src is NOT enough: removing
-    // and re-assigning a <video> src does not run the media load algorithm and
-    // does not clear the last decoded (press-time) frame, and when the landed
-    // clip equals the loaded file pickClip early-returns so nothing reloads at
-    // all. Force a real reload:
-    //   1. hide whatever the <video> holds (previewVisible needs previewReady),
-    //      so the .frame feed background posters the settle;
-    //   2. null activeClip / reset duration+prime so previewSrc derives to '';
-    //   3. await tick() so Svelte applies the src removal;
-    //   4. handleSeek(position) re-picks the landed clip (activeClip was null, so
-    //      pickClip re-assigns) -> previewSrc set to the landed clip;
-    //   5. await tick() to flush the landed src to the DOM;
-    //   6. previewEl.load() — THE FIX: run resource selection from scratch,
-    //      resetting readyState to HAVE_NOTHING so the press-time frame is
-    //      cleared immediately, then load the landed clip -> loadedmetadata ->
-    //      onMeta primes + seekPreview seeks to the landed position -> 'seeked'
-    //      flips previewReady true on the LANDED frame. This fires even when the
-    //      landed src equals the previously loaded src (the short-rush, same-file
-    //      case), which the reactive src toggle alone does not.
-    // On the open tail handleSeek drives the webp <img> (frameSrc); load() on
-    // the hidden <video> is harmless and the content-addressed <img> still shows
-    // the landed frame. A pending previewSeekRaf/frameRaf from the rush is safe:
-    // its callback no-ops once activeClip is null / previewDuration is 0.
-    previewReady = false
-    activeClip = null
-    previewDuration = 0
-    previewPrimed = false
-    await tick()
+    // Behave exactly like a manual scrub-release: leave the preview <video> on
+    // its loaded clip and just seek it to the landed position, then settle.
+    // (Nulling the clip / resetting duration / reloading the element only broke
+    // it — seekPreview early-returns while previewDuration is 0, so the landed
+    // frame never paints.) The one extra step over scrub-release: a rush almost
+    // always has a coalesced seekPreview rAF in flight at release, and its guard
+    // (previewSeekRaf !== null) would swallow the final landed seek — so clear
+    // the stale guard first. On closed hours this seeks the already-loaded
+    // <video>; on the open tail handleSeek drives the webp <img>.
+    if (previewSeekRaf !== null) {
+      cancelAnimationFrame(previewSeekRaf)
+      previewSeekRaf = null
+    }
     handleSeek(position)
-    await tick()
-    previewEl?.load()
     handleScrubEnd()
   }
 
