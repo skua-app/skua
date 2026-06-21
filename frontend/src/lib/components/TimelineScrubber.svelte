@@ -6,6 +6,10 @@
     windowStart: number
     windowEnd: number
     position: number
+    // Playable-domain bounds, used only to dim the out-of-footage track regions.
+    // Default to the viewport edges so no band shows when not provided.
+    playbackFloor?: number
+    liveEdge?: number
     onSeek: (tSec: number) => void
     // Pointer-drag lifecycle hooks. Fired only for pointer drags, NOT for
     // keyboard nudges — the consumer uses them to switch between the cheap
@@ -14,8 +18,17 @@
     onScrubEnd?: () => void
   }
 
-  let { hours, windowStart, windowEnd, position, onSeek, onScrubStart, onScrubEnd }: Props =
-    $props()
+  let {
+    hours,
+    windowStart,
+    windowEnd,
+    position,
+    playbackFloor = windowStart,
+    liveEdge = windowEnd,
+    onSeek,
+    onScrubStart,
+    onScrubEnd
+  }: Props = $props()
 
   // Width in CSS pixels, kept reactive via a ResizeObserver — same pattern
   // Segmented uses. Drives the label-decimation logic so narrow viewports
@@ -50,6 +63,11 @@
   // or the oldest footage. No drag override — during a drag the CONTENT moves,
   // not the playhead, so the round-tripped position drives it throughout.
   const playheadFraction = $derived(timeToFraction(position, windowStart, windowEnd))
+  // Out-of-footage bands: the recording floor / live edge mapped into the
+  // viewport. floorFrac > 0 means the left edge runs before recording started;
+  // liveFrac < 1 means the right edge runs past now. Each marks an empty span.
+  const floorFrac = $derived(timeToFraction(playbackFloor, windowStart, windowEnd))
+  const liveFrac = $derived(timeToFraction(liveEdge, windowStart, windowEnd))
 
   // Hour-tick model. Every hourStart in the window is a candidate label;
   // we drop labels until the per-label slice exceeds ~52px so HH:00 in
@@ -161,6 +179,13 @@
     {/each}
   </div>
 
+  {#if floorFrac > 0}
+    <span class="void" aria-hidden="true" style:left="0" style:width="{floorFrac * 100}%"></span>
+  {/if}
+  {#if liveFrac < 1}
+    <span class="void" aria-hidden="true" style:left="{liveFrac * 100}%" style:right="0"></span>
+  {/if}
+
   <div class="ticks" aria-hidden="true">
     {#each ticks as tick (tick.tSec)}
       <span class="tick" style:left="{tick.fraction * 100}%">
@@ -227,6 +252,25 @@
     height: 2px;
     background: var(--accent);
     opacity: 0.55;
+  }
+  /* Out-of-footage band: the span before recording started / beyond now. A
+     faint dark wash plus a low-opacity diagonal hatch so the empty edge reads
+     as "no footage here", not missing UI. Subtle — must not fight the cells or
+     the playhead, and never captures pointer events. */
+  .void {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.04) 0,
+        rgba(255, 255, 255, 0.04) 1px,
+        rgba(255, 255, 255, 0) 1px,
+        rgba(255, 255, 255, 0) 7px
+      ),
+      rgba(0, 0, 0, 0.28);
   }
   .ticks {
     position: absolute;
