@@ -16,6 +16,11 @@
     // preview-scrub layer (during drag) and full-res playback (on settle).
     onScrubStart?: () => void
     onScrubEnd?: () => void
+    // Zoom request: an ABSOLUTE desired viewport span in seconds (pinch
+    // distance ratio or wheel step). The consumer owns viewSpan and clamps it;
+    // the scrubber stays stateless about the span (reads windowEnd-windowStart
+    // as the current span).
+    onZoom?: (targetSpan: number) => void
   }
 
   let {
@@ -27,7 +32,8 @@
     liveEdge = windowEnd,
     onSeek,
     onScrubStart,
-    onScrubEnd
+    onScrubEnd,
+    onZoom
   }: Props = $props()
 
   // Width in CSS pixels, kept reactive via a ResizeObserver — same pattern
@@ -49,13 +55,26 @@
   })
 
   // dragging is $state so the playhead transition flips off in the same render
-  // pass a drag starts / ends. Filmstrip relative-drag bookkeeping is
-  // non-reactive: the pointer x and the playhead position captured at drag
-  // start, so a pan applies the finger delta to startPosition and the CONTENT
-  // moves under a centred playhead.
+  // pass a drag starts / ends — it is true for the WHOLE gesture, from the
+  // first pointer down to the last pointer up, covering both pan and pinch.
+  // Filmstrip relative-drag bookkeeping is non-reactive: the pointer x and the
+  // playhead position captured at drag start, so a pan applies the finger delta
+  // to startPosition and the CONTENT moves under a centred playhead.
   let dragging = $state(false)
   let startClientX = 0
   let startPosition = 0
+
+  // Multi-pointer model. activePointers maps pointerId -> clientX for every
+  // pointer currently down on the track, supporting BOTH the 1-finger pan and
+  // a 2-finger pinch zoom. pinching is a non-reactive flag (the zoom is
+  // delegated to onZoom, nothing in the template branches on it). While
+  // pinching, pan updates are suspended; pinchStartDist / pinchStartSpan are
+  // the |x0-x1| and the windowEnd-windowStart snapshot at the pinch start, so
+  // the requested span scales as pinchStartSpan * pinchStartDist / currentDist.
+  const activePointers = new Map<number, number>()
+  let pinching = false
+  let pinchStartDist = 0
+  let pinchStartSpan = 0
 
   const cells = $derived(hourCells(hours, windowStart, windowEnd))
   // The playhead follows the consumer-echoed position prop. In the filmstrip it
@@ -69,11 +88,21 @@
   const floorFrac = $derived(timeToFraction(playbackFloor, windowStart, windowEnd))
   const liveFrac = $derived(timeToFraction(liveEdge, windowStart, windowEnd))
 
-  // Hour-tick model. Every hourStart in the window is a candidate label;
-  // we drop labels until the per-label slice exceeds ~52px so HH:00 in
-  // JetBrains Mono never collides with its neighbour. The first and last
-  // ticks are always kept so the visible window is bracketed even after
-  // decimation.
+  // Tick model. The label STEP adapts to the zoom span so labels stay useful
+  // at every level: a ladder of round intervals (1m … 12h), choosing the
+  // smallest step whose value is at least span/10 — i.e. aim for ~10 labelled
+  // intervals across the viewport. Ticks land on multiples of that step. We
+  // then drop labels until the per-label slice exceeds ~52px so HH:MM in
+  // JetBrains Mono never collides with its neighbour. The first and last kept
+  // ticks bracket the visible window even after decimation.
+  const TICK_STEPS = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200]
+  function chooseTickStep(span: number): number {
+    const target = span / 10
+    for (const step of TICK_STEPS) {
+      if (step >= target) return step
+    }
+    return TICK_STEPS[TICK_STEPS.length - 1]!
+  }
   type Tick = { tSec: number; fraction: number; label: string }
   const hourLabelFmt = new Intl.DateTimeFormat([], {
     hour: '2-digit',
@@ -83,9 +112,10 @@
   const allTicks = $derived.by((): Tick[] => {
     if (windowEnd <= windowStart) return []
     const ticks: Tick[] = []
-    // First hour boundary at or after windowStart.
-    const firstHour = Math.ceil(windowStart / 3600) * 3600
-    for (let t = firstHour; t <= windowEnd; t += 3600) {
+    const step = chooseTickStep(windowEnd - windowStart)
+    // First step boundary at or after windowStart.
+    const first = Math.ceil(windowStart / step) * step
+    for (let t = first; t <= windowEnd; t += step) {
       ticks.push({
         tSec: t,
         fraction: timeToFraction(t, windowStart, windowEnd),
@@ -108,36 +138,96 @@
     return out
   })
 
-  // Pointer-Events filmstrip drag. setPointerCapture means we keep receiving
-  // pointermove even after the finger/cursor leaves the track bounds;
-  // touch-action: none on the track (CSS) cancels the page's horizontal-pan
-  // gesture without resorting to non-passive listeners. The drag is a RELATIVE
-  // pan from the press point — a tap does not seek (no jump); only movement
-  // pans the content under the centred playhead.
+  // Distance between the two active pointers (used by the pinch gesture).
+  function pointerDistance(): number {
+    const xs = [...activePointers.values()]
+    if (xs.length < 2) return 0
+    return Math.abs(xs[0]! - xs[1]!)
+  }
+  // Arm a relative pan from the given clientX: capture the press point and the
+  // current playhead so onPointerMove applies the finger delta to startPosition
+  // and the CONTENT moves under the centred playhead.
+  function armPan(clientX: number) {
+    startClientX = clientX
+    startPosition = position
+  }
+
+  // Pointer-Events filmstrip drag + pinch zoom. setPointerCapture means we keep
+  // receiving pointermove even after the finger/cursor leaves the track bounds;
+  // touch-action: none on the track (CSS) cancels the page's pan/zoom gestures
+  // without resorting to non-passive listeners. A 1-finger drag is a RELATIVE
+  // pan from the press point — a tap does not seek (no jump). A 2-finger gesture
+  // pinches the viewport span via onZoom while pan is suspended.
   function onPointerDown(e: PointerEvent) {
     if (!trackEl) return
-    dragging = true
-    startClientX = e.clientX
-    startPosition = position
     trackEl.setPointerCapture(e.pointerId)
-    onScrubStart?.()
+    activePointers.set(e.pointerId, e.clientX)
+    // First pointer of the gesture starts the scrub lifecycle.
+    if (activePointers.size === 1) {
+      dragging = true
+      onScrubStart?.()
+    }
+    if (activePointers.size === 2) {
+      // Second finger down: begin a pinch and snapshot its baseline.
+      pinching = true
+      pinchStartDist = pointerDistance()
+      pinchStartSpan = windowEnd - windowStart
+    } else if (activePointers.size === 1 && !pinching) {
+      armPan(e.clientX)
+    }
   }
   function onPointerMove(e: PointerEvent) {
-    if (!dragging || !trackEl) return
-    const w = trackWidth || trackEl.clientWidth
-    if (w <= 0) return
-    const span = windowEnd - windowStart
-    // Drag right -> content moves right -> earlier time -> position decreases.
-    // (If device-test shows the direction inverted, flip this one sign.)
-    const target = startPosition - ((e.clientX - startClientX) / w) * span
-    onSeek(Math.round(target))
+    if (!trackEl || !activePointers.has(e.pointerId)) return
+    activePointers.set(e.pointerId, e.clientX)
+    if (pinching && activePointers.size === 2) {
+      // Fingers apart -> currentDist up -> smaller span -> zoom in.
+      const currentDist = pointerDistance()
+      if (currentDist > 0) onZoom?.((pinchStartSpan * pinchStartDist) / currentDist)
+      return
+    }
+    if (!pinching && activePointers.size === 1) {
+      const w = trackWidth || trackEl.clientWidth
+      if (w <= 0) return
+      const span = windowEnd - windowStart
+      // Drag right -> content moves right -> earlier time -> position decreases.
+      // (If device-test shows the direction inverted, flip this one sign.)
+      const target = startPosition - ((e.clientX - startClientX) / w) * span
+      onSeek(Math.round(target))
+    }
   }
   function onPointerUp(e: PointerEvent) {
-    if (!dragging) return
-    dragging = false
+    if (!activePointers.has(e.pointerId)) return
     trackEl?.releasePointerCapture(e.pointerId)
-    onScrubEnd?.()
+    activePointers.delete(e.pointerId)
+    if (activePointers.size === 1 && pinching) {
+      // Pinch dropped to one finger: end the pinch and RE-ARM the pan from the
+      // remaining pointer so a pinch can flow back into a pan without a jump.
+      pinching = false
+      const [clientX] = activePointers.values()
+      armPan(clientX ?? startClientX)
+    } else if (activePointers.size === 0) {
+      pinching = false
+      dragging = false
+      onScrubEnd?.()
+    }
   }
+
+  // Wheel zoom (desktop). Multiplicative step around the centred playhead:
+  // scroll down/away -> larger span -> zoom out. The parent clamps to
+  // [MIN_SPAN, MAX_SPAN]. The handler is attached non-passively in an $effect
+  // below so preventDefault actually suppresses page scroll.
+  function onWheel(e: WheelEvent) {
+    if (!onZoom) return
+    e.preventDefault()
+    const span = windowEnd - windowStart
+    onZoom(span * (e.deltaY > 0 ? 1.15 : 1 / 1.15))
+  }
+  $effect(() => {
+    const el = trackEl
+    if (!el) return
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  })
 
   // Keyboard nudge: ±60s per arrow press, ±300s with Shift. Stays within
   // the window so the playhead never advertises a seek target outside the

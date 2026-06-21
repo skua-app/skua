@@ -38,6 +38,10 @@
   // Scrubber window: a fixed 3-hour span per camera. Full-res chunk: 10 min.
   const WINDOW_SECONDS = 3 * 3600
   const CHUNK_SECONDS = 10 * 60
+  // Zoom bounds for the scrubber viewport span (pinch / wheel). 10 min keeps a
+  // useful minimum context; 12 h is the widest pan that still resolves cells.
+  const MIN_SPAN = 10 * 60
+  const MAX_SPAN = 12 * 3600
   // Prefetch the next chunk into the idle buffer once the active playhead is
   // within this many seconds of the active chunk's end.
   const PREFETCH_LEAD_SECONDS = 10
@@ -955,6 +959,15 @@
     ensurePlaybackAt(position)
   }
 
+  // Zoom: the scrubber requests an absolute target span (pinch distance ratio
+  // or wheel step). We clamp to [MIN_SPAN, MAX_SPAN] and round to a whole
+  // second. Because windowStart/windowEnd are derived as position ± viewSpan/2
+  // and the playhead is centred, changing viewSpan zooms around the playhead
+  // for free — position does not move, so no chunk refetch is triggered.
+  function onZoom(targetSpan: number) {
+    viewSpan = Math.round(Math.max(MIN_SPAN, Math.min(MAX_SPAN, targetSpan)))
+  }
+
   // Play button. From scrubbing, or when the playhead is outside the loaded
   // chunk, settle+play; otherwise toggle the loaded chunk.
   function togglePlay() {
@@ -1376,6 +1389,7 @@
       onSeek={handleSeek}
       onScrubStart={handleScrubStart}
       onScrubEnd={handleScrubEnd}
+      {onZoom}
     />
 
     {#if timelineStore.loading}
