@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fractionToTime, hourCells, timeToFraction, type TimelineHour } from '$lib/timeline'
+  import { hourCells, timeToFraction, type TimelineHour } from '$lib/timeline'
 
   type Props = {
     hours: TimelineHour[]
@@ -35,26 +35,21 @@
     return () => ro.disconnect()
   })
 
-  // Drag state lives above the derived display fraction so the derived
-  // can read it directly (declaration order matters under
-  // verbatimModuleSyntax + strict $state checks). dragging is $state so
-  // displayFraction recomputes when a drag starts / ends and the
-  // playhead transition flips off in the same render pass.
+  // dragging is $state so the playhead transition flips off in the same render
+  // pass a drag starts / ends. Filmstrip relative-drag bookkeeping is
+  // non-reactive: the pointer x and the playhead position captured at drag
+  // start, so a pan applies the finger delta to startPosition and the CONTENT
+  // moves under a centred playhead.
   let dragging = $state(false)
-  let dragFraction = $state<number | null>(null)
+  let startClientX = 0
+  let startPosition = 0
 
   const cells = $derived(hourCells(hours, windowStart, windowEnd))
-  // Resting playhead follows the consumer-echoed position prop. Drives
-  // keyboard / programmatic seeks and idle playback in 2b-iii.
+  // The playhead follows the consumer-echoed position prop. In the filmstrip it
+  // sits ~centre and slides toward an edge only when the viewport pins near live
+  // or the oldest footage. No drag override — during a drag the CONTENT moves,
+  // not the playhead, so the round-tripped position drives it throughout.
   const playheadFraction = $derived(timeToFraction(position, windowStart, windowEnd))
-  // During a drag we render the LIVE finger fraction instead of the
-  // round-tripped position — iOS in particular re-echoes the prop a frame
-  // or two late, so left-on-prop was visibly trailing the finger by
-  // 0.5-1s. dragFraction is null when not dragging so the displayed
-  // fraction collapses to the prop-driven derivation above.
-  const displayFraction = $derived(
-    dragging && dragFraction !== null ? dragFraction : playheadFraction
-  )
 
   // Hour-tick model. Every hourStart in the window is a candidate label;
   // we drop labels until the per-label slice exceeds ~52px so HH:00 in
@@ -95,40 +90,33 @@
     return out
   })
 
-  // Pointer-Events drag-scrub. setPointerCapture means we keep receiving
+  // Pointer-Events filmstrip drag. setPointerCapture means we keep receiving
   // pointermove even after the finger/cursor leaves the track bounds;
-  // touch-action: none on the track (CSS) cancels the page's
-  // horizontal-pan gesture without resorting to non-passive listeners.
-  // (dragging / dragFraction declared above so displayFraction can read
-  // them in declaration order.)
-  function fractionFromEvent(e: PointerEvent): number {
-    const el = trackEl
-    if (!el) return 0
-    const rect = el.getBoundingClientRect()
-    if (rect.width <= 0) return 0
-    const f = (e.clientX - rect.left) / rect.width
-    return f < 0 ? 0 : f > 1 ? 1 : f
-  }
-  function seekAt(e: PointerEvent) {
-    const f = fractionFromEvent(e)
-    dragFraction = f
-    onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
-  }
+  // touch-action: none on the track (CSS) cancels the page's horizontal-pan
+  // gesture without resorting to non-passive listeners. The drag is a RELATIVE
+  // pan from the press point — a tap does not seek (no jump); only movement
+  // pans the content under the centred playhead.
   function onPointerDown(e: PointerEvent) {
     if (!trackEl) return
     dragging = true
+    startClientX = e.clientX
+    startPosition = position
     trackEl.setPointerCapture(e.pointerId)
-    seekAt(e)
     onScrubStart?.()
   }
   function onPointerMove(e: PointerEvent) {
-    if (!dragging) return
-    seekAt(e)
+    if (!dragging || !trackEl) return
+    const w = trackWidth || trackEl.clientWidth
+    if (w <= 0) return
+    const span = windowEnd - windowStart
+    // Drag right -> content moves right -> earlier time -> position decreases.
+    // (If device-test shows the direction inverted, flip this one sign.)
+    const target = startPosition - ((e.clientX - startClientX) / w) * span
+    onSeek(Math.round(target))
   }
   function onPointerUp(e: PointerEvent) {
     if (!dragging) return
     dragging = false
-    dragFraction = null
     trackEl?.releasePointerCapture(e.pointerId)
     onScrubEnd?.()
   }
@@ -186,7 +174,7 @@
     class="playhead"
     class:dragging
     aria-hidden="true"
-    style:transform="translateX({displayFraction * trackWidth - 1}px)"
+    style:transform="translateX({playheadFraction * trackWidth - 1}px)"
   >
     <span class="playhead-line"></span>
     <span class="playhead-handle"></span>

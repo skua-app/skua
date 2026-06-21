@@ -60,30 +60,51 @@
   const camId = $derived(page.params.id ?? '')
   const camera = $derived(camerasStore.cameras.find((c) => c.id === camId) ?? null)
 
-  // Scrubber VIEWPORT, captured ONCE per camId (in the effect below). start is
-  // the oldest edge; end is wall-clock now at capture time. These are the
-  // visible window of the scrubber ONLY — every PLAYBACK bound lives in
-  // liveEdge/playbackFloor below. Today the window is the fixed 3h captured on
-  // entry, so the two domains coincide; A-1/A-2 make the viewport movable, at
-  // which point windowEnd no longer equals the live edge.
-  let windowStart = $state(0)
-  let windowEnd = $state(0)
+  // Visible span of the scrubber viewport, in wall-clock seconds. Fixed at the
+  // 3h window this phase; A-2 makes it adjustable (zoom). The viewport itself
+  // (windowStart/windowEnd) is DERIVED from the playhead + this span below, so
+  // the filmstrip pans under a centred playhead instead of the playhead
+  // chasing a fixed window.
+  let viewSpan = $state(WINDOW_SECONDS)
 
   // PLAYBACK-domain bounds — the recording extent full-res playback may span,
-  // DISTINCT from the windowStart/windowEnd viewport. In the current fixed-window
-  // model liveEdge === windowEnd and playbackFloor === windowStart, so playback
-  // behaves exactly as before; once the viewport becomes movable these diverge.
+  // DISTINCT from the derived windowStart/windowEnd viewport. The viewport pans
+  // freely within this domain; these bounds gate what can actually load + play.
   // liveEdge: the newest playable wall-clock second (capture-time now). Always
   // the true now, even on a deep-link whose viewport end sits in the past.
   let liveEdge = $state(0)
-  // playbackFloor: the oldest playable wall-clock second. Today it equals the
-  // captured window start (byte-for-byte with the old windowStart playback
-  // clamp); A-1/A-2 will widen it to the true recording extent.
+  // playbackFloor: the oldest playable wall-clock second. Today it is ~3h before
+  // live (or 1.5h before a past deep-link target); A-1/A-2 will widen it to the
+  // true recording extent.
   let playbackFloor = $state(0)
 
   // Wall-clock playhead (unix sec). Driven by drag (preview) or full-res
-  // timeupdate (playback); consumed by the scrubber + the clock readout.
+  // timeupdate (playback); consumed by the scrubber + the clock readout. In the
+  // filmstrip model the playhead is the anchor: the viewport is derived FROM it.
   let position = $state(0)
+
+  // Scrubber VIEWPORT, DERIVED from the playhead. A horizontal drag pans the
+  // content under a centred playhead (filmstrip), so the viewport is a fixed
+  // span centred on position, shift-clamped so it never runs past the playable
+  // edges: it pins to liveEdge near live (the playhead slides right) and to
+  // playbackFloor near the oldest footage (the playhead slides left). These
+  // stay VIEWPORT-only — playback bounds are liveEdge/playbackFloor (A-0).
+  const viewport = $derived.by(() => {
+    const span = Math.min(viewSpan, Math.max(1, liveEdge - playbackFloor))
+    let end = position + span / 2
+    let start = position - span / 2
+    if (end > liveEdge) {
+      end = liveEdge
+      start = liveEdge - span
+    }
+    if (start < playbackFloor) {
+      start = playbackFloor
+      end = playbackFloor + span
+    }
+    return { start, end }
+  })
+  const windowStart = $derived(viewport.start)
+  const windowEnd = $derived(viewport.end)
 
   // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
   // the full-res chunk drives it.
@@ -123,6 +144,17 @@
   // Gate previewSrc to '' on the open tail (no mp4 to scrub there); the webp
   // frame layer drives the picture. Closed hours keep the clip-video src.
   const previewSrc = $derived(activeClip && !isOpenTail ? activeClip.src : '')
+
+  // The preview-clip list FOLLOWS the playhead as it pans: we fetch a span
+  // around the playhead (CLIP_LOAD_SPAN wide) and refetch — debounced — when the
+  // playhead nears a loaded edge, so the scrub preview stays correct anywhere in
+  // the recording without refetching on every move. loadedClipsStart/End bracket
+  // the last fetched list (null until the first load). clipFollowTimer is the
+  // single trailing-edge debounce handle.
+  const clipLoadSpan = $derived(viewSpan * 2)
+  let loadedClipsStart = $state<number | null>(null)
+  let loadedClipsEnd = $state<number | null>(null)
+  let clipFollowTimer: ReturnType<typeof setTimeout> | null = null
 
   // Open-tail webp frame layer. frames is the tail's frame list (sorted by ts);
   // framesKey keys which tail span's frames are loaded (load once per tail +
@@ -285,12 +317,14 @@
     !fullResVisible && !framesVisible && previewSrc !== '' && previewReady
   )
 
-  // On camId change: capture a fresh window, reset to scrubbing, drop any
-  // loaded chunk, and pull the summary for the scrubber cells. An optional
-  // ?t=<unix> deep-link (from an event's "See on timeline") centres a 3h
-  // window on t with the playhead at t; without it the window is the last 3h
-  // resting at the oldest edge. Read the raw t param in the tracked scope so a
-  // same-camera deep-link with a new t re-captures the window.
+  // On camId change: capture the playable bounds, place the playhead, reset to
+  // scrubbing, drop any loaded chunk, and pull the summary for the scrubber
+  // cells. The viewport is derived from the playhead, so we only set position:
+  // an optional ?t=<unix> deep-link (from an event's "See on timeline") lands
+  // the playhead at t (the shift-clamp centres the viewport on it); without it
+  // the playhead rests centred in the last viewSpan up to live, then autoplays
+  // forward. Read the raw t param in the tracked scope so a same-camera
+  // deep-link with a new t re-captures.
   const tParam = $derived(page.url.searchParams.get('t'))
   // Fires the heavy reset + one-shot autoplay once per real (camId, t) change.
   // The effect also re-runs on unrelated page.url churn (tParam is derived from
@@ -307,35 +341,25 @@
       lastCaptureKey = key
       const now = Math.floor(Date.now() / 1000)
       // PLAYBACK live edge is the true capture-time now REGARDLESS of the
-      // deep-link branch: the deep-link path can set windowEnd (the VIEWPORT
-      // end) to a past value, but full-res must still play/stop at real now.
+      // deep-link branch: a deep-link's derived viewport end may sit in the
+      // past, but full-res must still play/stop at real now.
       liveEdge = now
       // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
       // the default last-3h window, never NaN.
       const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
       if (Number.isFinite(tSec)) {
-        let end = tSec + WINDOW_SECONDS / 2
-        let start = tSec - WINDOW_SECONDS / 2
-        let pos = tSec
-        // Keep the window from running into the future: if the centred window
-        // overshoots now, shift it back to end at now, preserving the 3h span.
-        if (end > now) {
-          end = now
-          start = now - WINDOW_SECONDS
-          pos = pos < start ? start : pos > end ? end : pos
-        }
-        windowEnd = end
-        windowStart = start
-        position = pos
-        // Today playbackFloor tracks the captured window start (byte-for-byte
-        // with the old windowStart playback clamp); A-1/A-2 widen it to the
-        // true recording extent.
-        playbackFloor = start
+        // Deep-link: floor the playable domain 1.5h before the target, but never
+        // newer than 3h before live so a near-live deep-link still pans the last
+        // 3h. The viewport is derived, so we only place the playhead at t,
+        // clamped into the playable domain; the shift-clamp does the centring.
+        // (playbackFloor as A-0; A-1/A-2 widen it to the true recording extent.)
+        playbackFloor = Math.min(tSec - WINDOW_SECONDS / 2, now - WINDOW_SECONDS)
+        position = tSec < playbackFloor ? playbackFloor : tSec > liveEdge ? liveEdge : tSec
       } else {
-        windowEnd = now
-        windowStart = now - WINDOW_SECONDS
-        position = windowStart
+        // Default: rest the playhead centred in the last viewSpan up to live so
+        // the viewport shows the last 3h; autoplay then runs it forward to live.
         playbackFloor = now - WINDOW_SECONDS
+        position = liveEdge - viewSpan / 2
       }
       mode = 'scrubbing'
       // Reset BOTH buffers and the swap state.
@@ -362,9 +386,16 @@
       scrubActive = false
       decodeProven = false
       // Fresh camera: drop the loaded clips/clip, then load the clip list
-      // for the window and pick the clip at the oldest window edge.
+      // around the playhead and pick the clip there.
       clips = []
       activeClip = null
+      // Reset the clip-follow window + cancel any pending debounced refetch.
+      loadedClipsStart = null
+      loadedClipsEnd = null
+      if (clipFollowTimer !== null) {
+        clearTimeout(clipFollowTimer)
+        clipFollowTimer = null
+      }
       // Drop any open-tail frame state captured for the previous camera.
       frames = []
       framesKey = null
@@ -373,7 +404,7 @@
       // settled position, so a stale previous-camera frame can't flash.
       previewReady = false
       void timelineStore.load(id)
-      void loadClips(id)
+      void loadClipsAround(position)
       // Resolve decode capability, then gate the one-shot entry autoplay on it:
       // play full-res only when this device is known to decode the recording
       // codec. While capability is still pending we stay on the preview layer
@@ -416,22 +447,52 @@
     }
   }
 
-  // Load the preview-clips list for the current window and pick the clip at
-  // the playhead. Guard against a stale camId — an in-flight list for a
-  // camera the user has navigated away from must not overwrite the new one.
-  // On error the list stays empty (blank preview; scrubber / clock / full-res
-  // still work).
-  async function loadClips(id: string) {
+  // Load the preview-clips list spanning CLIP_LOAD_SPAN around center (clamped
+  // to the playable domain) and pick the clip at the playhead. Guard against a
+  // stale camId — an in-flight list for a camera the user has navigated away
+  // from must not overwrite the new one. On resolve, record the loaded span so
+  // the follow effect knows when the playhead nears an edge. On error the list
+  // stays empty (blank preview; scrubber / clock / full-res still work).
+  async function loadClipsAround(center: number) {
+    const id = camId
+    const half = clipLoadSpan / 2
+    const lo = Math.max(playbackFloor, center - half)
+    const hi = Math.min(liveEdge, center + half)
     try {
-      const list = await fetchPreviewClips(id, windowStart, windowEnd)
+      const list = await fetchPreviewClips(id, lo, hi)
       if (camId !== id) return
       clips = [...list].sort((a, b) => a.start - b.start)
+      loadedClipsStart = lo
+      loadedClipsEnd = hi
     } catch {
       if (camId !== id) return
       clips = []
     }
     pickClip(position)
   }
+
+  // Position-following clip refetch (debounced, trailing edge). When the
+  // playhead pans within viewSpan/2 of either loaded edge — and that edge isn't
+  // already pinned at the playable bound — schedule a refetch around the new
+  // position after a short settle. Tracks position; a cheap no-op until near an
+  // edge, so it does NOT refetch on every timeupdate. Each new schedule clears
+  // the prior timer (single trailing debounce), so a pan/rush coalesces into one
+  // fetch when the finger settles.
+  $effect(() => {
+    const pos = position
+    const lo = loadedClipsStart
+    const hi = loadedClipsEnd
+    if (lo === null || hi === null) return
+    const margin = viewSpan / 2
+    const nearStart = pos - lo < margin && lo > playbackFloor
+    const nearEnd = hi - pos < margin && hi < liveEdge
+    if (!nearStart && !nearEnd) return
+    if (clipFollowTimer !== null) clearTimeout(clipFollowTimer)
+    clipFollowTimer = setTimeout(() => {
+      clipFollowTimer = null
+      void loadClipsAround(position)
+    }, 250)
+  })
 
   // One-time decoder prime: a muted play()/pause() cycle so subsequent
   // currentTime seeks actually decode and paint. No-op once primed. If
@@ -876,7 +937,10 @@
   // pickClip swaps the preview file only on a clip-boundary crossing;
   // otherwise it is a no-op comparison.
   function handleSeek(t: number) {
-    const clamped = t < windowStart ? windowStart : t > windowEnd ? windowEnd : t
+    // Filmstrip: the viewport is derived from position, so clamping position to
+    // the viewport would be circular. The playhead is bounded by what's
+    // PLAYABLE; the viewport then follows it.
+    const clamped = t < playbackFloor ? playbackFloor : t > liveEdge ? liveEdge : t
     position = clamped
     chunkEnded = false
     pickClip(position)
@@ -991,8 +1055,8 @@
   // feed it to the SAME preview path the scrubber's onSeek uses, so closed-hour
   // clip seeks and open-tail webp frames behave identically to a manual drag.
   // dt is capped at 0.1s so a stutter / backgrounded tab can't fling the
-  // playhead. Auto-stops when the playhead reaches the window edge it travels
-  // toward.
+  // playhead. Auto-stops when the playhead reaches the PLAYABLE edge it travels
+  // toward (the viewport follows the playhead, so it pins there).
   function vhsTick(ts: number) {
     if (vhsDir === 0) return
     const dt = Math.min(Math.max((ts - vhsLastTs) / 1000, 0), 0.1)
@@ -1000,8 +1064,8 @@
     const rate = rushRateFor(ts - vhsHoldStart)
     vhsRate = rate
     const next = position + vhsDir * rate * dt
-    if (vhsDir > 0 ? next >= windowEnd : next <= windowStart) {
-      handleSeek(vhsDir > 0 ? windowEnd : windowStart)
+    if (vhsDir > 0 ? next >= liveEdge : next <= playbackFloor) {
+      handleSeek(vhsDir > 0 ? liveEdge : playbackFloor)
       vhsStop()
       return
     }
