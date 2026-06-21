@@ -869,3 +869,28 @@ export async function fetchPreviewFrameList(
     `/api/cameras/${encodeURIComponent(camId)}/preview-frame-list?start=${start}&end=${end}`
   )
 }
+
+// ReviewSegment is one Frigate review segment (grouped alert / detection
+// activity) reduced to what the scrubber's activity lane needs: its severity
+// and wall-clock span. end is null while the segment is still active — the
+// lane draws an active segment out to the live edge.
+export type ReviewSegment = {
+  id: string
+  severity: 'alert' | 'detection'
+  start: number
+  end: number | null
+}
+
+// fetchReview returns the review segments overlapping [start,end) for a
+// camera (the BFF widens the upstream lower bound by a fixed lookback to
+// catch a segment that started just before the window). On an empty window
+// the array is empty; callers degrade to a blank activity lane.
+export async function fetchReview(
+  camId: string,
+  start: number,
+  end: number
+): Promise<ReviewSegment[]> {
+  return apiFetch<ReviewSegment[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/review?start=${start}&end=${end}`
+  )
+}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { hourCells, timeToFraction, type TimelineHour } from '$lib/timeline'
+  import type { ReviewSegment } from '$lib/api'
 
   type Props = {
     hours: TimelineHour[]
@@ -10,6 +11,10 @@
     // Default to the viewport edges so no band shows when not provided.
     playbackFloor?: number
     liveEdge?: number
+    // Review activity segments (grouped alert / detection) rendered as a thin
+    // lane along the top of the bar. An active segment (end null) draws out to
+    // the live edge. Default empty so the lane is simply absent when omitted.
+    reviews?: ReviewSegment[]
     onSeek: (tSec: number) => void
     // Pointer-drag lifecycle hooks. Fired only for pointer drags, NOT for
     // keyboard nudges — the consumer uses them to switch between the cheap
@@ -30,6 +35,7 @@
     position,
     playbackFloor = windowStart,
     liveEdge = windowEnd,
+    reviews = [],
     onSeek,
     onScrubStart,
     onScrubEnd,
@@ -87,6 +93,23 @@
   // liveFrac < 1 means the right edge runs past now. Each marks an empty span.
   const floorFrac = $derived(timeToFraction(playbackFloor, windowStart, windowEnd))
   const liveFrac = $derived(timeToFraction(liveEdge, windowStart, windowEnd))
+
+  // Review-lane bands: each segment mapped onto the viewport. An active
+  // segment (end null) extends to the live edge. timeToFraction clamps to
+  // [0,1], so a segment fully outside the viewport collapses to zero width and
+  // is dropped (x1 <= x0); left/width are kept in % so the CSS scales with the
+  // track. Severity selects the colour (alert vs detection) in the template.
+  type ReviewBand = { id: string; severity: ReviewSegment['severity']; x0: number; width: number }
+  const reviewBands = $derived.by((): ReviewBand[] => {
+    const out: ReviewBand[] = []
+    for (const seg of reviews) {
+      const x0 = timeToFraction(seg.start, windowStart, windowEnd)
+      const x1 = timeToFraction(seg.end ?? liveEdge, windowStart, windowEnd)
+      if (x1 <= x0) continue
+      out.push({ id: seg.id, severity: seg.severity, x0, width: x1 - x0 })
+    }
+    return out
+  })
 
   // Tick model. The label STEP adapts to the zoom span AND the available width
   // so labels stay useful at every level: a ladder of round intervals
@@ -252,7 +275,6 @@
     {#each cells as cell (cell.x0)}
       <span
         class="cell"
-        class:has-events={cell.events > 0}
         style:left="{cell.x0 * 100}%"
         style:width="{(cell.x1 - cell.x0) * 100}%"
         style:--cell-fraction={cell.fraction}
@@ -266,6 +288,16 @@
   {#if liveFrac < 1}
     <span class="void" aria-hidden="true" style:left="{liveFrac * 100}%" style:right="0"></span>
   {/if}
+
+  <div class="review-lane" aria-hidden="true">
+    {#each reviewBands as band (band.id)}
+      <span
+        class="review {band.severity}"
+        style:left="{band.x0 * 100}%"
+        style:width="{band.width * 100}%"
+      ></span>
+    {/each}
+  </div>
 
   <div class="ticks" aria-hidden="true">
     {#each ticks as tick (tick.tSec)}
@@ -322,17 +354,32 @@
     background: var(--accent-soft);
     opacity: calc(var(--cell-fraction) * 0.9);
   }
-  /* events>0: a very faint top stripe in --accent. Keep this minimal —
-     real review markers land in a later phase. */
-  .cell.has-events::after {
-    content: '';
+  /* Review activity lane: a thin strip along the top of the bar carrying the
+     grouped alert / detection segments. pointer-events:none so the drag-scrub
+     surface underneath is untouched; it sits below the playhead in the DOM so
+     the handle still draws on top. */
+  .review-lane {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 2px;
+    height: 6px;
+    pointer-events: none;
+  }
+  .review {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    /* Keep a tiny segment visible rather than collapsing to a hairline. */
+    min-width: 3px;
+    border-radius: 1px;
+  }
+  .review.alert {
+    background: var(--warn);
+  }
+  .review.detection {
     background: var(--accent);
-    opacity: 0.55;
+    opacity: 0.7;
   }
   /* Out-of-footage band: the span before recording started / beyond now. A
      faint dark wash plus a low-opacity diagonal hatch so the empty edge reads
