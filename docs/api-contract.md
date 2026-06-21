@@ -793,6 +793,36 @@ type CameraOrderErrorBody = {
 //   Errors mirror the VOD path: invalid_id (400), not_found (404),
 //   upstream_timeout (504), upstream_error (502).
 
+// GET /api/cameras/{id}/review?start=&end=
+//   The windowed list of Frigate review segments (grouped alert / detection
+//   activity) overlapping [start,end), reshaped into the lean shape the
+//   recording-timeline scrubber renders as a thin activity lane along the top
+//   of the bar. The BFF queries Frigate's /api/review with cameras={id},
+//   after=start-1800 (a fixed 30-min lookback — Frigate filters review items
+//   on start_time, so the lookback catches a segment that started just before
+//   the window but overlaps it; a rare, very-long active segment that started
+//   more than 30 min before the left edge may still be missed there),
+//   before=end, and limit=500, then re-emits an array, one entry per segment:
+//
+//     [ { "id": <string>, "severity": <string>,
+//         "start": <float64>, "end": <float64|null> }, ... ]
+//
+//   severity is Frigate's value passed through ("alert" | "detection"). start
+//   is the segment's wall-clock start (unix seconds, subseconds preserved).
+//   end is null while the segment is still active (Frigate's end_time null) —
+//   the FE draws an active segment out to the live edge.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store.
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - any other upstream failure       → 502 upstream_error
+
 // GET /api/cameras/{id}/preview-frame-list?start=&end=
 //   The chronological list of preview FRAMES Frigate has rendered for
 //   [start,end), each rewritten to the BFF /preview-frame proxy. The
