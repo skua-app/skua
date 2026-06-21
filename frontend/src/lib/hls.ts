@@ -24,7 +24,14 @@ export function canDecodeRecording(
   codecs: string,
   video: Pick<HTMLVideoElement, 'canPlayType'>
 ): boolean {
-  const type = `video/mp4; codecs="${codecs}"`
+  // Normalise the HEVC sample-entry tag hev1 -> hvc1 before probing. Safari's
+  // canPlayType REJECTS "hev1" (returns '') and accepts only "hvc1", yet the
+  // player retags hev1 -> hvc1 on the fly for actual playback — so the gate
+  // must probe hvc1 to match what really plays. A device with no HEVC decoder
+  // (e.g. Redmi via MediaSource.isTypeSupported) still returns false for hvc1,
+  // so the gate stays correct everywhere; this only fixes Safari's hev1
+  // rejection. Only the HEVC video token carries "hev1" — mp4a/avc1 never do.
+  const type = `video/mp4; codecs="${codecs.replaceAll('hev1', 'hvc1')}"`
   if (supportsNativeHls(video)) {
     return video.canPlayType(type) !== ''
   }

@@ -41,4 +41,17 @@ describe('canDecodeRecording (native path)', () => {
   it('returns false when the native engine cannot play the codec', () => {
     expect(canDecodeRecording('hev1.1.6.L150.00,mp4a.40.2', nativeCodecStub(''))).toBe(false)
   })
+
+  it('accepts a hev1 codecs string by normalising it to hvc1 (Safari)', () => {
+    // Safari rejects the hev1 sample-entry tag (returns '') but accepts hvc1.
+    // canDecodeRecording must retag hev1 -> hvc1 before probing so the gate
+    // matches what the player actually plays.
+    const safariStub: Pick<HTMLVideoElement, 'canPlayType'> = {
+      canPlayType: (type: string) =>
+        type === 'application/vnd.apple.mpegurl'
+          ? 'maybe'
+          : ((type.includes('hvc1') ? 'probably' : '') as CanPlayTypeResult)
+    }
+    expect(canDecodeRecording('hev1.1.6.L150.00,mp4a.40.2', safariStub)).toBe(true)
+  })
 })

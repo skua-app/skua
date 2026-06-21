@@ -88,18 +88,22 @@
   const floorFrac = $derived(timeToFraction(playbackFloor, windowStart, windowEnd))
   const liveFrac = $derived(timeToFraction(liveEdge, windowStart, windowEnd))
 
-  // Tick model. The label STEP adapts to the zoom span so labels stay useful
-  // at every level: a ladder of round intervals (1m … 12h), choosing the
-  // smallest step whose value is at least span/10 — i.e. aim for ~10 labelled
-  // intervals across the viewport. Ticks land on multiples of that step. We
-  // then drop labels until the per-label slice exceeds ~52px so HH:MM in
-  // JetBrains Mono never collides with its neighbour. The first and last kept
-  // ticks bracket the visible window even after decimation.
+  // Tick model. The label STEP adapts to the zoom span AND the available width
+  // so labels stay useful at every level: a ladder of round intervals
+  // (1m … 12h), choosing the smallest entry whose count across the viewport
+  // (span / step) fits the pixel budget (maxLabels = trackWidth / minPx). Ticks
+  // land on ABSOLUTE multiples of that step and are rendered directly — NO
+  // index-based decimation. Decimating by array index would shift which
+  // absolute minutes survive as the window pans, making the labels jitter
+  // between e.g. :41/:43 and :40/:42; absolute marks slide smoothly instead.
   const TICK_STEPS = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200]
-  function chooseTickStep(span: number): number {
-    const target = span / 10
+  const TICK_MIN_PX = 56
+  function chooseTickStep(span: number, width: number): number {
+    // Before the ResizeObserver fires width is 0; fall back to ~10 labels' worth
+    // of budget so the step is sane rather than dividing by a zero label count.
+    const maxLabels = width > 0 ? Math.max(1, Math.floor(width / TICK_MIN_PX)) : 10
     for (const step of TICK_STEPS) {
-      if (step >= target) return step
+      if (span / step <= maxLabels) return step
     }
     return TICK_STEPS[TICK_STEPS.length - 1]!
   }
@@ -109,32 +113,19 @@
     minute: '2-digit',
     hour12: false
   })
-  const allTicks = $derived.by((): Tick[] => {
+  const ticks = $derived.by((): Tick[] => {
     if (windowEnd <= windowStart) return []
-    const ticks: Tick[] = []
-    const step = chooseTickStep(windowEnd - windowStart)
+    const out: Tick[] = []
+    const step = chooseTickStep(windowEnd - windowStart, trackWidth)
     // First step boundary at or after windowStart.
     const first = Math.ceil(windowStart / step) * step
     for (let t = first; t <= windowEnd; t += step) {
-      ticks.push({
+      out.push({
         tSec: t,
         fraction: timeToFraction(t, windowStart, windowEnd),
         label: hourLabelFmt.format(new Date(t * 1000))
       })
     }
-    return ticks
-  })
-  const ticks = $derived.by((): Tick[] => {
-    if (allTicks.length === 0 || trackWidth === 0) return allTicks
-    const minPx = 52
-    const maxLabels = Math.max(1, Math.floor(trackWidth / minPx))
-    if (allTicks.length <= maxLabels) return allTicks
-    const step = Math.ceil(allTicks.length / maxLabels)
-    const out: Tick[] = []
-    for (let i = 0; i < allTicks.length; i += step) out.push(allTicks[i]!)
-    // Always keep the right edge so the window's end hour stays labelled.
-    const last = allTicks[allTicks.length - 1]!
-    if (out[out.length - 1]!.tSec !== last.tSec) out.push(last)
     return out
   })
 
