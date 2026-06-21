@@ -60,10 +60,26 @@
   const camId = $derived(page.params.id ?? '')
   const camera = $derived(camerasStore.cameras.find((c) => c.id === camId) ?? null)
 
-  // Window captured ONCE per camId (in the effect below). start is the oldest
-  // edge; end is wall-clock now at capture time.
+  // Scrubber VIEWPORT, captured ONCE per camId (in the effect below). start is
+  // the oldest edge; end is wall-clock now at capture time. These are the
+  // visible window of the scrubber ONLY — every PLAYBACK bound lives in
+  // liveEdge/playbackFloor below. Today the window is the fixed 3h captured on
+  // entry, so the two domains coincide; A-1/A-2 make the viewport movable, at
+  // which point windowEnd no longer equals the live edge.
   let windowStart = $state(0)
   let windowEnd = $state(0)
+
+  // PLAYBACK-domain bounds — the recording extent full-res playback may span,
+  // DISTINCT from the windowStart/windowEnd viewport. In the current fixed-window
+  // model liveEdge === windowEnd and playbackFloor === windowStart, so playback
+  // behaves exactly as before; once the viewport becomes movable these diverge.
+  // liveEdge: the newest playable wall-clock second (capture-time now). Always
+  // the true now, even on a deep-link whose viewport end sits in the past.
+  let liveEdge = $state(0)
+  // playbackFloor: the oldest playable wall-clock second. Today it equals the
+  // captured window start (byte-for-byte with the old windowStart playback
+  // clamp); A-1/A-2 will widen it to the true recording extent.
+  let playbackFloor = $state(0)
 
   // Wall-clock playhead (unix sec). Driven by drag (preview) or full-res
   // timeupdate (playback); consumed by the scrubber + the clock readout.
@@ -290,6 +306,10 @@
     untrack(() => {
       lastCaptureKey = key
       const now = Math.floor(Date.now() / 1000)
+      // PLAYBACK live edge is the true capture-time now REGARDLESS of the
+      // deep-link branch: the deep-link path can set windowEnd (the VIEWPORT
+      // end) to a past value, but full-res must still play/stop at real now.
+      liveEdge = now
       // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
       // the default last-3h window, never NaN.
       const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
@@ -307,10 +327,15 @@
         windowEnd = end
         windowStart = start
         position = pos
+        // Today playbackFloor tracks the captured window start (byte-for-byte
+        // with the old windowStart playback clamp); A-1/A-2 widen it to the
+        // true recording extent.
+        playbackFloor = start
       } else {
         windowEnd = now
         windowStart = now - WINDOW_SECONDS
         position = windowStart
+        playbackFloor = now - WINDOW_SECONDS
       }
       mode = 'scrubbing'
       // Reset BOTH buffers and the swap state.
@@ -598,10 +623,12 @@
     // stays constant: at 4x the playhead eats the chunk 4x faster, so the
     // prefetch must start 4x further from the end to keep the seam gapless.
     if (aEnd - position > PREFETCH_LEAD_SECONDS * playbackRate) return
-    if (aEnd >= windowEnd) return
+    // PLAYBACK live-edge guard: no chunk past the recording's live edge.
+    if (aEnd >= liveEdge) return
     if (idleStart === aEnd) return
     const ns = aEnd
-    const ne = Math.min(aEnd + CHUNK_SECONDS, windowEnd)
+    // Next chunk's end is a PLAYBACK bound — cap it at the live edge.
+    const ne = Math.min(aEnd + CHUNK_SECONDS, liveEdge)
     setIdleChunk(ns, ne, timelineMasterURL(camId, ns, ne))
     primeIdle()
   }
@@ -645,7 +672,8 @@
   // next chunk and starts it through pendingPlay (a brief stall, not a freeze).
   function handleActiveEnded() {
     const aEnd = activeEnd
-    if (aEnd === null || aEnd >= windowEnd) {
+    // Live edge of the recording extent — no next chunk past it.
+    if (aEnd === null || aEnd >= liveEdge) {
       paused = true
       chunkEnded = true
       return
@@ -679,7 +707,7 @@
   // preview poster holds. A brief stall is the accepted fallback.
   function fallbackSwap(nextStart: number) {
     if (idleStart !== nextStart || idleSrc === '') {
-      const ne = Math.min(nextStart + CHUNK_SECONDS, windowEnd)
+      const ne = Math.min(nextStart + CHUNK_SECONDS, liveEdge)
       setIdleChunk(nextStart, ne, timelineMasterURL(camId, nextStart, ne))
     }
     active = active === 'a' ? 'b' : 'a'
@@ -819,8 +847,8 @@
       // edge can't build an empty (cs==ce) range, and not below the window
       // start. ce derives from the now-integer cs, so activeStart stays integer
       // and the position->currentTime mapping does not drift.
-      const end = Math.floor(windowEnd)
-      const cs = Math.max(Math.floor(windowStart), Math.min(Math.floor(t), end - 1))
+      const end = Math.floor(liveEdge)
+      const cs = Math.max(Math.floor(playbackFloor), Math.min(Math.floor(t), end - 1))
       const ce = Math.min(cs + CHUNK_SECONDS, end)
       showFullRes = false // hold the preview frame as a poster until first frame
       playerError = false
@@ -906,8 +934,10 @@
     applyPlaybackRate()
   }
 
-  // Transport skip by deltaSeconds (called with +/-SKIP_SECONDS). Clamp the
-  // target to the window. When the target stays inside the loaded active chunk
+  // Transport skip by deltaSeconds (called with +/-SKIP_SECONDS). The skip is a
+  // full-res PLAYBACK seek, so clamp the target to the playback extent
+  // [playbackFloor, liveEdge], not the scrubber viewport. When the target stays
+  // inside the loaded active chunk
   // and we're in playback, a cheap currentTime seek preserves the current
   // play/pause state (no forced play, no pause). When it crosses the active
   // chunk boundary or we're not in playback, settle a fresh chunk at the target
@@ -915,7 +945,7 @@
   function skip(deltaSeconds: number) {
     if (previewOnly) return
     const raw = position + deltaSeconds
-    const target = raw < windowStart ? windowStart : raw > windowEnd ? windowEnd : raw
+    const target = raw < playbackFloor ? playbackFloor : raw > liveEdge ? liveEdge : raw
     const el = activeEl
     const aStart = activeStart
     const aEnd = activeEnd
