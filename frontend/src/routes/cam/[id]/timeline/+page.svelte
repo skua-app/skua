@@ -40,6 +40,12 @@
   // Scrubber window: a fixed 3-hour span per camera. Full-res chunk: 10 min.
   const WINDOW_SECONDS = 3 * 3600
   const CHUNK_SECONDS = 10 * 60
+  // Max distance (seconds) between the landed time and the full-res element's
+  // current playback point for which an in-buffer currentTime seek is reliable.
+  // Beyond it a paused HLS element may not apply the large seek before play()
+  // resumes from the old currentTime, so we re-attach a fresh chunk at the
+  // landed time instead (the else-branch) rather than snap back.
+  const CHUNK_REJOIN_SLACK = 30
   // Zoom bounds for the scrubber viewport span (pinch / wheel). 10 min keeps a
   // useful minimum context; 12 h is the widest pan that still resolves cells.
   const MIN_SPAN = 10 * 60
@@ -1014,7 +1020,13 @@
     const aStart = activeStart
     const aEnd = activeEnd
     const within = aStart !== null && aEnd !== null && activeSrc !== '' && t >= aStart && t <= aEnd
-    if (within && el) {
+    // The element's current wall-clock playback point (null until bound). A
+    // large jump from it on a PAUSED HLS element often isn't applied before
+    // play() resumes from the old currentTime, so restrict the cheap in-buffer
+    // seek to small jumps near it; bigger jumps fall through to a fresh chunk.
+    const cur = el && aStart !== null ? aStart! + el.currentTime : null
+    const nearCurrent = cur !== null && Math.abs(t - cur) <= CHUNK_REJOIN_SLACK
+    if (within && el && nearCurrent) {
       lastSeekAt = performance.now()
       el.currentTime = t - aStart!
       void el.play().catch(() => {})
