@@ -683,11 +683,27 @@
     const onSeeked = () => {
       previewReady = true
     }
+    // Some Frigate preview clips report duration NaN/Infinity at
+    // 'loadedmetadata' (onMeta strands previewDuration at 0, so seekPreview
+    // early-returns forever and the frame never paints). The usable duration
+    // arrives later on 'durationchange'/'loadeddata' — pick it up there and
+    // seek. Engines differ on which event carries it, so listen on both.
+    const onDuration = () => {
+      const d = el.duration
+      if (Number.isFinite(d) && d > 0 && d !== previewDuration) {
+        previewDuration = d
+        seekPreview()
+      }
+    }
     el.addEventListener('loadedmetadata', onMeta)
     el.addEventListener('seeked', onSeeked)
+    el.addEventListener('durationchange', onDuration)
+    el.addEventListener('loadeddata', onDuration)
     return () => {
       el.removeEventListener('loadedmetadata', onMeta)
       el.removeEventListener('seeked', onSeeked)
+      el.removeEventListener('durationchange', onDuration)
+      el.removeEventListener('loadeddata', onDuration)
     }
   })
 
@@ -699,6 +715,18 @@
     if (readyPoll !== null) {
       clearInterval(readyPoll)
       readyPoll = null
+    }
+  }
+
+  // Clip/settle-scoped preview readiness poll handle (see the effect below). It
+  // retries the preview seek until the frame actually paints, then stops — the
+  // safety net for a closed-hour frame that didn't seek/paint on the first try
+  // (late duration, a dropped seek). Mirrors readyPoll's lifecycle.
+  let previewReadyPoll: ReturnType<typeof setInterval> | null = null
+  function stopPreviewReadyPoll() {
+    if (previewReadyPoll !== null) {
+      clearInterval(previewReadyPoll)
+      previewReadyPoll = null
     }
   }
 
@@ -935,6 +963,41 @@
       if (el && el.readyState >= el.HAVE_CURRENT_DATA) markReadyIfPlayable()
     }, 250)
     return () => stopReadyPoll()
+  })
+
+  // Clip/settle-scoped preview readiness poll, rekeyed on the active clip src +
+  // settled position + mode. A closed-hour preview frame is expected to paint
+  // (previewSrc set, not yet ready, not the open webp tail, while scrubbing),
+  // but the seek can be stranded — duration arrived late, or a currentTime
+  // assignment didn't paint. Retry primePreview + seekPreview (existing calls,
+  // existing guards) on a bounded schedule until 'seeked' flips previewReady,
+  // which the next tick observes and stops on. previewReady is set ONLY by
+  // 'seeked' (real paint), never here. A settle into playback flips mode and
+  // re-runs this effect, stopping the poll. No-op when the frame paints first
+  // try — the first tick's terminal check stops it almost immediately.
+  $effect(() => {
+    void activeClip?.src
+    void position
+    const m = mode
+    stopPreviewReadyPoll()
+    if (!(previewSrc !== '' && !previewReady && !isOpenTail && m === 'scrubbing')) return
+    let attempts = 0
+    previewReadyPoll = setInterval(() => {
+      if (
+        previewReady ||
+        previewSrc === '' ||
+        isOpenTail ||
+        mode !== 'scrubbing' ||
+        attempts >= 8
+      ) {
+        stopPreviewReadyPoll()
+        return
+      }
+      attempts++
+      primePreview()
+      seekPreview()
+    }, 300)
+    return () => stopPreviewReadyPoll()
   })
 
   // Ensure full-res plays at wall-clock T on the ACTIVE buffer: reuse the
