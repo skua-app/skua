@@ -54,10 +54,10 @@
   // 1 -> 2 -> 4 -> 0.5 -> 1 (advance by one, wrapping).
   const SPEED_STEPS = [0.5, 1, 2, 4]
   // VHS press-and-hold rush: wall-clock multipliers and the hold-duration ramp
-  // that selects between them. 60x immediately, 240x after 1.2s held, 480x
-  // after 2.5s held — the longer the button is held, the faster the rush.
-  const RUSH_RATES = [60, 240, 480]
-  const RUSH_RAMP_MS = [0, 1200, 2500]
+  // that selects between them. 6x immediately, 16x after 4s held, 40x
+  // after 9s held — the longer the button is held, the faster the rush.
+  const RUSH_RATES = [6, 16, 40]
+  const RUSH_RAMP_MS = [0, 4000, 9000]
 
   // page.params.id is typed string | undefined; the route only matches when
   // [id] is bound, so the empty fallback never surfaces in practice.
@@ -296,8 +296,8 @@
   let playbackRate = $state(1)
 
   // VHS press-and-hold rewind / fast-forward. vhsDir: 0 idle, 1 fast-forward,
-  // -1 rewind. vhsRate is the current wall-clock multiplier shown on the OSD
-  // badge (0 when idle). The rush rides the SAME low-res preview path a manual
+  // -1 rewind. vhsRate is the current wall-clock multiplier shown on the side
+  // indicator (0 when idle). The rush rides the SAME low-res preview path a manual
   // drag uses (handleScrubStart / handleSeek / handleScrubEnd) — no separate
   // seek logic.
   let vhsDir = $state<0 | 1 | -1>(0)
@@ -1292,11 +1292,12 @@
     {/if}
 
     {#if vhsDir !== 0}
-      <!-- Light CRT texture + a top-centre direction/rate badge while rushing. -->
-      <div class="vhs-shimmer" aria-hidden="true"></div>
-      <div class="vhs-badge">
-        <Icon name={vhsDir > 0 ? 'fastForward' : 'rewind'} size={13} />
-        <Mono size={11} weight={500} color="rgba(255,255,255,0.92)">{vhsRate}×</Mono>
+      <!-- Large side indicator while rushing: anchored to the side the playhead
+           is travelling (rewind left, fast-forward right), vertically centred,
+           showing the direction glyph and the live rate. -->
+      <div class="rush-osd {vhsDir > 0 ? 'ff' : 'rew'}" aria-hidden="true">
+        <Icon name={vhsDir > 0 ? 'fastForward' : 'rewind'} size={36} />
+        <Mono size={15} weight={600} color="rgba(255,255,255,0.95)">{vhsRate}×</Mono>
       </div>
     {/if}
   </div>
@@ -1561,67 +1562,33 @@
     -webkit-backdrop-filter: blur(8px);
     pointer-events: none;
   }
-  /* Light CRT shimmer over the preview while a VHS rush is held. Sits above the
-     media layers but below the controls (it lives inside .frame). Subtle
-     scanlines plus a faint rolling sheen — texture, not an obstruction. */
-  .vhs-shimmer {
+  /* Large rush indicator: anchored to the side the playhead is travelling
+     (rewind left, fast-forward right), vertically centred. Direction glyph
+     above the live rush rate. Sits above the media layers but below the
+     controls (it lives inside .frame). Never captures pointer events. */
+  .rush-osd {
     position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      to bottom,
-      rgba(0, 0, 0, 0) 0px,
-      rgba(0, 0, 0, 0) 1px,
-      rgba(0, 0, 0, 0.07) 1px,
-      rgba(0, 0, 0, 0.07) 2px
-    );
-  }
-  .vhs-shimmer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.05) 50%,
-      rgba(255, 255, 255, 0) 100%
-    );
-    background-size: 100% 40%;
-    background-repeat: no-repeat;
-    animation: vhs-roll 2.4s linear infinite;
-  }
-  @keyframes vhs-roll {
-    from {
-      background-position: 0 -40%;
-    }
-    to {
-      background-position: 0 140%;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .vhs-shimmer::after {
-      animation: none;
-    }
-  }
-  /* VHS OSD badge: top-centre pill, mirrors .frame-hint styling. Direction
-     glyph + the live rush rate. Never captures pointer events. */
-  .vhs-badge {
-    position: absolute;
-    left: 50%;
-    top: 10px;
-    transform: translateX(-50%);
-    display: inline-flex;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border-radius: 999px;
+    gap: 4px;
+    padding: 14px 16px;
+    border-radius: var(--r);
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    color: rgba(255, 255, 255, 0.92);
+    color: rgba(255, 255, 255, 0.95);
     pointer-events: none;
   }
-  .vhs-badge :global(svg) {
+  .rush-osd.rew {
+    left: 16px;
+  }
+  .rush-osd.ff {
+    right: 16px;
+  }
+  .rush-osd :global(svg) {
     fill: currentColor;
     stroke: currentColor;
   }
