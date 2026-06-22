@@ -26,9 +26,10 @@
     fetchPreviewClips,
     fetchPreviewFrameList,
     fetchRecordingCodecs,
-    fetchReview
+    fetchReview,
+    fetchAudioEvents
   } from '$lib/api'
-  import type { PreviewClip, PreviewFrame, ReviewSegment } from '$lib/api'
+  import type { PreviewClip, PreviewFrame, ReviewSegment, AudioMarker } from '$lib/api'
   import { canDecodeRecording } from '$lib/hls'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
@@ -138,6 +139,10 @@
   // preview clips (capture reset + the debounced clip-follow), so the lane
   // stays correct as the playhead pans without a separate effect.
   let reviews = $state<ReviewSegment[]>([])
+  // Audio-detection events (speech, bark, ...) for the scrubber's audio lane.
+  // Loaded on the SAME trigger and over the SAME span as reviews / preview
+  // clips, so the lane stays correct as the playhead pans.
+  let audioEvents = $state<AudioMarker[]>([])
   // Frigate omits the open current hour from the preview-clips list entirely —
   // its mp4 is still being assembled — so the newest available coverage ends at
   // the last clip's end (clips are sorted by start). The live tail is the span
@@ -394,6 +399,8 @@
       // Drop the review lane for the previous camera; it reloads below over
       // the same span as the clips.
       reviews = []
+      // Same for the audio lane.
+      audioEvents = []
       // Reset the clip-follow window + cancel any pending debounced refetch.
       loadedClipsStart = null
       loadedClipsEnd = null
@@ -411,6 +418,7 @@
       void timelineStore.load(id)
       void loadClipsAround(position)
       void loadReviewAround(position)
+      void loadAudioAround(position)
       // Resolve decode capability, then gate the one-shot entry autoplay on it:
       // play full-res only when this device is known to decode the recording
       // codec. While capability is still pending we stay on the preview layer
@@ -498,6 +506,26 @@
     }
   }
 
+  // Load the audio-detection events spanning the same clipLoadSpan window
+  // around center (clamped to the playable domain) as loadReviewAround. Guard a
+  // stale camId — an in-flight list for a camera the user has navigated away
+  // from must not overwrite the new one. On error the lane stays empty (no
+  // markers; the lane simply hides).
+  async function loadAudioAround(center: number) {
+    const id = camId
+    const half = clipLoadSpan / 2
+    const lo = Math.max(playbackFloor, center - half)
+    const hi = Math.min(liveEdge, center + half)
+    try {
+      const list = await fetchAudioEvents(id, Math.floor(lo), Math.floor(hi))
+      if (camId !== id) return
+      audioEvents = list
+    } catch {
+      if (camId !== id) return
+      audioEvents = []
+    }
+  }
+
   // Position-following clip refetch (debounced, trailing edge). When the
   // playhead pans within viewSpan/2 of either loaded edge — and that edge isn't
   // already pinned at the playable bound — schedule a refetch around the new
@@ -519,6 +547,7 @@
       clipFollowTimer = null
       void loadClipsAround(position)
       void loadReviewAround(position)
+      void loadAudioAround(position)
     }, 250)
   })
 
@@ -1419,6 +1448,7 @@
       {playbackFloor}
       {liveEdge}
       {reviews}
+      {audioEvents}
       onSeek={handleSeek}
       onScrubStart={handleScrubStart}
       onScrubEnd={handleScrubEnd}

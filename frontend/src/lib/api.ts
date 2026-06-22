@@ -894,3 +894,28 @@ export async function fetchReview(
     `/api/cameras/${encodeURIComponent(camId)}/review?start=${start}&end=${end}`
   )
 }
+
+// AudioMarker is one Frigate audio-detection event reduced to what the
+// scrubber's audio lane needs: its sound class and wall-clock span. end is null
+// while the event is still active — the lane draws an active marker out to the
+// live edge.
+export type AudioMarker = {
+  id: string
+  label: string
+  start: number
+  end: number | null
+}
+
+// fetchAudioEvents returns the audio-detection events overlapping [start,end)
+// for a camera (the BFF widens the upstream lower bound by a fixed lookback to
+// catch an event that started just before the window). On an empty window the
+// array is empty and the lane hides; on error callers degrade to a blank lane.
+export async function fetchAudioEvents(
+  camId: string,
+  start: number,
+  end: number
+): Promise<AudioMarker[]> {
+  return apiFetch<AudioMarker[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/audio-events?start=${start}&end=${end}`
+  )
+}

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { hourCells, timeToFraction, type TimelineHour } from '$lib/timeline'
-  import type { ReviewSegment } from '$lib/api'
+  import type { ReviewSegment, AudioMarker } from '$lib/api'
 
   type Props = {
     hours: TimelineHour[]
@@ -15,6 +15,10 @@
     // lane along the top of the bar. An active segment (end null) draws out to
     // the live edge. Default empty so the lane is simply absent when omitted.
     reviews?: ReviewSegment[]
+    // Discrete audio-detection markers rendered as a thin lane directly under
+    // the review lane. An active marker (end null) draws out to the live edge.
+    // Default empty so the lane is absent when there is no audio activity.
+    audioEvents?: AudioMarker[]
     onSeek: (tSec: number) => void
     // Pointer-drag lifecycle hooks. Fired only for pointer drags, NOT for
     // keyboard nudges — the consumer uses them to switch between the cheap
@@ -36,6 +40,7 @@
     playbackFloor = windowStart,
     liveEdge = windowEnd,
     reviews = [],
+    audioEvents = [],
     onSeek,
     onScrubStart,
     onScrubEnd,
@@ -107,6 +112,21 @@
       const x1 = timeToFraction(seg.end ?? liveEdge, windowStart, windowEnd)
       if (x1 <= x0) continue
       out.push({ id: seg.id, severity: seg.severity, x0, width: x1 - x0 })
+    }
+    return out
+  })
+
+  // Audio-lane bands: same viewport mapping as reviewBands, minus severity. An
+  // active marker (end null) extends to the live edge; a marker fully outside
+  // the viewport collapses to zero width and is dropped (x1 <= x0).
+  type AudioBand = { id: string; x0: number; width: number }
+  const audioBands = $derived.by((): AudioBand[] => {
+    const out: AudioBand[] = []
+    for (const mark of audioEvents) {
+      const x0 = timeToFraction(mark.start, windowStart, windowEnd)
+      const x1 = timeToFraction(mark.end ?? liveEdge, windowStart, windowEnd)
+      if (x1 <= x0) continue
+      out.push({ id: mark.id, x0, width: x1 - x0 })
     }
     return out
   })
@@ -299,6 +319,14 @@
     {/each}
   </div>
 
+  {#if audioEvents.length > 0}
+    <div class="audio-lane" aria-hidden="true">
+      {#each audioBands as band (band.id)}
+        <span class="audio" style:left="{band.x0 * 100}%" style:width="{band.width * 100}%"></span>
+      {/each}
+    </div>
+  {/if}
+
   <div class="ticks" aria-hidden="true">
     {#each ticks as tick (tick.tSec)}
       <span class="tick" style:left="{tick.fraction * 100}%">
@@ -380,6 +408,28 @@
   .review.detection {
     background: var(--accent);
     opacity: 0.7;
+  }
+  /* Audio activity lane: a second thin strip directly under the review lane
+     (review-lane is top:0 height:6px), carrying discrete audio-detection
+     markers. pointer-events:none so the drag-scrub surface underneath is
+     untouched; it sits below the playhead in the DOM so the handle still draws
+     on top. */
+  .audio-lane {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    height: 5px;
+    pointer-events: none;
+  }
+  .audio {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    /* Keep a tiny marker visible rather than collapsing to a hairline. */
+    min-width: 3px;
+    border-radius: 1px;
+    background: var(--online);
   }
   /* Out-of-footage band: the span before recording started / beyond now. A
      faint dark wash plus a low-opacity diagonal hatch so the empty edge reads

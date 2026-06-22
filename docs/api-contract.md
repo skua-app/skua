@@ -823,6 +823,42 @@ type CameraOrderErrorBody = {
 //     - context deadline                 → 504 upstream_timeout
 //     - any other upstream failure       → 502 upstream_error
 
+// GET /api/cameras/{id}/audio-events?start=&end=
+//   The windowed list of Frigate audio-detection events overlapping
+//   [start,end), reshaped into the lean shape the recording-timeline scrubber
+//   renders as a thin activity lane directly under the review lane. The source
+//   is Frigate's /api/events filtered to data.type=="audio" (the same endpoint
+//   the events list uses; the BFF drops the object events). The BFF queries
+//   /api/events with cameras={id}, after=start-300 (a fixed 5-min lookback —
+//   Frigate filters events on start_time, so the lookback catches an audio
+//   event that started just before the window but overlaps it; audio events are
+//   short, well under a couple of minutes), before=end, and limit=500, then
+//   re-emits an array, one entry per audio event:
+//
+//     [ { "id": <string>, "label": <string>,
+//         "start": <float64>, "end": <float64|null> }, ... ]
+//
+//   label is the raw Frigate audio class ("speech", "bark", ...). start is the
+//   event's wall-clock start (unix seconds, subseconds preserved). end is null
+//   while the event is still active (Frigate's end_time null) — the FE draws an
+//   active marker out to the live edge.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store.
+//
+//   Limit caveat: /api/events has no audio-only upstream filter, so limit=500
+//   caps the raw mixed object+audio list BEFORE the type filter — in a very
+//   busy window object events could crowd out audio, acceptable at household
+//   rates and bounded by the time window.
+//
+//   Errors (same table as /review):
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - any other upstream failure       → 502 upstream_error
+
 // GET /api/cameras/{id}/preview-frame-list?start=&end=
 //   The chronological list of preview FRAMES Frigate has rendered for
 //   [start,end), each rewritten to the BFF /preview-frame proxy. The

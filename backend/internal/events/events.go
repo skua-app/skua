@@ -121,6 +121,11 @@ type FrigateEvent struct {
 	Data     struct {
 		TopScore *float64 `json:"top_score"`
 		Score    *float64 `json:"score"`
+		// Type discriminates the event source: "object" for tracked-object
+		// events, "audio" for audio-detection events. The object-event path
+		// (ToItem) ignores it; the audio lane reads it to filter the mixed
+		// /api/events list down to audio events only.
+		Type string `json:"type"`
 	} `json:"data"`
 }
 

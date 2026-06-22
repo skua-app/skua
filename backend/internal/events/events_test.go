@@ -82,6 +82,7 @@ func TestToItem_ScorePrecedence(t *testing.T) {
 				Data: struct {
 					TopScore *float64 `json:"top_score"`
 					Score    *float64 `json:"score"`
+					Type     string   `json:"type"`
 				}{TopScore: &score, Score: &dataScore},
 				TopScore: &topScore,
 			},
@@ -95,6 +96,7 @@ func TestToItem_ScorePrecedence(t *testing.T) {
 				Data: struct {
 					TopScore *float64 `json:"top_score"`
 					Score    *float64 `json:"score"`
+					Type     string   `json:"type"`
 				}{TopScore: nil, Score: &dataScore},
 			},
 			want: 0.55,
