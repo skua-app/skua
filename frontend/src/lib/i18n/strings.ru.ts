@@ -244,8 +244,6 @@ export const ui = {
   timelineSeeOnTimeline: 'Показать на таймлайне',
   timelineMute: 'Звук выкл.',
   timelineUnmute: 'Звук вкл.',
-  timelineSkipBack: 'Назад на 10 секунд',
-  timelineSkipForward: 'Вперёд на 10 секунд',
   timelineSpeed: 'Скорость воспроизведения',
   timelineRewind: 'Перемотка назад',
   timelineFastForward: 'Перемотка вперёд',

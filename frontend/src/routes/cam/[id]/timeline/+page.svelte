@@ -53,8 +53,6 @@
   // Playback-speed cycle for the speed chip. Cycling from 1x runs
   // 1 -> 2 -> 4 -> 0.5 -> 1 (advance by one, wrapping).
   const SPEED_STEPS = [0.5, 1, 2, 4]
-  // Transport skip step, in wall-clock seconds, for the back/forward buttons.
-  const SKIP_SECONDS = 10
   // VHS press-and-hold rush: wall-clock multipliers and the hold-duration ramp
   // that selects between them. 60x immediately, 240x after 1.2s held, 480x
   // after 2.5s held — the longer the button is held, the faster the rush.
@@ -1064,34 +1062,6 @@
     applyPlaybackRate()
   }
 
-  // Transport skip by deltaSeconds (called with +/-SKIP_SECONDS). The skip is a
-  // full-res PLAYBACK seek, so clamp the target to the playback extent
-  // [playbackFloor, liveEdge], not the scrubber viewport. When the target stays
-  // inside the loaded active chunk
-  // and we're in playback, a cheap currentTime seek preserves the current
-  // play/pause state (no forced play, no pause). When it crosses the active
-  // chunk boundary or we're not in playback, settle a fresh chunk at the target
-  // and play. Full-res control: a no-op on preview-only devices.
-  function skip(deltaSeconds: number) {
-    if (previewOnly) return
-    const raw = position + deltaSeconds
-    const target = raw < playbackFloor ? playbackFloor : raw > liveEdge ? liveEdge : raw
-    const el = activeEl
-    const aStart = activeStart
-    const aEnd = activeEnd
-    const within =
-      aStart !== null && aEnd !== null && activeSrc !== '' && target >= aStart && target <= aEnd
-    if (mode === 'playback' && within && el) {
-      el.currentTime = target - aStart!
-      lastSeekAt = performance.now()
-      position = target
-      // Preserve the current play/pause state — the element keeps playing if it
-      // was playing and stays paused if it was paused.
-    } else {
-      ensurePlaybackAt(target)
-    }
-  }
-
   // Rush multiplier for an elapsed hold: walk the ramp thresholds and return
   // the highest rate whose hold-time has been reached.
   function rushRateFor(heldMs: number): number {
@@ -1311,13 +1281,13 @@
 
     {#if previewOnly && !scrubActive}
       <div class="frame-codec">
-        <Mono size={12} color="rgba(255,255,255,0.82)">{ui.timelineCodecUnsupported}</Mono>
+        <Mono size={12} color="rgba(255,255,255,0.82)" wrap>{ui.timelineCodecUnsupported}</Mono>
       </div>
     {/if}
 
     {#if playerError}
       <div class="frame-overlay">
-        <Mono size={12} color="rgba(255,255,255,0.82)">{ui.timelineNoRecording}</Mono>
+        <Mono size={12} color="rgba(255,255,255,0.82)" wrap>{ui.timelineNoRecording}</Mono>
       </div>
     {/if}
 
@@ -1365,27 +1335,11 @@
         </button>
         <button
           type="button"
-          class="livebtn skip"
-          onclick={() => skip(-SKIP_SECONDS)}
-          aria-label={ui.timelineSkipBack}
-        >
-          <Icon name="skipBack" size={18} />
-        </button>
-        <button
-          type="button"
           class="livebtn playpause"
           onclick={togglePlay}
           aria-label={paused ? ui.timelinePlay : ui.timelinePause}
         >
           <Icon name={paused ? 'play' : 'pause'} size={20} />
-        </button>
-        <button
-          type="button"
-          class="livebtn skip"
-          onclick={() => skip(SKIP_SECONDS)}
-          aria-label={ui.timelineSkipForward}
-        >
-          <Icon name="skipForward" size={18} />
         </button>
         <button
           type="button"
@@ -1461,11 +1415,11 @@
       </div>
     {:else if timelineStore.error}
       <div class="scrub-note error">
-        <Mono size={11} color="var(--warn)">{ui.timelineSummaryError}</Mono>
+        <Mono size={11} color="var(--warn)" wrap>{ui.timelineSummaryError}</Mono>
       </div>
     {:else if timelineStore.hours.length === 0}
       <div class="scrub-note">
-        <Mono size={11} color="var(--text-3)">{ui.timelineEmpty}</Mono>
+        <Mono size={11} color="var(--text-3)" wrap>{ui.timelineEmpty}</Mono>
       </div>
     {/if}
   </div>
@@ -1523,6 +1477,19 @@
     border-radius: var(--r);
     overflow: hidden;
     background: var(--feed);
+  }
+  /* Desktop (matches the layout's 900px isDesktop breakpoint): on a wide
+     viewport a full-width 16:9 frame would push the controls + scrubber below
+     the fold. Cap the height so the whole player fits, driving width off the
+     height via aspect-ratio. The 36px is the .page's 18px horizontal padding on
+     each side. .page is a flex column, so width:auto needs align-self:center to
+     stay centred instead of stretching. */
+  @media (min-width: 900px) {
+    .frame {
+      height: min(56vh, calc((100vw - 36px) * 9 / 16));
+      width: auto;
+      align-self: center;
+    }
   }
   /* Two stacked players. Opacity swaps between the low-res preview and the
      full-res chunk; the short fade hides the seam without a hard cut. */
@@ -1672,8 +1639,8 @@
   .edge {
     flex: 1 1 0;
   }
-  /* Centred transport cluster: rewind, skip-back, play/pause, skip-forward,
-     fast-forward. Tight internal gap so the five read as one unit. */
+  /* Centred transport cluster: rewind, play/pause, fast-forward. Tight internal
+     gap so the three read as one unit. */
   .transport {
     display: flex;
     align-items: center;
@@ -1728,8 +1695,8 @@
   .livebtn:active {
     transform: translateY(1px);
   }
-  /* Skip and VHS buttons sit a touch smaller than play/pause — they flank it. */
-  .livebtn.skip,
+  /* VHS rewind/fast-forward buttons sit a touch smaller than play/pause — they
+     flank it. */
   .livebtn.vhs {
     width: 40px;
     height: 40px;

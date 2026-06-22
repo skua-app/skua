@@ -429,7 +429,10 @@
     /* Keep a tiny marker visible rather than collapsing to a hairline. */
     min-width: 3px;
     border-radius: 1px;
-    background: var(--online);
+    /* Deliberate one-off violet (no design token): keeps the audio lane
+       visually distinct from the amber alert and cyan detection review bands,
+       which sit just above. */
+    background: oklch(0.72 0.14 300);
   }
   /* Out-of-footage band: the span before recording started / beyond now. A
      faint dark wash plus a low-opacity diagonal hatch so the empty edge reads
@@ -472,10 +475,13 @@
     position: absolute;
     bottom: 4px;
     left: 4px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    /* Geist (inherit), not JetBrains Mono: the mono dotted zero reads as an 8
+       at this size. Keep tabular-nums so the digit columns stay aligned. */
+    font-family: inherit;
     font-variant-numeric: tabular-nums;
-    font-size: 11px;
-    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
     letter-spacing: 0.2px;
   }
   .playhead {

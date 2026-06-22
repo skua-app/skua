@@ -20,7 +20,12 @@
 
   let width = $state(typeof window !== 'undefined' ? window.innerWidth : 0)
   const isDesktop = $derived(width >= 900)
-  const isFocus = $derived(page.route.id === '/cam/[id]')
+  // Both the single-camera focus view and the recording timeline are immersive:
+  // they render their own top bar, so the global AppHeader must stay hidden to
+  // avoid a duplicate header row and a doubled safe-area top inset.
+  const isImmersive = $derived(
+    page.route.id === '/cam/[id]' || page.route.id === '/cam/[id]/timeline'
+  )
 
   // All bootstrap goes through onMount, not $effect: each side-effect must
   // run exactly once per session. Previous $effect-based registerSW could
@@ -151,7 +156,7 @@
 <svelte:window bind:innerWidth={width} />
 
 <div class="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-  {#if !isFocus}
+  {#if !isImmersive}
     <AppHeader {isDesktop} />
   {/if}
 
