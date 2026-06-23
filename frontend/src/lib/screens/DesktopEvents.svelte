@@ -249,11 +249,11 @@
   .dk-filterrow .lbl {
     flex: 0 0 64px;
     font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .dk-chips {
     display: flex;
@@ -312,11 +312,11 @@
     gap: 12px;
     padding: 18px 2px 0;
     font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     letter-spacing: 1.2px;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .dk-daydiv:first-child {
     padding-top: 0;

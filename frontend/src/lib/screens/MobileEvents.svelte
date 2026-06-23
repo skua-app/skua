@@ -93,7 +93,7 @@
     {#if groups.length > 0}
       <div class="chip-group">
         <span class="chip-label">
-          <Mono size={10} color="var(--text-3)" letterSpacing={1.5} uppercase
+          <Mono size={11} color="var(--text-2)" letterSpacing={1.5} uppercase
             >{ui.filterLabelGroup}</Mono
           >
         </span>
@@ -118,7 +118,7 @@
 
     <div class="chip-group">
       <span class="chip-label">
-        <Mono size={10} color="var(--text-3)" letterSpacing={1.5} uppercase
+        <Mono size={11} color="var(--text-2)" letterSpacing={1.5} uppercase
           >{ui.filterLabelCamera}</Mono
         >
       </span>
@@ -142,7 +142,7 @@
 
     <div class="chip-group">
       <span class="chip-label">
-        <Mono size={10} color="var(--text-3)" letterSpacing={1.5} uppercase
+        <Mono size={11} color="var(--text-2)" letterSpacing={1.5} uppercase
           >{ui.filterLabelType}</Mono
         >
       </span>
@@ -176,7 +176,7 @@
     <div class="ev-list">
       {#each eventDays as day (day.key)}
         <div class="day-div">
-          <Mono size={11} color="var(--text-3)" letterSpacing={1} uppercase
+          <Mono size={12} color="var(--text-2)" letterSpacing={1} uppercase
             >{dayLabel(day.date)}</Mono
           >
         </div>
@@ -236,7 +236,9 @@
     min-width: 0;
   }
   .chip-label {
-    flex: 0 0 46px;
+    /* 54px (was 46px) so the longest sub-label ("CAMERA") still fits on one
+       line at the raised 11px size. */
+    flex: 0 0 54px;
     display: inline-flex;
     align-items: center;
   }
