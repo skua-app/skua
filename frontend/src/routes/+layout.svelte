@@ -21,8 +21,11 @@
   let width = $state(typeof window !== 'undefined' ? window.innerWidth : 0)
   const isDesktop = $derived(width >= 900)
   // Both the single-camera focus view and the recording timeline are immersive:
-  // they render their own top bar, so the global AppHeader must stay hidden to
-  // avoid a duplicate header row and a doubled safe-area top inset.
+  // on MOBILE they render their own top bar, so the global AppHeader must stay
+  // hidden there to avoid a duplicate header row and a doubled safe-area top
+  // inset. On DESKTOP these routes have no in-screen global nav, so the
+  // AppHeader still renders (its grid control-bar is route-'/'-gated, so only
+  // brand + tabs + theme + bell appear).
   const isImmersive = $derived(
     page.route.id === '/cam/[id]' || page.route.id === '/cam/[id]/timeline'
   )
@@ -156,7 +159,7 @@
 <svelte:window bind:innerWidth={width} />
 
 <div class="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-  {#if !isImmersive}
+  {#if !isImmersive || isDesktop}
     <AppHeader {isDesktop} />
   {/if}
 

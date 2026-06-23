@@ -1506,8 +1506,11 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+    /* Mobile (< 900px) renders the fixed bottom tab bar, which would overlap
+       the scrubber + its note. Reserve safe-area + 96px at the bottom for it,
+       mirroring MobileFocus's .mf-body clearance. Desktop resets this below. */
     padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px
-      calc(env(safe-area-inset-bottom, 0px) + 24px);
+      calc(env(safe-area-inset-bottom, 0px) + 96px);
     background: var(--bg);
     min-height: 100dvh;
     color: var(--text);
@@ -1565,6 +1568,12 @@
       height: min(56vh, calc((100vw - 36px) * 9 / 16));
       width: auto;
       align-self: center;
+    }
+    /* No bottom tab bar on desktop — drop the mobile tab-bar clearance back to
+       the original padding so the height-capped player + controls + scrubber
+       still fit without introducing a new scroll. */
+    .page {
+      padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
     }
   }
   /* Two stacked players. Opacity swaps between the low-res preview and the
