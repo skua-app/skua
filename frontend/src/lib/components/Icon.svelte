@@ -47,3 +47,13 @@
     />
   {/each}
 </svg>
+
+<style>
+  /* Icons are fixed-size by the `size` prop. In an overflowing flex row a
+     control's flex children can otherwise be shrunk below their basis, which
+     collapses the icon to nothing. Pin flex-shrink so the rendered size always
+     equals the width/height bound above. */
+  svg {
+    flex-shrink: 0;
+  }
+</style>
