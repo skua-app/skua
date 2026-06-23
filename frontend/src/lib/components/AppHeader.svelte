@@ -238,58 +238,60 @@
 
     {#if showControlBar}
       <div class="control-bar">
-        <div class="grpfilter" bind:this={grpfilterEl}>
-          <button
-            type="button"
-            class="ctrl filter-btn"
-            class:open={filterOpen}
-            aria-label={ui.groupFilterLabel}
-            aria-haspopup="listbox"
-            aria-expanded={filterOpen}
-            onclick={() => (filterOpen = !filterOpen)}
-          >
-            <span class="fb-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
-            <span class="fb-chev" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
-          </button>
-          {#if filterOpen}
-            <ul class="grp-menu" role="listbox">
-              <li>
-                <button
-                  type="button"
-                  class="grp-opt"
-                  class:on={prefsStore.gridFilter === null}
-                  role="option"
-                  aria-selected={prefsStore.gridFilter === null}
-                  onclick={() => selectGroup(null)}
-                >
-                  <span class="check" aria-hidden="true">
-                    {#if prefsStore.gridFilter === null}<Icon name="check" size={15} />{/if}
-                  </span>
-                  <span class="g-name">{ui.filterAllCams}</span>
-                  <Mono size={11} color="inherit" class="g-count">{cameras.length}</Mono>
-                </button>
-              </li>
-              {#each groupsStore.groups as g (g.id)}
+        {#if groupsStore.groups.length > 0}
+          <div class="grpfilter" bind:this={grpfilterEl}>
+            <button
+              type="button"
+              class="ctrl filter-btn"
+              class:open={filterOpen}
+              aria-label={ui.groupFilterLabel}
+              aria-haspopup="listbox"
+              aria-expanded={filterOpen}
+              onclick={() => (filterOpen = !filterOpen)}
+            >
+              <span class="fb-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
+              <span class="fb-chev" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
+            </button>
+            {#if filterOpen}
+              <ul class="grp-menu" role="listbox">
                 <li>
                   <button
                     type="button"
                     class="grp-opt"
-                    class:on={prefsStore.gridFilter === g.id}
+                    class:on={prefsStore.gridFilter === null}
                     role="option"
-                    aria-selected={prefsStore.gridFilter === g.id}
-                    onclick={() => selectGroup(g.id)}
+                    aria-selected={prefsStore.gridFilter === null}
+                    onclick={() => selectGroup(null)}
                   >
                     <span class="check" aria-hidden="true">
-                      {#if prefsStore.gridFilter === g.id}<Icon name="check" size={15} />{/if}
+                      {#if prefsStore.gridFilter === null}<Icon name="check" size={15} />{/if}
                     </span>
-                    <span class="g-name">{g.name}</span>
-                    <Mono size={11} color="inherit" class="g-count">{cameraCount(g.id)}</Mono>
+                    <span class="g-name">{ui.filterAllCams}</span>
+                    <Mono size={11} color="inherit" class="g-count">{cameras.length}</Mono>
                   </button>
                 </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
+                {#each groupsStore.groups as g (g.id)}
+                  <li>
+                    <button
+                      type="button"
+                      class="grp-opt"
+                      class:on={prefsStore.gridFilter === g.id}
+                      role="option"
+                      aria-selected={prefsStore.gridFilter === g.id}
+                      onclick={() => selectGroup(g.id)}
+                    >
+                      <span class="check" aria-hidden="true">
+                        {#if prefsStore.gridFilter === g.id}<Icon name="check" size={15} />{/if}
+                      </span>
+                      <span class="g-name">{g.name}</span>
+                      <Mono size={11} color="inherit" class="g-count">{cameraCount(g.id)}</Mono>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
         <div class="control-right">
           <Segmented
             value={prefsStore.gridMode}
@@ -398,6 +400,9 @@
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
+    /* Pin the mode + density cluster to the right whether or not the group
+       filter is present (it is hidden when there are no groups). */
+    margin-left: auto;
   }
 
   /* shared .ctrl frame for pill controls */
