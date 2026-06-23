@@ -56,9 +56,10 @@
   // After a settle/seek, ignore the full-res timeupdate echo briefly so it
   // doesn't fight the UI right after the assignment.
   const SEEK_SETTLE_MS = 300
-  // Playback-speed cycle for the speed chip. Cycling from 1x runs
-  // 1 -> 2 -> 4 -> 0.5 -> 1 (advance by one, wrapping).
-  const SPEED_STEPS = [0.5, 1, 2, 4]
+  // Playback speeds offered by the speed dropdown, in menu order. 1 is the
+  // default playbackRate and must stay present. 4x is intentionally absent —
+  // it can't keep the full-res chunk pipeline fed and stutters.
+  const SPEED_STEPS = [0.5, 1, 2]
   // VHS press-and-hold rush: wall-clock multipliers and the hold-duration ramp
   // that selects between them. 6x immediately, 16x after 4s held, 40x
   // after 9s held — the longer the button is held, the faster the rush.
