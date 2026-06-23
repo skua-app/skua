@@ -563,6 +563,11 @@
     overflow-x: auto;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    /* overflow-x: auto also clips the cross axis, cutting the 2px accent ring
+       off the top of the active thumb (.mini.on .cam). Pad the top to match
+       the bottom (parity with the desktop .dk-filmstrip) so the full ring
+       shows. */
+    padding-top: 4px;
     padding-bottom: 4px;
     margin: 0 -18px;
     padding-left: 18px;
