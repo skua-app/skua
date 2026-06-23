@@ -548,12 +548,16 @@
     bottom: 0;
     transform: translateX(-0.5px);
   }
+  /* Sub-hour label ticks: a SHORT stub sitting just above its label, so LENGTH
+     (short stub vs the full-height .hourline) is the cue that distinguishes a
+     label tick from an hour boundary; the brighter --border-strong is the
+     secondary cue. Exact height/colour are a first pass to tune on device. */
   .tick-rule {
     position: absolute;
-    top: 0;
     bottom: 18px;
+    height: 8px;
     width: 1px;
-    background: var(--border);
+    background: var(--border-strong);
   }
   .tick-label {
     position: absolute;
