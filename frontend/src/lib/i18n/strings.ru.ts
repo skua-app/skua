@@ -161,6 +161,7 @@ export const ui = {
   menuLabel: 'Меню',
   statsLabel: 'Статистика',
   pipLabel: 'Картинка в картинке',
+  pipShort: 'PiP',
   otherCamerasLabel: 'Другие камеры',
   primaryNavLabel: 'Основная навигация',
   groupFilterLabel: 'Фильтр групп',

@@ -160,6 +160,7 @@ export const ui = {
   menuLabel: 'Menu',
   statsLabel: 'Stats',
   pipLabel: 'Picture in picture',
+  pipShort: 'PiP',
   otherCamerasLabel: 'Other cameras',
   primaryNavLabel: 'Primary navigation',
   groupFilterLabel: 'Group filter',

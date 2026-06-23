@@ -253,6 +253,10 @@
           >
             <Icon name={isMuted ? 'mute' : 'unmute'} size={20} />
           </button>
+          <button type="button" class="dk-livebtn" onclick={downloadSnapshot}>
+            <Icon name="snapshot" size={20} />
+            <span>Snapshot</span>
+          </button>
           <button
             type="button"
             class="dk-livebtn"
@@ -262,12 +266,6 @@
             <Icon name="activity" size={20} />
             <span>{ui.statsLabel}</span>
           </button>
-          {#if camera?.capabilities.talk_back}
-            <button type="button" class="dk-livebtn" disabled aria-label="Talkback">
-              <Icon name="mic" size={20} />
-            </button>
-          {/if}
-          <span class="grow"></span>
           <button
             type="button"
             class="dk-livebtn"
@@ -276,10 +274,6 @@
           >
             <Icon name="history" size={20} />
             <span>{ui.timelineHistory}</span>
-          </button>
-          <button type="button" class="dk-livebtn" onclick={downloadSnapshot}>
-            <Icon name="snapshot" size={20} />
-            <span>Snapshot</span>
           </button>
           {#if pipSupported}
             <button
@@ -290,13 +284,18 @@
               aria-label={ui.pipLabel}
             >
               <Icon name="pip" size={20} />
-              <span>{ui.pipLabel}</span>
+              <span>{ui.pipShort}</span>
             </button>
           {/if}
           <button type="button" class="dk-livebtn" onclick={toggleFullscreen}>
             <Icon name={isFullscreen ? 'exitFull' : 'fullscreen'} size={20} />
             <span>Fullscreen</span>
           </button>
+          {#if camera?.capabilities.talk_back}
+            <button type="button" class="dk-livebtn" disabled aria-label="Talkback">
+              <Icon name="mic" size={20} />
+            </button>
+          {/if}
         {:else}
           <button type="button" class="dk-livebtn" onclick={onBack}>
             <Icon name="back" size={20} />
@@ -589,15 +588,22 @@
     -webkit-backdrop-filter: blur(10px);
   }
 
-  /* dk-livebar */
+  /* dk-livebar — single centred cluster, mirroring the mobile bar. */
   .dk-livebar {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 10px;
     flex-shrink: 0;
   }
-  .dk-livebar .grow {
-    flex: 1 1 auto;
+  /* Below this width the labelled buttons stop fitting the live-main column,
+     so drop the text and keep icon-only buttons. Concern-1's flex-shrink: 0 on
+     the icons means the row stays clean once the labels are gone.
+     1280px is a first guess — tune on device. */
+  @media (max-width: 1280px) {
+    .dk-livebtn span {
+      display: none;
+    }
   }
   .dk-livebtn {
     height: 46px;
