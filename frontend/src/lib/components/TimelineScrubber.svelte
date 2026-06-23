@@ -165,10 +165,14 @@
     minute: '2-digit',
     hour12: false
   })
+  // The major (labelled) step is computed ONCE here; both the labelled ticks
+  // and the micro-ticks derive from this single value, so the two ladders can
+  // never diverge as the window pans (calling chooseTickStep twice could).
+  const majorStep = $derived(chooseTickStep(windowEnd - windowStart, trackWidth))
   const ticks = $derived.by((): Tick[] => {
     if (windowEnd <= windowStart) return []
     const out: Tick[] = []
-    const step = chooseTickStep(windowEnd - windowStart, trackWidth)
+    const step = majorStep
     // First step boundary at or after windowStart.
     const first = Math.ceil(windowStart / step) * step
     for (let t = first; t <= windowEnd; t += step) {
@@ -180,6 +184,43 @@
     }
     return out
   })
+
+  // Micro-ticks: finer unlabelled marks subdividing each labelled interval.
+  // MICRO_DIVISIONS=4 quarters each major interval — a first-pass subdivision
+  // count, tunable. microStep stays integer for every TICK_STEPS entry, so the
+  // "is this also a major?" modulo test below is exact.
+  const MICRO_DIVISIONS = 4
+  // Hide micro-ticks once their pixel spacing drops below this, so wide zooms
+  // stay clean instead of crowding. ~9px is a first pass — tune on device.
+  const MIN_MICRO_PX = 9
+  const microTicks = $derived.by((): { fraction: number }[] => {
+    if (windowEnd <= windowStart) return []
+    const span = windowEnd - windowStart
+    const microStep = majorStep / MICRO_DIVISIONS
+    // Pixel-spacing guard: drop the whole micro layer when it would crowd.
+    if ((microStep / span) * trackWidth < MIN_MICRO_PX) return []
+    const out: { fraction: number }[] = []
+    const first = Math.ceil(windowStart / microStep) * microStep
+    for (let t = first; t <= windowEnd; t += microStep) {
+      // Skip marks that are also major boundaries — those get the labelled tick.
+      if (t % majorStep === 0) continue
+      out.push({ fraction: timeToFraction(t, windowStart, windowEnd) })
+    }
+    return out
+  })
+
+  // Approximate half-width of a labelled tick in px. The first/last labels are
+  // clamped so their centre stays this far inside the track, keeping them from
+  // clipping under .track's overflow:hidden. ~22px is a tune-on-device guess.
+  const LABEL_HALF_W = 22
+  // Clamp a tick's label centre (in px across the track) to stay fully visible.
+  // The tick MARK itself stays at the true fraction; only the label clamps.
+  function clampLabelPx(fraction: number): number {
+    const x = fraction * trackWidth
+    const hi = trackWidth - LABEL_HALF_W
+    if (hi < LABEL_HALF_W) return x // track too narrow to clamp meaningfully
+    return Math.min(Math.max(x, LABEL_HALF_W), hi)
+  }
 
   // Hour-boundary dividers, computed from TIME on a fixed 3600s grid (NOT from
   // the cells, whose straddling-edge x0/x1 are clamped to [0,1] and so are not
@@ -365,11 +406,16 @@
     {/if}
 
     <div class="ticks" aria-hidden="true">
+      {#each microTicks as mt (mt.fraction)}
+        <span class="microtick" style:left="{mt.fraction * 100}%"></span>
+      {/each}
       {#each ticks as tick (tick.tSec)}
         <span class="tick" style:left="{tick.fraction * 100}%">
           <span class="tick-rule"></span>
-          <span class="tick-label">{tick.label}</span>
         </span>
+      {/each}
+      {#each ticks as tick (tick.tSec)}
+        <span class="tick-label" style:left="{clampLabelPx(tick.fraction)}px">{tick.label}</span>
       {/each}
     </div>
 
@@ -548,21 +594,34 @@
     bottom: 0;
     transform: translateX(-0.5px);
   }
-  /* Sub-hour label ticks: a SHORT stub sitting just above its label, so LENGTH
-     (short stub vs the full-height .hourline) is the cue that distinguishes a
-     label tick from an hour boundary; the brighter --border-strong is the
-     secondary cue. Exact height/colour are a first pass to tune on device. */
+  /* Major (labelled) ruler tick: a short mark rising from the BOTTOM edge.
+     Taller/brighter than the micro-ticks, shorter than the full-height
+     .hourline so LENGTH distinguishes a ruler tick from an hour boundary.
+     Exact height/colour are a first pass to tune on device. */
   .tick-rule {
     position: absolute;
-    bottom: 18px;
+    bottom: 0;
     height: 8px;
     width: 1px;
     background: var(--border-strong);
   }
+  /* Micro-tick: a tiny faint mark from the bottom edge between the labelled
+     ticks; shorter + fainter than .tick-rule. First-pass px — tune on device. */
+  .microtick {
+    position: absolute;
+    bottom: 0;
+    height: 4px;
+    width: 1px;
+    background: var(--border);
+    transform: translateX(-0.5px);
+    pointer-events: none;
+  }
   .tick-label {
     position: absolute;
-    bottom: 4px;
-    left: 4px;
+    /* Centred over its tick (left is a clamped px set inline) and sitting just
+       ABOVE the 8px tick mark. First-pass bottom — tune on device. */
+    bottom: 12px;
+    transform: translateX(-50%);
     /* Geist (inherit), not JetBrains Mono: the mono dotted zero reads as an 8
        at this size. Keep tabular-nums so the digit columns stay aligned. */
     font-family: inherit;
@@ -571,6 +630,7 @@
     font-weight: 500;
     color: var(--text-2);
     letter-spacing: 0.2px;
+    white-space: nowrap;
   }
   .playhead {
     position: absolute;
