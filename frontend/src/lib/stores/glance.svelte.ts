@@ -1,5 +1,5 @@
 import { fetchGlance, glanceHeartbeat, markAllGlanceSeen, markGlanceSeen } from '$lib/api'
-import type { GlanceMoment } from '$lib/api'
+import type { EventKind, GlanceMoment } from '$lib/api'
 import { prefsStore } from '$lib/stores/prefs.svelte'
 
 // GLANCE_SURFACED_KEY persists the layout's "I surfaced the peek for
@@ -21,7 +21,31 @@ class GlanceStore {
     try {
       const resp = await fetchGlance(prefsStore.glanceWindowHours, prefsStore.glanceMaxMoments)
       this.unseenCount = resp.unseen_count
-      this.moments = resp.moments
+      // GlancePeek reads moment.detection_ids.length and moment.kinds.map at
+      // render time, so a null/undefined in either throws inside the Svelte
+      // render and freezes ALL interactivity (the resume-after-background bug).
+      // This normalization is the resilience layer behind the backend contract
+      // fix: a malformed/empty payload is coerced to safe empty arrays here. The
+      // api.ts types declare these fields non-null, so widen to a nullable view
+      // at this trust boundary — that makes the ?? fallbacks genuinely necessary
+      // and keeps the strict no-unnecessary-condition lint clean.
+      const raw = resp as {
+        moments?:
+          | (Omit<GlanceMoment, 'detection_ids' | 'kinds' | 'labels' | 'zones'> & {
+              detection_ids?: string[] | null
+              kinds?: EventKind[] | null
+              labels?: string[] | null
+              zones?: string[] | null
+            })[]
+          | null
+      }
+      this.moments = (raw.moments ?? []).map((m) => ({
+        ...m,
+        detection_ids: m.detection_ids ?? [],
+        kinds: m.kinds ?? [],
+        labels: m.labels ?? [],
+        zones: m.zones ?? []
+      }))
     } catch (err) {
       console.error('[glance] load failed, using defaults:', err)
     } finally {
