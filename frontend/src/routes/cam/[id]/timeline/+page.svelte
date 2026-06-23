@@ -1129,13 +1129,32 @@
     if (el) el.playbackRate = playbackRate
   }
 
-  // Speed chip: advance to the next entry in SPEED_STEPS (wrapping) and apply
-  // it to the active element. From 1x: 1 -> 2 -> 4 -> 0.5 -> 1.
-  function cycleSpeed() {
-    const i = SPEED_STEPS.indexOf(playbackRate)
-    playbackRate = SPEED_STEPS[(i + 1) % SPEED_STEPS.length] ?? 1
+  // Speed dropdown (opens upward — the controls sit below the video, above the
+  // scrubber). Mirrors the AppHeader group-filter popover idiom: a bound
+  // container, an open flag, close on Escape / outside pointerdown / selection.
+  let speedOpen = $state(false)
+  let speedMenuEl: HTMLDivElement | undefined = $state()
+  function selectSpeed(s: number) {
+    playbackRate = s
     applyPlaybackRate()
+    speedOpen = false
   }
+  $effect(() => {
+    if (!speedOpen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') speedOpen = false
+    }
+    function onPointer(e: PointerEvent) {
+      const t = e.target as Node | null
+      if (speedMenuEl && t && !speedMenuEl.contains(t)) speedOpen = false
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onPointer)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('pointerdown', onPointer)
+    }
+  })
 
   // Rush multiplier for an elapsed hold: walk the ramp thresholds and return
   // the highest rate whose hold-time has been reached.
@@ -1437,14 +1456,41 @@
     {/if}
     <div class="meta">
       {#if !previewOnly}
-        <button
-          type="button"
-          class="livebtn speed"
-          onclick={cycleSpeed}
-          aria-label={ui.timelineSpeed}
-        >
-          <Mono size={13} weight={500} color="var(--text)">{playbackRate}×</Mono>
-        </button>
+        <div class="speed-drop" bind:this={speedMenuEl}>
+          <button
+            type="button"
+            class="livebtn speed"
+            class:open={speedOpen}
+            aria-haspopup="listbox"
+            aria-expanded={speedOpen}
+            aria-label={ui.timelineSpeed}
+            onclick={() => (speedOpen = !speedOpen)}
+          >
+            <Mono size={13} weight={500} color="inherit">{playbackRate}×</Mono>
+            <Icon name="chevDown" size={14} />
+          </button>
+          {#if speedOpen}
+            <ul class="speed-menu" role="listbox">
+              {#each SPEED_STEPS as s (s)}
+                <li>
+                  <button
+                    type="button"
+                    class="speed-opt"
+                    class:on={playbackRate === s}
+                    role="option"
+                    aria-selected={playbackRate === s}
+                    onclick={() => selectSpeed(s)}
+                  >
+                    <span class="check" aria-hidden="true">
+                      {#if playbackRate === s}<Icon name="check" size={15} />{/if}
+                    </span>
+                    <Mono size={13} weight={500} color="inherit">{s}×</Mono>
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
         <button
           type="button"
           class="livebtn"
@@ -1755,12 +1801,69 @@
     user-select: none;
     -webkit-touch-callout: none;
   }
-  /* Speed chip: width follows the mono label (e.g. "0.5×") instead of a fixed
-     square. */
+  /* Speed dropdown trigger: width follows the mono label (e.g. "0.5×") + chev
+     instead of a fixed square. */
   .livebtn.speed {
     width: auto;
     min-width: 46px;
     padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+  }
+  .livebtn.speed.open {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent-ink);
+  }
+  /* Speed popover: anchored to the trigger and grown UPWARD (controls sit below
+     the video, above the scrubber). Raised z-index + own stacking context so it
+     is not painted under the later .scrub sibling. */
+  .speed-drop {
+    position: relative;
+    z-index: 40;
+  }
+  .speed-menu {
+    list-style: none;
+    margin: 0;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    z-index: 40;
+    min-width: 104px;
+    background: var(--elev);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    box-shadow: var(--shadow);
+    padding: 6px;
+  }
+  .speed-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .speed-opt:active {
+    background: var(--surface-2);
+  }
+  .speed-opt.on {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+  .speed-opt .check {
+    width: 16px;
+    flex: 0 0 16px;
+    color: var(--accent-ink);
+    display: inline-flex;
   }
   /* Pin fill+stroke to currentColor so the filled-triangle play glyph and
      the two-bar pause glyph both render fully (same fix as MobileFocus). */
