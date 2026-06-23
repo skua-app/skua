@@ -149,7 +149,11 @@ func ReviewItemToMoment(r FrigateReviewItem) Moment {
 		endedAt = &s
 	}
 
-	var kinds []Kind
+	// Initialise as empty (non-nil) slices so json.Marshal emits [] not null
+	// when the source review data is empty. A null here wedges the glance UI:
+	// GlancePeek dereferences these arrays at render time. The dedup / sort /
+	// encounter-order behaviour below is unchanged — only nil → empty.
+	kinds := []Kind{}
 	if len(r.Data.Objects) > 0 {
 		seen := make(map[Kind]struct{})
 		for _, label := range r.Data.Objects {
@@ -162,7 +166,7 @@ func ReviewItemToMoment(r FrigateReviewItem) Moment {
 		}
 	}
 
-	var labels []string
+	labels := []string{}
 	if len(r.Data.Objects) > 0 {
 		seen := make(map[string]struct{})
 		for _, label := range r.Data.Objects {
@@ -175,12 +179,12 @@ func ReviewItemToMoment(r FrigateReviewItem) Moment {
 		sort.Strings(labels)
 	}
 
-	var zones []string
+	zones := []string{}
 	if len(r.Data.Zones) > 0 {
 		zones = append(zones, r.Data.Zones...)
 	}
 
-	var detections []string
+	detections := []string{}
 	if len(r.Data.Detections) > 0 {
 		detections = append(detections, r.Data.Detections...)
 	}

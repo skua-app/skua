@@ -1,7 +1,9 @@
 package events
 
 import (
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -136,8 +138,48 @@ func TestReviewItemToMoment_EmptyDetectionsLeavesThumbEmpty(t *testing.T) {
 	if m.ThumbEventID != "" {
 		t.Errorf("ThumbEventID = %q, want empty", m.ThumbEventID)
 	}
-	if m.DetectionIDs != nil {
-		t.Errorf("DetectionIDs = %v, want nil", m.DetectionIDs)
+	// Contract: empty, never nil (so it marshals as [] not null).
+	if m.DetectionIDs == nil || len(m.DetectionIDs) != 0 {
+		t.Errorf("DetectionIDs = %v, want non-nil empty", m.DetectionIDs)
+	}
+}
+
+func TestReviewItemToMoment_EmptyDataYieldsEmptyArraysNotNull(t *testing.T) {
+	// All slice-bearing data fields empty (zero value): the resulting Moment's
+	// array fields must be non-nil empty so the JSON contract is [] not null —
+	// a null wedges the glance render (GlancePeek derefs these at render time).
+	r := FrigateReviewItem{
+		ID:        "1779310000.0-x",
+		Camera:    "camA",
+		StartTime: 1779310000,
+		Severity:  "detection",
+	}
+
+	m := ReviewItemToMoment(r)
+
+	if m.Kinds == nil || len(m.Kinds) != 0 {
+		t.Errorf("Kinds = %v, want non-nil empty", m.Kinds)
+	}
+	if m.Labels == nil || len(m.Labels) != 0 {
+		t.Errorf("Labels = %v, want non-nil empty", m.Labels)
+	}
+	if m.Zones == nil || len(m.Zones) != 0 {
+		t.Errorf("Zones = %v, want non-nil empty", m.Zones)
+	}
+	if m.DetectionIDs == nil || len(m.DetectionIDs) != 0 {
+		t.Errorf("DetectionIDs = %v, want non-nil empty", m.DetectionIDs)
+	}
+
+	// Lock the wire contract: empty slices marshal as [], not null.
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	got := string(b)
+	for _, want := range []string{`"kinds":[]`, `"labels":[]`, `"zones":[]`, `"detection_ids":[]`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("marshaled Moment missing %s; got %s", want, got)
+		}
 	}
 }
 
