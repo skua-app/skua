@@ -181,6 +181,23 @@
     return out
   })
 
+  // Hour-boundary dividers, computed from TIME on a fixed 3600s grid (NOT from
+  // the cells, whose straddling-edge x0/x1 are clamped to [0,1] and so are not
+  // real boundaries). Walks whole-hour marks across the window like ticks does.
+  // Keep only STRICTLY interior lines so a boundary landing exactly on a window
+  // edge does not draw a spurious divider pinned at 0 or 1.
+  const HOUR = 3600
+  const hourLines = $derived.by((): number[] => {
+    if (windowEnd <= windowStart) return []
+    const out: number[] = []
+    const first = Math.ceil(windowStart / HOUR) * HOUR
+    for (let t = first; t <= windowEnd; t += HOUR) {
+      const fraction = timeToFraction(t, windowStart, windowEnd)
+      if (fraction > 0 && fraction < 1) out.push(fraction)
+    }
+    return out
+  })
+
   // Distance between the two active pointers (used by the pinch gesture).
   function pointerDistance(): number {
     const xs = [...activePointers.values()]
@@ -315,6 +332,12 @@
       {/each}
     </div>
 
+    <div class="hourlines" aria-hidden="true">
+      {#each hourLines as fraction (fraction)}
+        <span class="hourline" style:left="{fraction * 100}%"></span>
+      {/each}
+    </div>
+
     {#if floorFrac > 0}
       <span class="void" aria-hidden="true" style:left="0" style:width="{floorFrac * 100}%"></span>
     {/if}
@@ -410,16 +433,32 @@
     inset: 0;
     pointer-events: none;
   }
-  /* Hour fill uses --accent-soft modulated by --cell-fraction so denser
-     hours read stronger and empty hours fall back to the track. The
-     opacity is the only signal — we do NOT imply WHERE within the hour
-     the recording sits (the summary is hour-granular). */
+  /* Hour fill uses --accent-soft modulated by --cell-fraction. It is now only a
+     faint wash — the hour-boundary dividers (.hourline) are the primary hour
+     cue. The 0.4 multiplier is a first pass to tune on device; a later
+     backend-backed change will replace this density wash with real
+     recorded/empty sub-hour coverage. */
   .cell {
     position: absolute;
     top: 0;
     bottom: 0;
     background: var(--accent-soft);
-    opacity: calc(var(--cell-fraction) * 0.9);
+    opacity: calc(var(--cell-fraction) * 0.4);
+  }
+  /* Hour-boundary dividers: a crisp vertical line at each whole hour, the
+     primary cue separating hours. Stronger than the faint --border label ticks.
+     Width/colour are a first pass to tune on device. */
+  .hourlines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .hourline {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border-strong);
   }
   /* Review activity lane: a thin strip along the top of the bar carrying the
      grouped alert / detection segments. pointer-events:none so the drag-scrub
