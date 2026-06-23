@@ -1251,6 +1251,49 @@
     fullResMuted = !fullResMuted
   }
 
+  // Fullscreen — mirrors cam/[id]/+page.svelte. Desktop/iPad take the whole
+  // .frame composite fullscreen (Element.requestFullscreen). iPhone has no
+  // Element.requestFullscreen, so it falls back to webkitEnterFullscreen on the
+  // currently-visible <video>: the full-res buffer when it is the shown layer,
+  // else the preview element.
+  let frameEl: HTMLDivElement | undefined = $state()
+  let isFullscreen = $state(false)
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {})
+      return
+    }
+    if (frameEl?.requestFullscreen) {
+      frameEl.requestFullscreen().catch(() => {})
+      return
+    }
+    // iPhone path: native fullscreen on the visible video element.
+    const vis = mode === 'playback' && showFullRes && activeSrc ? activeEl : previewEl
+    if (vis && 'webkitEnterFullscreen' in vis) {
+      ;(vis as HTMLVideoElement & { webkitEnterFullscreen(): void }).webkitEnterFullscreen()
+    }
+  }
+
+  // Track fullscreen state so the button swaps the enter↔exit glyph. iPhone's
+  // native single-video fullscreen may not fire these events (and loses the
+  // scrubber/overlays) — the same known limitation as the focus view, and the
+  // only iOS path available.
+  $effect(() => {
+    const onFsChange = () => {
+      isFullscreen = !!(
+        document.fullscreenElement ??
+        (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement
+      )
+    }
+    document.addEventListener('fullscreenchange', onFsChange)
+    document.addEventListener('webkitfullscreenchange', onFsChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFsChange)
+      document.removeEventListener('webkitfullscreenchange', onFsChange)
+    }
+  })
+
   // Decode-class HlsVideo errors: the player CAN fetch the stream but cannot
   // decode it. Native path emits media_error_<code> (MEDIA_ERR_DECODE=3,
   // MEDIA_ERR_SRC_NOT_SUPPORTED=4); the hls.js path emits its two
@@ -1325,7 +1368,7 @@
     <span class="title">{camera?.name ?? camId}</span>
   </header>
 
-  <div class="frame">
+  <div class="frame" bind:this={frameEl}>
     <!-- Picture zoom (wheel / two-finger pinch / double-tap reset), same as the
          live focus view. Only the media layers scale; the overlays below stay
          fixed siblings outside the pane. resetKey={camId} resets zoom on camera
@@ -1508,6 +1551,11 @@
           <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
         </button>
       {/if}
+      <!-- Fullscreen is available even in preview-only mode, so it sits OUTSIDE
+           the !previewOnly guard as the last meta button. -->
+      <button type="button" class="livebtn" onclick={toggleFullscreen} aria-label="Fullscreen">
+        <Icon name={isFullscreen ? 'exitFull' : 'fullscreen'} size={20} />
+      </button>
     </div>
   </div>
 
@@ -1598,6 +1646,16 @@
     border-radius: var(--r);
     overflow: hidden;
     background: var(--feed);
+  }
+  /* Fullscreen: let the composite fill the viewport. The media layers already
+     object-fit:contain (preview/frames + HlsVideo), so they letterbox cleanly. */
+  .frame:fullscreen,
+  .frame:-webkit-full-screen {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    aspect-ratio: auto;
+    border-radius: 0;
   }
   /* Desktop (matches the layout's 900px isDesktop breakpoint): on a wide
      viewport a full-width 16:9 frame would push the controls + scrubber below
