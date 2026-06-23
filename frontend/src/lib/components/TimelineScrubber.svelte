@@ -93,6 +93,15 @@
   // or the oldest footage. No drag override — during a drag the CONTENT moves,
   // not the playhead, so the round-tripped position drives it throughout.
   const playheadFraction = $derived(timeToFraction(position, windowStart, windowEnd))
+  // Local-time readout for the flag above the playhead — the same HH:MM:SS
+  // format the controls bar used to show before the clock moved up here.
+  function pad(n: number): string {
+    return String(n).padStart(2, '0')
+  }
+  const clock = $derived.by(() => {
+    const d = new Date(position * 1000)
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  })
   // Out-of-footage bands: the recording floor / live edge mapped into the
   // viewport. floorFrac > 0 means the left edge runs before recording started;
   // liveFrac < 1 means the right edge runs past now. Each marks an empty span.
@@ -276,78 +285,105 @@
   }
 </script>
 
-<div
-  bind:this={trackEl}
-  class="track"
-  role="slider"
-  tabindex="0"
-  aria-orientation="horizontal"
-  aria-valuemin={windowStart}
-  aria-valuemax={windowEnd}
-  aria-valuenow={position}
-  onpointerdown={onPointerDown}
-  onpointermove={onPointerMove}
-  onpointerup={onPointerUp}
-  onpointercancel={onPointerUp}
-  onkeydown={onKeyDown}
->
-  <div class="cells" aria-hidden="true">
-    {#each cells as cell (cell.x0)}
-      <span
-        class="cell"
-        style:left="{cell.x0 * 100}%"
-        style:width="{(cell.x1 - cell.x0) * 100}%"
-        style:--cell-fraction={cell.fraction}
-      ></span>
-    {/each}
-  </div>
-
-  {#if floorFrac > 0}
-    <span class="void" aria-hidden="true" style:left="0" style:width="{floorFrac * 100}%"></span>
-  {/if}
-  {#if liveFrac < 1}
-    <span class="void" aria-hidden="true" style:left="{liveFrac * 100}%" style:right="0"></span>
-  {/if}
-
-  <div class="review-lane" aria-hidden="true">
-    {#each reviewBands as band (band.id)}
-      <span
-        class="review {band.severity}"
-        style:left="{band.x0 * 100}%"
-        style:width="{band.width * 100}%"
-      ></span>
-    {/each}
-  </div>
-
-  {#if audioEvents.length > 0}
-    <div class="audio-lane" aria-hidden="true">
-      {#each audioBands as band (band.id)}
-        <span class="audio" style:left="{band.x0 * 100}%" style:width="{band.width * 100}%"></span>
+<!-- Non-clipping wrapper: reserves space above the track for the time flag so it
+     is NOT cut off by the track's overflow:hidden. The .track stays the sole
+     drag surface (all handlers, bind:this, role/aria, touch-action). -->
+<div class="scrubber">
+  <div
+    bind:this={trackEl}
+    class="track"
+    role="slider"
+    tabindex="0"
+    aria-orientation="horizontal"
+    aria-valuemin={windowStart}
+    aria-valuemax={windowEnd}
+    aria-valuenow={position}
+    onpointerdown={onPointerDown}
+    onpointermove={onPointerMove}
+    onpointerup={onPointerUp}
+    onpointercancel={onPointerUp}
+    onkeydown={onKeyDown}
+  >
+    <div class="cells" aria-hidden="true">
+      {#each cells as cell (cell.x0)}
+        <span
+          class="cell"
+          style:left="{cell.x0 * 100}%"
+          style:width="{(cell.x1 - cell.x0) * 100}%"
+          style:--cell-fraction={cell.fraction}
+        ></span>
       {/each}
     </div>
-  {/if}
 
-  <div class="ticks" aria-hidden="true">
-    {#each ticks as tick (tick.tSec)}
-      <span class="tick" style:left="{tick.fraction * 100}%">
-        <span class="tick-rule"></span>
-        <span class="tick-label">{tick.label}</span>
-      </span>
-    {/each}
+    {#if floorFrac > 0}
+      <span class="void" aria-hidden="true" style:left="0" style:width="{floorFrac * 100}%"></span>
+    {/if}
+    {#if liveFrac < 1}
+      <span class="void" aria-hidden="true" style:left="{liveFrac * 100}%" style:right="0"></span>
+    {/if}
+
+    <div class="review-lane" aria-hidden="true">
+      {#each reviewBands as band (band.id)}
+        <span
+          class="review {band.severity}"
+          style:left="{band.x0 * 100}%"
+          style:width="{band.width * 100}%"
+        ></span>
+      {/each}
+    </div>
+
+    {#if audioEvents.length > 0}
+      <div class="audio-lane" aria-hidden="true">
+        {#each audioBands as band (band.id)}
+          <span class="audio" style:left="{band.x0 * 100}%" style:width="{band.width * 100}%"
+          ></span>
+        {/each}
+      </div>
+    {/if}
+
+    <div class="ticks" aria-hidden="true">
+      {#each ticks as tick (tick.tSec)}
+        <span class="tick" style:left="{tick.fraction * 100}%">
+          <span class="tick-rule"></span>
+          <span class="tick-label">{tick.label}</span>
+        </span>
+      {/each}
+    </div>
+
+    <span
+      class="playhead"
+      class:dragging
+      aria-hidden="true"
+      style:transform="translateX({playheadFraction * trackWidth - 1}px)"
+    >
+      <span class="playhead-line"></span>
+    </span>
   </div>
 
+  <!-- Time flag: a sibling of .track inside the non-clipping wrapper, so it is
+       not clipped. Aligned to the playhead line with the SAME x expression the
+       playhead uses; the inner bubble is centred over that x. The flag and the
+       line share the drag-gated transition so they move together. -->
   <span
-    class="playhead"
+    class="playhead-flag"
     class:dragging
     aria-hidden="true"
     style:transform="translateX({playheadFraction * trackWidth - 1}px)"
   >
-    <span class="playhead-line"></span>
-    <span class="playhead-handle"></span>
+    <span class="flag-bubble">{clock}</span>
   </span>
 </div>
 
 <style>
+  /* Non-clipping wrapper around the track. padding-top reserves room for the
+     time flag, which sits ABOVE the overflow:hidden track. First-pass size —
+     tune on device. */
+  .scrubber {
+    position: relative;
+    width: 100%;
+    padding-top: 26px;
+    overflow: visible;
+  }
   .track {
     position: relative;
     width: 100%;
@@ -509,18 +545,52 @@
     width: 2px;
     background: var(--accent);
   }
-  .playhead-handle {
+  /* Time flag — the top cap of the playhead line, sitting in the wrapper's
+     reserved padding above the track. Same drag-gated transition as the
+     playhead so the two move as one. First-pass sizes — tune on device. */
+  .playhead-flag {
     position: absolute;
-    top: -4px;
-    left: -5px;
-    width: 12px;
-    height: 12px;
-    border-radius: 999px;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    transition: transform 120ms linear;
+    will-change: transform;
+  }
+  .playhead-flag.dragging {
+    transition: none;
+  }
+  .flag-bubble {
+    position: relative;
+    display: inline-block;
+    /* Centre the bubble over the playhead-line x. */
+    transform: translateX(-50%);
+    height: 22px;
+    padding: 0 7px;
+    border-radius: var(--r-sm);
     background: var(--accent);
-    box-shadow: var(--shadow);
+    color: var(--on-accent);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 22px;
+    white-space: nowrap;
+  }
+  /* Downward pointer merging the bubble into the playhead line below: its tip
+     lands at the track top (22px bubble + 4px triangle == 26px padding-top). */
+  .flag-bubble::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid var(--accent);
   }
   @media (prefers-reduced-motion: reduce) {
-    .playhead {
+    .playhead,
+    .playhead-flag {
       transition: none;
     }
   }

@@ -1293,15 +1293,6 @@
     if (typeof history !== 'undefined' && history.length > 1) history.back()
     else goto(`/cam/${camId}`)
   }
-
-  function pad(n: number): string {
-    return String(n).padStart(2, '0')
-  }
-  // Wall-clock readout of the current position (local time, HH:MM:SS).
-  const clock = $derived.by(() => {
-    const d = new Date(position * 1000)
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  })
 </script>
 
 <div class="page">
@@ -1463,9 +1454,6 @@
           <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
         </button>
       {/if}
-      <span class="clock">
-        <Mono size={13} weight={500} color="var(--text)" letterSpacing={0.3}>{clock}</Mono>
-      </span>
     </div>
   </div>
 
@@ -1699,7 +1687,8 @@
     gap: 8px;
     flex: 0 1 auto;
   }
-  /* Trailing meta cluster: speed chip, mute, clock — pinned to the right. */
+  /* Trailing meta cluster: speed chip, mute — pinned to the right. The clock
+     now lives in the scrubber's time flag, not here. */
   .meta {
     flex: 1 1 0;
     display: flex;
@@ -1779,11 +1768,6 @@
     fill: currentColor;
     stroke: currentColor;
   }
-  .clock {
-    display: inline-flex;
-    align-items: center;
-  }
-
   .scrub {
     display: flex;
     flex-direction: column;
