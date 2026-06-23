@@ -287,3 +287,30 @@ func (c *Client) GetRecordingsSummary(ctx context.Context, cam, timezone string)
 	}
 	return resp, nil
 }
+
+// GetRecordings fetches the per-segment recordings list for a camera over
+// the [after, before] window from Frigate's /api/{cam}/recordings endpoint.
+// Frigate returns the raw ~10s recording segments (each with start_time /
+// end_time and bookkeeping fields) that the BFF coalesces into coverage
+// ranges for the scrubber's recorded/gap lane. after and before are integer
+// unix-seconds STRINGS passed verbatim as query params (the handler validates
+// them as digit-only before calling); both are always set. Returns the raw
+// upstream *http.Response so the BFF handler can read and reduce the body;
+// the caller owns the body and is responsible for closing it. Any status code
+// is returned to the caller; non-2xx is not treated as an error here (same
+// contract as GetRecordingsSummary).
+func (c *Client) GetRecordings(ctx context.Context, cam, after, before string) (*http.Response, error) {
+	q := url.Values{}
+	q.Set("after", after)
+	q.Set("before", before)
+	reqURL := c.baseURL + "/api/" + url.PathEscape(cam) + "/recordings?" + q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate recordings: %w", err)
+	}
+	return resp, nil
+}

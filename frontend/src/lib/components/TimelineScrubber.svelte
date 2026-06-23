@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { hourCells, timeToFraction, type TimelineHour } from '$lib/timeline'
-  import type { ReviewSegment, AudioMarker } from '$lib/api'
+  import { timeToFraction } from '$lib/timeline'
+  import type { ReviewSegment, AudioMarker, CoverageSegment } from '$lib/api'
 
   type Props = {
-    hours: TimelineHour[]
     windowStart: number
     windowEnd: number
     position: number
@@ -11,6 +10,10 @@
     // Default to the viewport edges so no band shows when not provided.
     playbackFloor?: number
     liveEdge?: number
+    // Recorded-coverage ranges rendered as a full-height neutral base fill. Each
+    // range is footage-present; the unfilled track between ranges is a real
+    // recording gap. Default empty so the layer is simply absent when omitted.
+    coverage?: CoverageSegment[]
     // Review activity segments (grouped alert / detection) rendered as a thin
     // lane along the top of the bar. An active segment (end null) draws out to
     // the live edge. Default empty so the lane is simply absent when omitted.
@@ -33,12 +36,12 @@
   }
 
   let {
-    hours,
     windowStart,
     windowEnd,
     position,
     playbackFloor = windowStart,
     liveEdge = windowEnd,
+    coverage = [],
     reviews = [],
     audioEvents = [],
     onSeek,
@@ -87,7 +90,22 @@
   let pinchStartDist = 0
   let pinchStartSpan = 0
 
-  const cells = $derived(hourCells(hours, windowStart, windowEnd))
+  // Coverage bands: each recorded range mapped onto the viewport, same idiom as
+  // reviewBands but with NO severity and — crucially — NO min-width clamp, so a
+  // recorded range renders at its true width and a real gap between ranges stays
+  // visible as empty track. timeToFraction clamps to [0,1], so a range fully
+  // outside the viewport collapses to zero width and is dropped (x1 <= x0).
+  type CoverageBand = { id: string; x0: number; width: number }
+  const coverageBands = $derived.by((): CoverageBand[] => {
+    const out: CoverageBand[] = []
+    for (const seg of coverage) {
+      const x0 = timeToFraction(seg.start, windowStart, windowEnd)
+      const x1 = timeToFraction(seg.end, windowStart, windowEnd)
+      if (x1 <= x0) continue
+      out.push({ id: `${seg.start}-${seg.end}`, x0, width: x1 - x0 })
+    }
+    return out
+  })
   // The playhead follows the consumer-echoed position prop. In the filmstrip it
   // sits ~centre and slides toward an edge only when the viewport pins near live
   // or the oldest footage. No drag override — during a drag the CONTENT moves,
@@ -223,8 +241,8 @@
   }
 
   // Hour-boundary dividers, computed from TIME on a fixed 3600s grid (NOT from
-  // the cells, whose straddling-edge x0/x1 are clamped to [0,1] and so are not
-  // real boundaries). Walks whole-hour marks across the window like ticks does.
+  // any band geometry, whose straddling-edge x0/x1 are clamped to [0,1] and so
+  // are not real boundaries). Walks whole-hour marks across the window like ticks.
   // Keep only STRICTLY interior lines so a boundary landing exactly on a window
   // edge does not draw a spurious divider pinned at 0 or 1.
   const HOUR = 3600
@@ -362,13 +380,9 @@
     onpointercancel={onPointerUp}
     onkeydown={onKeyDown}
   >
-    <div class="cells" aria-hidden="true">
-      {#each cells as cell (cell.x0)}
-        <span
-          class="cell"
-          style:left="{cell.x0 * 100}%"
-          style:width="{(cell.x1 - cell.x0) * 100}%"
-          style:--cell-fraction={cell.fraction}
+    <div class="coverage" aria-hidden="true">
+      {#each coverageBands as band (band.id)}
+        <span class="covered" style:left="{band.x0 * 100}%" style:width="{band.width * 100}%"
         ></span>
       {/each}
     </div>
@@ -474,22 +488,22 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .cells {
+  /* Recorded-coverage base fill: the bottom layer (first in DOM order), a
+     full-height neutral grey marking footage-present spans so the amber/cyan
+     review and violet audio lanes above it stand out. Gaps are simply left
+     unfilled — the .track --feed background shows through as empty track. */
+  .coverage {
     position: absolute;
     inset: 0;
     pointer-events: none;
   }
-  /* Hour fill uses --accent-soft modulated by --cell-fraction. It is now only a
-     faint wash — the hour-boundary dividers (.hourline) are the primary hour
-     cue. The 0.4 multiplier is a first pass to tune on device; a later
-     backend-backed change will replace this density wash with real
-     recorded/empty sub-hour coverage. */
-  .cell {
+  /* Token-based neutral grey (no hex literal): a faint white wash reading as
+     plain "footage here". Colour/opacity are a first pass — tune on device. */
+  .covered {
     position: absolute;
     top: 0;
     bottom: 0;
-    background: var(--accent-soft);
-    opacity: calc(var(--cell-fraction) * 0.4);
+    background: var(--border-strong);
   }
   /* Hour-boundary dividers: a crisp vertical line at each whole hour, the
      primary cue separating hours. Stronger than the faint --border label ticks.
@@ -566,8 +580,8 @@
   }
   /* Out-of-footage band: the span before recording started / beyond now. A
      faint dark wash plus a low-opacity diagonal hatch so the empty edge reads
-     as "no footage here", not missing UI. Subtle — must not fight the cells or
-     the playhead, and never captures pointer events. */
+     as "no footage here", not missing UI. Subtle — must not fight the coverage
+     fill or the playhead, and never captures pointer events. */
   .void {
     position: absolute;
     top: 0;

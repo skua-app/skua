@@ -43,6 +43,7 @@ func NewRouter(h *Handler, hub *sse.Hub, logger *slog.Logger, staticFS fs.FS) ht
 		r.Get("/cameras/{id}/recordings-summary", h.handleRecordingsSummary)
 		r.Get("/cameras/{id}/review", h.handleTimelineReview)
 		r.Get("/cameras/{id}/audio-events", h.handleTimelineAudioEvents)
+		r.Get("/cameras/{id}/recordings", h.handleTimelineRecordings)
 		r.Post("/webrtc/{cam_id}/whep", h.handleWhep)
 		r.Get("/prefs", h.handleGetPrefs)
 		r.Put("/prefs", h.handlePutPrefs)

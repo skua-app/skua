@@ -895,6 +895,29 @@ export async function fetchReview(
   )
 }
 
+// CoverageSegment is one coalesced range of recorded footage: the BFF merges
+// Frigate's raw ~10s recording segments into a small set of [start,end) spans.
+// The scrubber renders these as a neutral recorded fill; gaps are the spans
+// BETWEEN entries, left as empty track.
+export type CoverageSegment = {
+  start: number
+  end: number
+}
+
+// fetchCoverage returns the recorded-coverage ranges overlapping [start,end)
+// for a camera. Recorded ranges are the entries; gaps are the spans between
+// them. On an empty window the array is empty and the coverage layer is blank;
+// on error callers degrade to a blank layer.
+export async function fetchCoverage(
+  camId: string,
+  start: number,
+  end: number
+): Promise<CoverageSegment[]> {
+  return apiFetch<CoverageSegment[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/recordings?start=${start}&end=${end}`
+  )
+}
+
 // AudioMarker is one Frigate audio-detection event reduced to what the
 // scrubber's audio lane needs: its sound class and wall-clock span. end is null
 // while the event is still active — the lane draws an active marker out to the

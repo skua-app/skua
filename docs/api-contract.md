@@ -859,6 +859,37 @@ type CameraOrderErrorBody = {
 //     - context deadline                 → 504 upstream_timeout
 //     - any other upstream failure       → 502 upstream_error
 
+// GET /api/cameras/{id}/recordings?start=&end=
+//   The windowed recording-COVERAGE lane for the recording-timeline scrubber:
+//   the spans of recorded footage overlapping [start,end), rendered as a
+//   neutral recorded fill with the gaps between spans left as empty track. The
+//   BFF reads Frigate's per-segment /api/{cam}/recordings (the raw ~10s
+//   recording segments) with after=start-60 (a fixed 60-s lookback — Frigate
+//   filters segments on start_time, so the lookback catches a segment that
+//   started just before the window's left edge and straddles it) and
+//   before=end, then sorts the segments ascending and coalesces contiguous
+//   ones — bridging gaps up to COVERAGE_GAP_MERGE (5 s) so sub-second boundary
+//   jitter does not fragment continuous recording — into a small set of
+//   coverage ranges:
+//
+//     [ { "start": <float64>, "end": <float64> }, ... ]
+//
+//   sorted ascending. Recorded ranges are the entries; gaps are the spans
+//   BETWEEN them. start/end are wall-clock unix seconds (subseconds preserved).
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store.
+//
+//   Errors (same table as /review):
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - any other upstream failure       → 502 upstream_error
+//   A non-2xx upstream status is passed through with an empty JSON array (like
+//   /preview-clips) so the FE degrades to no coverage.
+
 // GET /api/cameras/{id}/preview-frame-list?start=&end=
 //   The chronological list of preview FRAMES Frigate has rendered for
 //   [start,end), each rewritten to the BFF /preview-frame proxy. The

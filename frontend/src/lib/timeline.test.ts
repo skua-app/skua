@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RecordingsSummary } from './api'
-import {
-  flattenSummary,
-  fractionToTime,
-  hourCells,
-  timeToFraction,
-  type TimelineHour
-} from './timeline'
+import { flattenSummary, fractionToTime, timeToFraction } from './timeline'
 
 describe('flattenSummary', () => {
   it('returns an empty array for an empty summary', () => {
@@ -118,55 +112,5 @@ describe('fractionToTime', () => {
   it('clamps out-of-range fractions before mapping back', () => {
     expect(fractionToTime(-0.5, 1000, 2000)).toBe(1000)
     expect(fractionToTime(1.7, 1000, 2000)).toBe(2000)
-  })
-})
-
-describe('hourCells', () => {
-  function hourAt(tSec: number, fraction: number, events = 0): TimelineHour {
-    const d = new Date(0)
-    d.setTime(tSec * 1000)
-    return { hourStart: d, recordedFraction: fraction, events, motion: 0 }
-  }
-
-  it('maps an hour fully inside the window to the expected x0/x1', () => {
-    const start = 0
-    const end = 6 * 3600
-    const cells = hourCells([hourAt(2 * 3600, 0.5, 4)], start, end)
-    expect(cells).toHaveLength(1)
-    expect(cells[0]!.x0).toBeCloseTo(2 / 6, 10)
-    expect(cells[0]!.x1).toBeCloseTo(3 / 6, 10)
-    expect(cells[0]!.fraction).toBe(0.5)
-    expect(cells[0]!.events).toBe(4)
-  })
-
-  it('clamps hours that straddle the left or right edge', () => {
-    const start = 1800
-    const end = 1800 + 3 * 3600
-    const cells = hourCells([hourAt(0, 1.0), hourAt(2 * 3600 + 1800, 0.7)], start, end)
-    expect(cells).toHaveLength(2)
-    expect(cells[0]!.x0).toBe(0)
-    expect(cells[0]!.x1).toBeGreaterThan(0)
-    expect(cells[0]!.x1).toBeLessThan(1)
-    expect(cells[1]!.x1).toBe(1)
-    expect(cells[1]!.x0).toBeGreaterThan(0)
-    expect(cells[1]!.x0).toBeLessThan(1)
-  })
-
-  it('drops hours fully outside the window', () => {
-    const start = 10 * 3600
-    const end = 12 * 3600
-    expect(hourCells([hourAt(0, 1)], start, end)).toEqual([])
-    expect(hourCells([hourAt(20 * 3600, 1)], start, end)).toEqual([])
-  })
-
-  it('returns cells in ascending x0 order regardless of input', () => {
-    const start = 0
-    const end = 6 * 3600
-    const cells = hourCells(
-      [hourAt(4 * 3600, 0.2), hourAt(1 * 3600, 0.4), hourAt(3 * 3600, 0.9)],
-      start,
-      end
-    )
-    expect(cells.map((c) => c.x0)).toEqual([...cells.map((c) => c.x0)].sort((a, b) => a - b))
   })
 })

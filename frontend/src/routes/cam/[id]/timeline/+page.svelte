@@ -27,9 +27,16 @@
     fetchPreviewFrameList,
     fetchRecordingCodecs,
     fetchReview,
-    fetchAudioEvents
+    fetchAudioEvents,
+    fetchCoverage
   } from '$lib/api'
-  import type { PreviewClip, PreviewFrame, ReviewSegment, AudioMarker } from '$lib/api'
+  import type {
+    PreviewClip,
+    PreviewFrame,
+    ReviewSegment,
+    AudioMarker,
+    CoverageSegment
+  } from '$lib/api'
   import { canDecodeRecording } from '$lib/hls'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
@@ -48,7 +55,7 @@
   // landed time instead (the else-branch) rather than snap back.
   const CHUNK_REJOIN_SLACK = 30
   // Zoom bounds for the scrubber viewport span (pinch / wheel). 10 min keeps a
-  // useful minimum context; 12 h is the widest pan that still resolves cells.
+  // useful minimum context; 12 h is the widest pan the scrubber still resolves.
   const MIN_SPAN = 10 * 60
   const MAX_SPAN = 12 * 3600
   // Prefetch the next chunk into the idle buffer once the active playhead is
@@ -149,6 +156,10 @@
   // Loaded on the SAME trigger and over the SAME span as reviews / preview
   // clips, so the lane stays correct as the playhead pans.
   let audioEvents = $state<AudioMarker[]>([])
+  // Recorded-coverage ranges for the scrubber's base fill layer. Loaded on the
+  // SAME trigger and over the SAME span as reviews / audio / preview clips, so
+  // the recorded/gap fill stays correct as the playhead pans.
+  let coverage = $state<CoverageSegment[]>([])
   // Frigate omits the open current hour from the preview-clips list entirely —
   // its mp4 is still being assembled — so the newest available coverage ends at
   // the last clip's end (clips are sorted by start). The live tail is the span
@@ -334,8 +345,8 @@
   )
 
   // On camId change: capture the playable bounds, place the playhead, reset to
-  // scrubbing, drop any loaded chunk, and pull the summary for the scrubber
-  // cells. The viewport is derived from the playhead, so we only set position:
+  // scrubbing, drop any loaded chunk, and pull the summary for the recording
+  // floor. The viewport is derived from the playhead, so we only set position:
   // an optional ?t=<unix> deep-link (from an event's "See on timeline") lands
   // the playhead at t (the centred viewport then sits t dead-centre); without it
   // the playhead rests centred in the last viewSpan up to live, then autoplays
@@ -407,6 +418,8 @@
       reviews = []
       // Same for the audio lane.
       audioEvents = []
+      // Same for the recorded-coverage base fill.
+      coverage = []
       // Reset the clip-follow window + cancel any pending debounced refetch.
       loadedClipsStart = null
       loadedClipsEnd = null
@@ -425,6 +438,7 @@
       void loadClipsAround(position)
       void loadReviewAround(position)
       void loadAudioAround(position)
+      void loadCoverageAround(position)
       // Resolve decode capability, then gate the one-shot entry autoplay on it:
       // play full-res only when this device is known to decode the recording
       // codec. While capability is still pending we stay on the preview layer
@@ -532,6 +546,26 @@
     }
   }
 
+  // Load the recorded-coverage ranges spanning the same clipLoadSpan window
+  // around center (clamped to the playable domain) as loadReviewAround. Guard a
+  // stale camId — an in-flight list for a camera the user has navigated away
+  // from must not overwrite the new one. On error the layer stays empty (no
+  // recorded fill; the track shows as an empty bar).
+  async function loadCoverageAround(center: number) {
+    const id = camId
+    const half = clipLoadSpan / 2
+    const lo = Math.max(playbackFloor, center - half)
+    const hi = Math.min(liveEdge, center + half)
+    try {
+      const list = await fetchCoverage(id, Math.floor(lo), Math.floor(hi))
+      if (camId !== id) return
+      coverage = list
+    } catch {
+      if (camId !== id) return
+      coverage = []
+    }
+  }
+
   // Position-following clip refetch (debounced, trailing edge). When the
   // playhead pans within viewSpan/2 of either loaded edge — and that edge isn't
   // already pinned at the playable bound — schedule a refetch around the new
@@ -554,6 +588,7 @@
       void loadClipsAround(position)
       void loadReviewAround(position)
       void loadAudioAround(position)
+      void loadCoverageAround(position)
     }, 250)
   })
 
@@ -1561,12 +1596,12 @@
 
   <div class="scrub">
     <TimelineScrubber
-      hours={timelineStore.hours}
       {windowStart}
       {windowEnd}
       {position}
       {playbackFloor}
       {liveEdge}
+      {coverage}
       {reviews}
       {audioEvents}
       onSeek={handleSeek}
