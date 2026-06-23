@@ -655,6 +655,34 @@
     })
   }
 
+  // Snap a settle target onto recorded footage. Frigate's VOD only plays
+  // forward and silently skips a gap to the first real segment, but our
+  // wall-clock anchor (position = chunkStart + el.currentTime) counts from the
+  // chunk's start second — so a chunk that starts inside a gap makes the flag
+  // clock lag the real footage by the gap size. Snapping a gap target forward
+  // to the first recorded second keeps chunkStart on footage and the anchor
+  // honest. Settle-only (never during a drag): scrubbing must follow the finger.
+  function snapToCoverage(t: number): number {
+    // No coverage data (not yet loaded, or a continuous-record camera reporting
+    // full coverage): degrade to current behaviour, no snap.
+    if (coverage.length === 0) return t
+    // Already on footage: leave it.
+    for (const b of coverage) {
+      if (t >= b.start && t <= b.end) return t
+    }
+    // In a gap: snap to the FORWARD-nearest band (smallest start >= t). Do not
+    // assume coverage is sorted; scan for the minimum qualifying start.
+    let best: number | null = null
+    for (const b of coverage) {
+      if (b.start >= t && (best === null || b.start < best)) best = b.start
+    }
+    // No forward band — t is past the last loaded coverage. Near the live edge
+    // coverage reaches ~now, so this is a sub-segment tail; a BACKWARD snap
+    // would rewind the user surprisingly and Frigate VOD only plays forward
+    // anyway. Forward-only: leave t unchanged.
+    return best ?? t
+  }
+
   // Lazily load the open live tail's webp preview frame list, once per tail
   // span. The tail spans [lastClipEnd, windowEnd] — the live, not-yet-clipped
   // footage after the newest preview clip, which has no assembled mp4, so we
@@ -1052,6 +1080,20 @@
     // Preview-only device: never touch full-res — the scrub/preview path is
     // the whole experience here.
     if (previewOnly) return
+    // Settle landed in a gap: snap forward to the first recorded second so the
+    // chunk starts on real footage and the wall-clock anchor holds (otherwise
+    // the flag clock lags by the gap size). Move the playhead too — the flag /
+    // cursor jump to the first existing record is the point of the fix, and the
+    // derived viewport recenters on it for free. Keep the load-time poster on
+    // the snapped footage rather than the gap. Runs for every caller
+    // (handleScrubEnd, togglePlay, entry/deep-link autoplay) by living here.
+    const snapped = snapToCoverage(t)
+    if (snapped !== t) {
+      t = snapped
+      position = snapped
+      pickClip(snapped)
+      seekPreview()
+    }
     chunkEnded = false
     const el = activeEl
     const aStart = activeStart
