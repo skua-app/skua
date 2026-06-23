@@ -33,6 +33,7 @@
   import { canDecodeRecording } from '$lib/hls'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
+  import ZoomPane from '$lib/components/ZoomPane.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import { ui } from '$lib/i18n/strings'
@@ -1325,39 +1326,45 @@
   </header>
 
   <div class="frame">
-    <video
-      bind:this={previewEl}
-      src={previewSrc || undefined}
-      muted
-      playsinline
-      preload="auto"
-      class="layer preview"
-      style:opacity={previewVisible ? 1 : 0}
-    ></video>
+    <!-- Picture zoom (wheel / two-finger pinch / double-tap reset), same as the
+         live focus view. Only the media layers scale; the overlays below stay
+         fixed siblings outside the pane. resetKey={camId} resets zoom on camera
+         switch, but NOT on scrub↔playback within one camera. -->
+    <ZoomPane resetKey={camId}>
+      <video
+        bind:this={previewEl}
+        src={previewSrc || undefined}
+        muted
+        playsinline
+        preload="auto"
+        class="layer preview"
+        style:opacity={previewVisible ? 1 : 0}
+      ></video>
 
-    <img
-      class="layer frames"
-      src={frameSrc || undefined}
-      alt=""
-      style:opacity={framesVisible ? 1 : 0}
-    />
+      <img
+        class="layer frames"
+        src={frameSrc || undefined}
+        alt=""
+        style:opacity={framesVisible ? 1 : 0}
+      />
 
-    <div class="layer fullres" style:opacity={active === 'a' && fullResVisible ? 1 : 0}>
-      <HlsVideo
-        bind:video={videoElA}
-        src={srcA}
-        muted={fullResMuted}
-        onError={handleFullResError}
-      />
-    </div>
-    <div class="layer fullres" style:opacity={active === 'b' && fullResVisible ? 1 : 0}>
-      <HlsVideo
-        bind:video={videoElB}
-        src={srcB}
-        muted={fullResMuted}
-        onError={handleFullResError}
-      />
-    </div>
+      <div class="layer fullres" style:opacity={active === 'a' && fullResVisible ? 1 : 0}>
+        <HlsVideo
+          bind:video={videoElA}
+          src={srcA}
+          muted={fullResMuted}
+          onError={handleFullResError}
+        />
+      </div>
+      <div class="layer fullres" style:opacity={active === 'b' && fullResVisible ? 1 : 0}>
+        <HlsVideo
+          bind:video={videoElB}
+          src={srcB}
+          muted={fullResMuted}
+          onError={handleFullResError}
+        />
+      </div>
+    </ZoomPane>
 
     {#if chunkEnded}
       <div class="frame-hint">
