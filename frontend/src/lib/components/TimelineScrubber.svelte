@@ -434,9 +434,11 @@
     position: absolute;
     top: 0;
     height: 100%;
-    /* Keep a tiny segment visible rather than collapsing to a hairline. */
-    min-width: 3px;
-    border-radius: 1px;
+    /* Rounded capsule. min-width 4px so the round caps read; a 1px dark rim
+       separates the capsule from the cell fills behind it. */
+    min-width: 4px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
   }
   .review.alert {
     background: var(--warn);
@@ -452,7 +454,9 @@
      on top. */
   .audio-lane {
     position: absolute;
-    top: 6px;
+    /* top:10px leaves ~4px between this lane and the review lane (top:0,
+       height:6px) so the two no longer touch. First-pass px — tune on device. */
+    top: 10px;
     left: 0;
     right: 0;
     height: 5px;
@@ -462,9 +466,11 @@
     position: absolute;
     top: 0;
     height: 100%;
-    /* Keep a tiny marker visible rather than collapsing to a hairline. */
-    min-width: 3px;
-    border-radius: 1px;
+    /* Rounded capsule. min-width 4px so the round caps read; a 1px dark rim
+       separates the capsule from the cell fills behind it. */
+    min-width: 4px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
     /* Deliberate one-off violet (no design token): keeps the audio lane
        visually distinct from the amber alert and cyan detection review bands,
        which sit just above. */
