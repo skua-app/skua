@@ -368,8 +368,11 @@
     class="playhead-flag"
     class:dragging
     aria-hidden="true"
-    style:transform="translateX({playheadFraction * trackWidth - 1}px)"
+    style:transform="translateX({playheadFraction * trackWidth + 1}px)"
   >
+    <!-- +1 (vs the playhead's -1) compensates the track's 1px left border: the
+         flag lives in the borderless .scrubber frame, the playhead inside the
+         bordered .track frame, so the flag's centre lands on the line. -->
     <span class="flag-bubble">{clock}</span>
   </span>
 </div>
