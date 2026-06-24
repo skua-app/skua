@@ -180,6 +180,23 @@
   let dragStartY = 0
   let dragStartT = 0
   let curT = 0
+  // Flick bookkeeping (non-reactive): the last translate sample, the time it
+  // was taken (performance.now()), and the current downward velocity in px/ms
+  // (positive = moving down). Reset at every drag start so a stale sample from
+  // a previous gesture can't trigger an accidental dismiss.
+  let lastSampleT = 0
+  let lastSampleTime = 0
+  let flickVelocity = 0
+  // Downward flick velocity above which a release dismisses the sheet even if
+  // it never travelled past the dismiss threshold. ~0.6 px/ms ≈ 600 px/s.
+  // Tune on device.
+  const FLICK_CLOSE_VELOCITY = 0.6
+
+  function resetFlickTracking() {
+    lastSampleT = curT
+    lastSampleTime = performance.now()
+    flickVelocity = 0
+  }
 
   function computeDetents() {
     const screenH = window.visualViewport?.height ?? window.innerHeight
@@ -283,10 +300,20 @@
     curT = Math.max(0, Math.min(max, dragStartT + dy))
     sheetEl.style.transform = `translateY(${curT}px)`
     setScrimForTranslate(curT)
+    // Sample velocity from the delta since the last move (positive = downward)
+    // so a fast flick can dismiss even when it doesn't travel far.
+    const nowMs = performance.now()
+    const dt = nowMs - lastSampleTime
+    if (dt > 0) {
+      flickVelocity = (curT - lastSampleT) / dt
+      lastSampleT = curT
+      lastSampleTime = nowMs
+    }
   }
   function sheetDragRelease() {
     const peekT = detents[detents.length - 1]!
-    if (curT > peekT + 70) {
+    // Dismiss on a far drag OR a fast downward flick.
+    if (curT > peekT + 70 || flickVelocity > FLICK_CLOSE_VELOCITY) {
       glanceStore.closePeek()
       return
     }
@@ -316,6 +343,7 @@
     dragStartY = e.clientY
     dragStartT = detents[detentIdx]!
     curT = dragStartT
+    resetFlickTracking()
     sheetEl.style.transition = 'none'
     e.preventDefault()
   }
@@ -386,6 +414,7 @@
         touchEngaged = true
         dragStartT = detents[detentIdx]!
         curT = dragStartT
+        resetFlickTracking()
         sheetEl.style.transition = 'none'
         e.preventDefault()
         sheetDragMove(dy)
