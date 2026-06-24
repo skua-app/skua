@@ -27,6 +27,7 @@ Changed
 - The moment and event detail modals no longer pile their buttons into a wrapping row. Close is now an X over the top-right corner of the video, the way modals usually close, and "See on timeline" has become the filled primary action that spans the row, with Download (and, for a live moment, Open live) sitting beside it as small icon buttons. The separate "Open in Frigate" button is gone, since the app now has its own recording timeline reached through "See on timeline".
 
 Fixed
+- The About screen no longer shows its tagline twice. The line "A calmer front-end for Frigate" now appears only once, in the identity card.
 - A quick downward flick on the moments sheet now closes it instead of springing back. Before, only a slow drag that pulled the sheet far enough would dismiss it; a fast short flick snapped back. A slow short drag still settles back to its detent.
 
 ## [0.13.0] — 2026-06-16
