@@ -6,6 +6,8 @@
 // `rects`/`lines`/`circles` for mixed-primitive icons (e.g. the events tab
 // glyph). Icon.svelte renders each list in order.
 
+import type { EventKind } from '$lib/api'
+
 export type IconRect = { x: number; y: number; width: number; height: number; rx?: number }
 export type IconLine = { x1: number; y1: number; x2: number; y2: number }
 export type IconCircle = {
@@ -70,6 +72,10 @@ export type IconName =
   | 'skipForward'
   | 'rewind'
   | 'fastForward'
+  | 'person'
+  | 'car'
+  | 'paw'
+  | 'tag'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'M15 18l-6-6 6-6' },
@@ -281,5 +287,52 @@ export const ICONS: Record<IconName, IconDef> = {
     paths: ['M20 5.5v13l-8-6.5z', 'M12 5.5v13l-8-6.5z'],
     fill: 'currentColor',
     stroke: 'none'
+  },
+  // Event-kind glyphs (see kindIcon below). Drawn to read at ~14px in the
+  // filter chips and event rows/cards.
+  // person — head circle + shoulders arc.
+  person: {
+    circles: [{ cx: 12, cy: 8, r: 3.5 }],
+    paths: 'M5.5 21v-1a6.5 6.5 0 0 1 13 0v1'
+  },
+  // car — side-on body (roof arc over a chassis bar) + two wheels.
+  car: {
+    paths: [
+      'M5 13l1.6-4.7A2 2 0 0 1 8.5 7h7a2 2 0 0 1 1.9 1.3L19 13',
+      'M3 13h18v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z'
+    ],
+    circles: [
+      { cx: 7.5, cy: 17, r: 1.7 },
+      { cx: 16.5, cy: 17, r: 1.7 }
+    ]
+  },
+  // paw — filled pad + four filled toe beans; filled reads clearer at 14px.
+  paw: {
+    paths: 'M8.2 14.3c0-2 1.7-3.3 3.8-3.3s3.8 1.3 3.8 3.3c0 1.8-1.7 2.4-3.8 2.4s-3.8-.6-3.8-2.4z',
+    circles: [
+      { cx: 7.3, cy: 9, r: 1.4, fill: 'currentColor', stroke: 'none' },
+      { cx: 10.4, cy: 7, r: 1.4, fill: 'currentColor', stroke: 'none' },
+      { cx: 13.6, cy: 7, r: 1.4, fill: 'currentColor', stroke: 'none' },
+      { cx: 16.7, cy: 9, r: 1.4, fill: 'currentColor', stroke: 'none' }
+    ],
+    fill: 'currentColor',
+    stroke: 'none'
+  },
+  // tag — neutral catch-all marker (stroked tag body + filled hole dot).
+  tag: {
+    paths:
+      'M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z',
+    circles: [{ cx: 7.5, cy: 7.5, r: 1.1, fill: 'currentColor', stroke: 'none' }]
   }
+}
+
+// kindIcon maps each EventKind to the glyph that represents it. Audio-detection
+// events carry no snapshot and are excluded from the Events list by the
+// has_snapshot filter, so no audio kind/icon is needed here — audio activity
+// has its own lane on the recording timeline.
+export const kindIcon: Record<EventKind, IconName> = {
+  person: 'person',
+  vehicle: 'car',
+  animal: 'paw',
+  other: 'tag'
 }

@@ -2,8 +2,10 @@
   import type { Camera, EventItem, EventKind, Group } from '$lib/api'
   import { eventSnapshotURL } from '$lib/api'
   import EmptyState from '$lib/components/EmptyState.svelte'
+  import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
   import OnlineDot from '$lib/components/OnlineDot.svelte'
+  import { kindIcon } from '$lib/icons'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { ui, eventKindLabels } from '$lib/i18n/strings'
   import { relativeTime, formatDuration } from '$lib/util/time'
@@ -149,7 +151,9 @@
             type="button"
             class="pill"
             class:active={activeKinds.has(k)}
-            onclick={() => onToggleKind(k)}>{eventKindLabels[k]}</button
+            onclick={() => onToggleKind(k)}
+          >
+            <Icon name={kindIcon[k]} size={15} />{eventKindLabels[k]}</button
           >
         {/each}
       </div>
@@ -184,7 +188,10 @@
                 <Mono size={13} color="var(--text-2)">{relativeTime(ev.started_at, now)}</Mono>
               </div>
               <div class="l2">
-                <span class="ev-kind">{eventKindLabels[ev.kind] ?? ev.kind}</span>
+                <span class="ev-kindwrap">
+                  <Icon name={kindIcon[ev.kind]} size={14} />
+                  <span class="ev-kind">{eventKindLabels[ev.kind] ?? ev.kind}</span>
+                </span>
                 <Mono size={12} color="var(--accent-ink)" weight={500}
                   >{ev.score !== null
                     ? ev.score.toFixed(2)
@@ -368,6 +375,13 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+  }
+  /* tune-on-device: ~14px kind icon + label, small gap. */
+  .ev-kindwrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     min-width: 0;
   }
   .ev-kind {

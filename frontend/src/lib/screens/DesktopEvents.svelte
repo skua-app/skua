@@ -2,7 +2,9 @@
   import type { Camera, EventItem, EventKind, Group } from '$lib/api'
   import EmptyState from '$lib/components/EmptyState.svelte'
   import EventCardWide from '$lib/components/EventCardWide.svelte'
+  import Icon from '$lib/components/Icon.svelte'
   import OnlineDot from '$lib/components/OnlineDot.svelte'
+  import { kindIcon } from '$lib/icons'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { ui, eventKindLabels } from '$lib/i18n/strings'
   import type { EventDay } from '$lib/util/time'
@@ -163,7 +165,9 @@
             type="button"
             class="pill"
             class:active={activeKinds.has(k)}
-            onclick={() => onToggleKind(k)}>{eventKindLabels[k]}</button
+            onclick={() => onToggleKind(k)}
+          >
+            <Icon name={kindIcon[k]} size={15} />{eventKindLabels[k]}</button
           >
         {/each}
       </div>
