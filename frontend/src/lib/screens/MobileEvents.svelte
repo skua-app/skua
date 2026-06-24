@@ -3,6 +3,7 @@
   import { eventSnapshotURL } from '$lib/api'
   import EmptyState from '$lib/components/EmptyState.svelte'
   import Mono from '$lib/components/Mono.svelte'
+  import OnlineDot from '$lib/components/OnlineDot.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { ui, eventKindLabels } from '$lib/i18n/strings'
   import { relativeTime, formatDuration } from '$lib/util/time'
@@ -126,7 +127,9 @@
             type="button"
             class="pill"
             class:active={activeCams.has(cam.id)}
-            onclick={() => onToggleCam(cam.id)}>{cam.name}</button
+            onclick={() => onToggleCam(cam.id)}
+          >
+            <OnlineDot online={cam.online} size={6} />{cam.name}</button
           >
         {/each}
       </div>
