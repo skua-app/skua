@@ -190,7 +190,7 @@
           size={20}
         />
       </button>
-      {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
+      {#if page.route.id === '/' && glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
           type="button"
           class="dk-iconbtn"
@@ -220,7 +220,7 @@
           </span>
         {/if}
       </div>
-      {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
+      {#if page.route.id === '/' && glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
           type="button"
           class="bell"

@@ -21,6 +21,7 @@ Added
 
 Changed
 - The "while you were away" glance no longer lists empty motion-only moments that had nothing to look at (the old "0 events · No events" rows), and each remaining moment drops its per-moment event count for a cleaner row. The list still fills up to its usual number of real moments.
+- The moments bell now appears only on the Cameras grid, on phone and desktop. It no longer sits in the header on Events, Settings, or a camera's focus view, where it was just clutter.
 
 ## [0.13.0] — 2026-06-16
 
