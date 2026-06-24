@@ -98,11 +98,6 @@
     const parts = moment.kinds.map((k) => eventKindLabels[k] ?? k)
     return parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
   }
-  function countChipText(moment: GlanceMoment): string {
-    const n = moment.detection_ids.length
-    const tpl = n === 1 ? ui.glanceEventOne : ui.glanceEventMany
-    return tpl.replace('{n}', String(n))
-  }
   function newestTime(moment: GlanceMoment): string {
     const newest = moment.ended_at ?? moment.started_at
     return relativeTime(newest, now)
@@ -491,10 +486,7 @@
             <span class="m-name">{camName(m.cam_id)}</span>
             <span class="m-ago">{newestTime(m)}</span>
           </div>
-          <div class="m-l2">
-            <span class="m-count">{countChipText(m)}</span>
-            <span class="m-sep"> · {kindsLine(m)}</span>
-          </div>
+          <div class="m-l2">{kindsLine(m)}</div>
         </div>
         <span class="m-chev" aria-hidden="true"><Icon name="chevRight" size={20} /></span>
       </button>
@@ -1016,10 +1008,6 @@
   }
   .dk-side-list .m-l2 {
     font-size: 12.5px;
-  }
-  .m-count {
-    color: var(--text-2);
-    font-weight: 500;
   }
   .m-chev {
     flex: 0 0 auto;

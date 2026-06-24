@@ -19,6 +19,9 @@ Added
 - Recording-coverage lane on the timeline scrubber. The scrubber now shades the spans where footage was actually recorded as a neutral grey fill and leaves real recording gaps as empty track, so on a motion-only camera you can see at a glance which parts of the window have footage and which don't, while a continuous-record camera shows a fully filled bar. The coverage follows the playhead as you pan and zoom. This replaces the old faint per-hour density wash with real sub-hour recorded/gap coverage sourced from Frigate's per-segment recordings.
 - Recording timeline BFF passthrough. The backend now reverse-proxies Frigate's recording VOD endpoint (HLS fMP4 playlists and segments) and the per-camera recordings-summary JSON through `/api/cameras/{id}/vod/{start}/{end}/*` and `/api/cameras/{id}/recordings-summary`. Single-camera scope, codec-agnostic, no transcode — Range is forwarded verbatim, segment bytes are cached as immutable, and playlists are not cached. Phase 1 of the recording timeline epic; no frontend yet.
 
+Changed
+- The "while you were away" glance no longer lists empty motion-only moments that had nothing to look at (the old "0 events · No events" rows), and each remaining moment drops its per-moment event count for a cleaner row. The list still fills up to its usual number of real moments.
+
 ## [0.13.0] — 2026-06-16
 
 Added

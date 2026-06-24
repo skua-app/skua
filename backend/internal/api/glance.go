@@ -20,6 +20,13 @@ const (
 	glanceMaxHours          = 168
 	glanceDefaultMaxMoments = 20
 	glanceMaxMomentsCeil    = 200
+	// glanceEmptyOverfetchFactor bounds the upstream review page so that,
+	// after empty (no-detection) moments are filtered out, the filter can
+	// still surface up to maxMoments real moments. maxMoments is the OUTPUT
+	// cap; without over-fetching, a window full of empties would starve the
+	// list. The fetched page is min(maxMoments * factor, glanceMaxMomentsCeil)
+	// so the upstream request stays bounded.
+	glanceEmptyOverfetchFactor = 4
 )
 
 // glanceMoment embeds events.Moment and adds a per-moment seen flag
@@ -95,9 +102,13 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 
 	after := time.Now().Add(-time.Duration(hours) * time.Hour)
 
+	// Over-fetch upstream so the empty-moment filter below still has enough
+	// real moments to fill maxMoments. The page is bounded by the ceiling.
+	upstreamLimit := min(maxMoments*glanceEmptyOverfetchFactor, glanceMaxMomentsCeil)
+
 	reviewItems, err := h.events.ListReview(ctx, events.ReviewParams{
 		After: after,
-		Limit: maxMoments,
+		Limit: upstreamLimit,
 	})
 	if err != nil {
 		status := http.StatusBadGateway
@@ -110,26 +121,39 @@ func (h *Handler) handleGlance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Frigate /api/review returns segments newest-first; preserve that
-	// order. Defensive truncate in case upstream ignores limit.
-	if len(reviewItems) > maxMoments {
-		reviewItems = reviewItems[:maxMoments]
+	// Defensive truncate in case upstream ignores limit; keep Frigate's
+	// newest-first order.
+	if len(reviewItems) > upstreamLimit {
+		reviewItems = reviewItems[:upstreamLimit]
 	}
 
 	seenSet := h.glance.SeenSet(glance.ScopeHousehold)
 	seenThrough := h.glance.SeenThrough(glance.ScopeHousehold)
 
-	out := glanceResponse{Moments: make([]glanceMoment, len(reviewItems))}
-	for i, it := range reviewItems {
+	// Build moments, skipping empty motion-only segments (no tracked-object
+	// detections) so the "while you were away" list never shows a moment with
+	// nothing to look at. Preserve newest-first order, then truncate the
+	// surviving moments to maxMoments and compute unseen_count over that final
+	// list so the badge count matches what the client renders.
+	out := glanceResponse{Moments: make([]glanceMoment, 0, maxMoments)}
+	for _, it := range reviewItems {
 		m := events.ReviewItemToMoment(it)
+		if len(m.DetectionIDs) == 0 {
+			continue
+		}
 		_, seen := seenSet[m.ID]
 		if !seen && !seenThrough.IsZero() {
 			if t, perr := time.Parse(time.RFC3339, m.StartedAt); perr == nil && !t.After(seenThrough) {
 				seen = true
 			}
 		}
-		out.Moments[i] = glanceMoment{Moment: m, Seen: seen}
-		if !seen {
+		out.Moments = append(out.Moments, glanceMoment{Moment: m, Seen: seen})
+		if len(out.Moments) >= maxMoments {
+			break
+		}
+	}
+	for _, m := range out.Moments {
+		if !m.Seen {
 			out.UnseenCount++
 		}
 	}

@@ -500,12 +500,15 @@ type Moment = {
 //          1 hour through 7 days). Controls how far back the "while you
 //          were away" window extends.
 //   max:   optional positive integer (default 20, clamped to 1..200).
-//          Caps the number of moments returned and is forwarded to
-//          Frigate as the upstream review-list limit.
+//          Caps the number of REAL moments returned.
 //   The BFF makes a single GET /api/review call against Frigate with
-//   `after = now - hours` (unix seconds) and `limit = max`. Frigate
-//   returns review segments newest-first; the BFF preserves that
-//   order and defensively truncates to `max`. The window is purely
+//   `after = now - hours` (unix seconds) and an over-fetched
+//   `limit = min(max * 4, 200)`. Moments with no tracked-object
+//   detections (empty motion-only segments) are omitted, so the
+//   upstream page is over-fetched to let the output `max` count real
+//   moments. Frigate returns review segments newest-first; the BFF
+//   preserves that order and truncates the surviving moments to `max`.
+//   `unseen_count` counts only the moments actually returned. The window is purely
 //   time-based: there is no `cleared_at`-style clamp, and moments
 //   already at-or-before the household `seen_through` watermark stay
 //   in the response (they render with `seen: true`, not dropped).
