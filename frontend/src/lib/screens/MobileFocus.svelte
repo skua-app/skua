@@ -42,6 +42,7 @@
     onShowTelemetry: () => void
     onBack: () => void
     videoSnippet: Snippet
+    overlaySnippet: Snippet
   }
 
   let {
@@ -70,7 +71,8 @@
     downloadSnapshot,
     onShowTelemetry,
     onBack,
-    videoSnippet
+    videoSnippet,
+    overlaySnippet
   }: Props = $props()
 
   function pad(n: number): string {
@@ -212,6 +214,13 @@
           {/if}
         </div>
       {/if}
+
+      <!-- Stream-status overlay (connecting/buffering pill + error card).
+           Rendered as a sibling of ZoomPane so pinch/wheel zoom never moves
+           or scales it; the elements are absolute inset:0 and fill this
+           relatively-positioned frame. Last child so the error card and its
+           retry button sit above the video and the other overlays. -->
+      {@render overlaySnippet()}
     </div>
 
     <div class="livebar">

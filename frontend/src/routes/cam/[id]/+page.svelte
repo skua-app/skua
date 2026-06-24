@@ -408,7 +408,9 @@
   {#if isPaused && pausedFrameUrl}
     <img src={pausedFrameUrl} alt="" class="freeze" />
   {/if}
+{/snippet}
 
+{#snippet overlaySnippet()}
   {#if !videoPlaying && streamState !== 'failed' && !isPaused}
     <div class="overlay-spinner">
       <div class="spinner-pill">
@@ -471,6 +473,7 @@
     }}
     onBack={handleBack}
     {videoSnippet}
+    {overlaySnippet}
   />
 {:else}
   <MobileFocus
@@ -503,6 +506,7 @@
     }}
     onBack={handleBack}
     {videoSnippet}
+    {overlaySnippet}
   />
 {/if}
 
