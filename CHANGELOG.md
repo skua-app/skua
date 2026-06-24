@@ -24,6 +24,7 @@ Added
 Changed
 - The small uppercase section labels on Events and the camera grid now use the regular Geist typeface instead of the monospace one, which reads much better at that size. This covers the GROUP/CAMERA/TYPE filter labels, the TODAY/YESTERDAY day dividers, and the grid's room/group headers, and the Events filter block now sits clearly apart from the day list so the TYPE label and the first day divider no longer blur together.
 - The moments bell now appears only on the Cameras grid, on phone and desktop. It no longer sits in the header on Events, Settings, or a camera's focus view, where it was just clutter.
+- The moment and event detail modals no longer pile their buttons into a wrapping row. Close is now an X over the top-right corner of the video, the way modals usually close, and "See on timeline" has become the filled primary action that spans the row, with Download (and, for a live moment, Open live) sitting beside it as small icon buttons. The separate "Open in Frigate" button is gone, since the app now has its own recording timeline reached through "See on timeline".
 
 Fixed
 - A quick downward flick on the moments sheet now closes it instead of springing back. Before, only a slow drag that pulled the sheet far enough would dismiss it; a fast short flick snapped back. A slow short drag still settles back to its detent.

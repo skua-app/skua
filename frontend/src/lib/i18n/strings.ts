@@ -33,11 +33,10 @@ export const ui = {
   filterAll: 'All',
   recentEvents: 'Recent events',
   noRecentEvents: 'Nothing yet',
-  openInFrigate: 'Open in Frigate',
   downloadVideo: 'Download video',
   clipUnplayableHeading: 'Clip can’t play on this device',
   clipUnplayableHint:
-    'This device can’t decode this clip. Use Download or Open in Frigate instead.',
+    'This device can’t decode this clip. Use Download or See on timeline instead.',
   close: 'Close',
   duration: 'Duration',
   score: 'Confidence',

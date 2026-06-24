@@ -5,7 +5,6 @@
   import type { GlanceMoment } from '$lib/api'
   import { eventSnapshotURL, momentClipURL } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
-  import { configStore } from '$lib/stores/config.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
   import Mono from '$lib/components/Mono.svelte'
   import Icon from '$lib/components/Icon.svelte'
@@ -39,17 +38,6 @@
       dateStyle: 'medium',
       timeStyle: 'medium'
     }).format(new Date(moment.started_at))
-  )
-  // Moments deep-link straight to the Frigate review timeline at this
-  // segment: moment.id IS the Frigate review id, so /review?id=<id>
-  // scrolls to (and selects) the matching review on Frigate's
-  // history view. No /explore fallback is needed — the BFF only
-  // surfaces moments that came from /api/review, so the id is
-  // guaranteed to be valid for the timeline.
-  const deepLink = $derived(
-    configStore.frigateUIURL
-      ? `${configStore.frigateUIURL}/review?id=${encodeURIComponent(moment.id)}`
-      : ''
   )
   // In-app deep-link to this camera's recording timeline, centred on the
   // moment start. Computed reactively from the moment prop so the click
@@ -152,6 +140,18 @@
           <div class="mm-placeholder" aria-hidden="true"></div>
         {/if}
       </ZoomPane>
+      <!-- Sibling of ZoomPane, not a child, so zooming the clip never moves
+           or scales the close affordance. The frame's overflow:hidden clips
+           it inside the rounded corner. -->
+      <button
+        type="button"
+        class="mm-close"
+        onclick={onClose}
+        bind:this={closeBtn}
+        aria-label={ui.close}
+      >
+        <Icon name="close" size={18} />
+      </button>
     </div>
 
     {#if moment.thumb_event_id && clipFailed}
@@ -183,9 +183,6 @@
     </div>
 
     <div class="mm-actions">
-      <button type="button" class="mm-btn mm-btn-secondary" onclick={onClose} bind:this={closeBtn}>
-        {ui.close}
-      </button>
       {#if onOpenLive}
         <button
           type="button"
@@ -209,7 +206,7 @@
         </a>
       {/if}
       <a
-        class="mm-btn mm-btn-secondary"
+        class="mm-btn mm-btn-primary"
         href={timelineHref}
         onclick={(e) => {
           // Navigate FIRST and let the route change unmount the peek/modal
@@ -223,12 +220,6 @@
         <Icon name="history" size={18} />
         {ui.timelineSeeOnTimeline}
       </a>
-      {#if deepLink}
-        <a class="mm-btn mm-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
-          <Icon name="link" size={16} />
-          {ui.openInFrigate}
-        </a>
-      {/if}
     </div>
   </div>
 </div>
@@ -281,6 +272,7 @@
   }
 
   .mm-snap {
+    position: relative;
     aspect-ratio: 16 / 9;
     /* Cap on short viewports so a tall iPhone in landscape doesn't let
        the 16:9 box eat the entire modal. */
@@ -288,6 +280,30 @@
     background: var(--feed);
     overflow: hidden;
     flex-shrink: 0;
+  }
+  .mm-close {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    z-index: 2;
+    width: 38px;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    color: #fff;
+    /* The only place a hardcoded colour is allowed (CLAUDE.md §9): an
+       "on top of media" chip. */
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: background 0.15s ease;
+  }
+  .mm-close:hover {
+    background: rgba(0, 0, 0, 0.65);
   }
   .mm-snap img,
   .mm-snap video {
@@ -364,7 +380,6 @@
     display: flex;
     justify-content: flex-end;
     gap: 10px;
-    flex-wrap: wrap;
     flex-shrink: 0;
     border-top: 1px solid var(--border);
   }
