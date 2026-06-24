@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"sync"
 	"testing"
 	"testing/fstest"
 
@@ -14,10 +16,73 @@ import (
 	"github.com/skua-app/skua/internal/sse"
 )
 
-// timelineReviewRouter wires the timeline review handler against the same
-// eventReviewFake the event-review tests use (it serves GET /api/review with
-// after / before / limit honoured) plus a one-camera registry so the
-// handler's registry guard passes.
+// eventReviewFake is a fake Frigate that serves GET /api/review with
+// after / before / limit honoured. It returns reviews from `all` whose
+// start_time falls within the [after, before] window, capped to limit
+// items, newest-first.
+//
+// errOnReview, when set, short-circuits review requests with the
+// supplied status. Lets a test exercise the 502 mapping without
+// depending on Frigate-side semantics.
+type eventReviewFake struct {
+	all         []events.FrigateReviewItem
+	errOnReview int
+	gotQuery    string
+	mu          sync.Mutex
+}
+
+func (f *eventReviewFake) handler(t *testing.T) http.Handler {
+	t.Helper()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/review" {
+			http.NotFound(w, r)
+			return
+		}
+		f.mu.Lock()
+		f.gotQuery = r.URL.RawQuery
+		f.mu.Unlock()
+		if f.errOnReview != 0 {
+			http.Error(w, "boom", f.errOnReview)
+			return
+		}
+		q := r.URL.Query()
+		var after, before int64 = -1 << 62, 1 << 62
+		if s := q.Get("after"); s != "" {
+			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+				after = n
+			}
+		}
+		if s := q.Get("before"); s != "" {
+			if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+				before = n
+			}
+		}
+		limit := len(f.all)
+		if s := q.Get("limit"); s != "" {
+			if n, err := strconv.Atoi(s); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		out := make([]events.FrigateReviewItem, 0, len(f.all))
+		for _, it := range f.all {
+			start := int64(it.StartTime)
+			if start < after || start > before {
+				continue
+			}
+			out = append(out, it)
+			if len(out) >= limit {
+				break
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(out)
+	})
+}
+
+// timelineReviewRouter wires the timeline review handler against the
+// eventReviewFake (it serves GET /api/review with after / before / limit
+// honoured) plus a one-camera registry so the handler's registry guard
+// passes.
 func timelineReviewRouter(t *testing.T, fake *eventReviewFake) http.Handler {
 	t.Helper()
 	frigateSrv := httptest.NewServer(fake.handler(t))

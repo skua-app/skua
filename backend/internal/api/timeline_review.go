@@ -14,8 +14,8 @@ import (
 
 const (
 	// reviewTimelineTimeout caps the upstream /api/review fetch for the
-	// scrubber activity lane. A single request; 5s mirrors
-	// eventReviewTimeout and is plenty for the LAN-only deployment.
+	// scrubber activity lane. A single request; 5s mirrors the events
+	// list timeout and is plenty for the LAN-only deployment.
 	reviewTimelineTimeout = 5 * time.Second
 	// reviewLookback widens the lower bound on Frigate's /api/review query.
 	// Frigate filters review items on start_time, so a segment that STARTED

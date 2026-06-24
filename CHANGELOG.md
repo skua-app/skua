@@ -33,6 +33,9 @@ Fixed
 - The About screen no longer shows its tagline twice. The line "A calmer front-end for Frigate" now appears only once, in the identity card.
 - A quick downward flick on the moments sheet now closes it instead of springing back. Before, only a slow drag that pulled the sheet far enough would dismiss it; a fast short flick snapped back. A slow short drag still settles back to its detent.
 
+Removed
+- Dropped the unused event-review deep-link endpoint (GET /api/events/{id}/review) and its frontend helper. It only ever fed the modal's old "Open in Frigate" button, which is gone now that events open on the app's own recording timeline.
+
 ## [0.13.0] — 2026-06-16
 
 Added
