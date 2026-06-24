@@ -37,6 +37,7 @@
     AudioMarker,
     CoverageSegment
   } from '$lib/api'
+  import { footageToWallclock } from '$lib/timeline'
   import { canDecodeRecording } from '$lib/hls'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
@@ -948,9 +949,11 @@
       const start = which === 'a' ? startA : startB
       if (start === null) return
       if (performance.now() - lastSeekAt < SEEK_SETTLE_MS) return
-      // Accurate, drift-bounded mapping: a chunk's currentTime 0 == its
-      // wall-clock start, and the chunk spans at most CHUNK_SECONDS.
-      position = start + el.currentTime
+      // Map footage-time to wall-clock THROUGH the coverage bands: the VOD
+      // splices only recorded segments, so a naive start + currentTime drifts
+      // behind the picture once playback crosses a gap. Walking the bands makes
+      // the flag jump each gap in lockstep with the footage.
+      position = footageToWallclock(start, el.currentTime, coverage)
       runPrefetchCheck()
     }
     const onPlay = () => {

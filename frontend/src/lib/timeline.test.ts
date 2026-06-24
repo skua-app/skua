@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { RecordingsSummary } from './api'
-import { flattenSummary, fractionToTime, timeToFraction } from './timeline'
+import type { CoverageSegment, RecordingsSummary } from './api'
+import { flattenSummary, footageToWallclock, fractionToTime, timeToFraction } from './timeline'
 
 describe('flattenSummary', () => {
   it('returns an empty array for an empty summary', () => {
@@ -112,5 +112,60 @@ describe('fractionToTime', () => {
   it('clamps out-of-range fractions before mapping back', () => {
     expect(fractionToTime(-0.5, 1000, 2000)).toBe(1000)
     expect(fractionToTime(1.7, 1000, 2000)).toBe(2000)
+  })
+})
+
+describe('footageToWallclock', () => {
+  it('maps continuously when coverage is empty', () => {
+    expect(footageToWallclock(1000, 0, [])).toBe(1000)
+    expect(footageToWallclock(1000, 42, [])).toBe(1042)
+  })
+
+  it('maps continuously when a single band spans the whole chunk', () => {
+    const coverage: CoverageSegment[] = [{ start: 1000, end: 2000 }]
+    expect(footageToWallclock(1000, 0, coverage)).toBe(1000)
+    expect(footageToWallclock(1000, 250, coverage)).toBe(1250)
+    expect(footageToWallclock(1000, 1000, coverage)).toBe(2000)
+  })
+
+  it('jumps an interior gap forward by the gap size', () => {
+    // Recorded [1000,1100) then a 200s gap then [1300,1500). Footage splices
+    // the two bands: 0..100 -> [1000,1100), 100..300 -> [1300,1500).
+    const coverage: CoverageSegment[] = [
+      { start: 1000, end: 1100 },
+      { start: 1300, end: 1500 }
+    ]
+    // Before the gap: linear within the first band.
+    expect(footageToWallclock(1000, 50, coverage)).toBe(1050)
+    expect(footageToWallclock(1000, 100, coverage)).toBe(1100)
+    // After the gap: jumped forward by the 200s gap (footage 100 -> band-2 start).
+    expect(footageToWallclock(1000, 100.0001, coverage)).toBeCloseTo(1300.0001, 4)
+    expect(footageToWallclock(1000, 150, coverage)).toBe(1350)
+    expect(footageToWallclock(1000, 300, coverage)).toBe(1500)
+  })
+
+  it('is order-independent (sorts coverage before walking)', () => {
+    const coverage: CoverageSegment[] = [
+      { start: 1300, end: 1500 },
+      { start: 1000, end: 1100 }
+    ]
+    expect(footageToWallclock(1000, 150, coverage)).toBe(1350)
+  })
+
+  it('maps footage 0 to the next band start when chunkStart lands in a gap', () => {
+    // chunkStart 1150 sits in the [1100,1300) gap; the first usable band is
+    // [1300,1500), so footage 0 maps to that band's start.
+    const coverage: CoverageSegment[] = [
+      { start: 1000, end: 1100 },
+      { start: 1300, end: 1500 }
+    ]
+    expect(footageToWallclock(1150, 0, coverage)).toBe(1300)
+    expect(footageToWallclock(1150, 50, coverage)).toBe(1350)
+  })
+
+  it('falls back to continuous mapping past all loaded coverage', () => {
+    const coverage: CoverageSegment[] = [{ start: 1000, end: 1100 }]
+    // Recorded duration is 100s; footage 150 exceeds it -> chunkStart + ct.
+    expect(footageToWallclock(1000, 150, coverage)).toBe(1150)
   })
 })

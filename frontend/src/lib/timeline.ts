@@ -1,4 +1,4 @@
-import type { RecordingsSummary } from '$lib/api'
+import type { CoverageSegment, RecordingsSummary } from '$lib/api'
 
 // TimelineHour is one wall-clock hour of recording, normalised for the
 // scrubber UI. `hourStart` is local midnight + N hours, `recordedFraction`
@@ -55,4 +55,51 @@ export function timeToFraction(tSec: number, startSec: number, endSec: number): 
 export function fractionToTime(f: number, startSec: number, endSec: number): number {
   const clamped = f < 0 ? 0 : f > 1 ? 1 : f
   return startSec + clamped * (endSec - startSec)
+}
+
+// footageToWallclock maps an element's currentTime (footage-time, seconds into
+// the concatenated VOD) back to wall-clock seconds THROUGH the coverage bands.
+// The full-res VOD splices only recorded segments end-to-end — gaps are removed
+// from the footage — so a naive `chunkStart + currentTime` drifts behind the
+// picture by the cumulative gap size once playback crosses a gap. Walking the
+// bands instead makes every gap boundary jump the wall-clock forward to the
+// next band's start, keeping the playhead flag in lockstep with the footage.
+//
+// `chunkStart` is the chunk's wall-clock start (already a covered second, per
+// the chunk-bounds logic). `footageSeconds` is el.currentTime. `coverage` is
+// the loaded coverage bands (not assumed sorted).
+//
+// Note: the BFF coalesces Frigate's raw segments with a COVERAGE_GAP_MERGE
+// threshold, so sub-threshold gaps are absorbed into a band and leave at most
+// that threshold of residual error within it — acceptable, those are recording
+// jitter, not real gaps.
+export function footageToWallclock(
+  chunkStart: number,
+  footageSeconds: number,
+  coverage: CoverageSegment[]
+): number {
+  // No coverage (not yet loaded, or a continuous-record camera reporting a
+  // single full band that collapses to the same result): footage is continuous
+  // wall-clock from the chunk start.
+  if (coverage.length === 0) return chunkStart + footageSeconds
+
+  const sorted = [...coverage].sort((a, b) => a.start - b.start)
+  let accumulated = 0
+  for (const band of sorted) {
+    if (band.end <= chunkStart) continue
+    const bs = Math.max(band.start, chunkStart)
+    const be = band.end
+    const len = be - bs
+    if (len <= 0) continue
+    // footageSeconds 0 maps to the first covered second at or after chunkStart;
+    // each subsequent band picks up where the previous one's recorded duration
+    // left off, so crossing a gap jumps wall-clock forward by the gap size.
+    if (footageSeconds <= accumulated + len) {
+      return bs + (footageSeconds - accumulated)
+    }
+    accumulated += len
+  }
+  // Past all loaded coverage: a late-arriving frame near the live tail. Fall
+  // back to continuous mapping rather than snapping backward to the last band.
+  return chunkStart + footageSeconds
 }
