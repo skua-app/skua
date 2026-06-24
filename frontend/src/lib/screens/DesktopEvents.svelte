@@ -5,7 +5,6 @@
   import Icon from '$lib/components/Icon.svelte'
   import OnlineDot from '$lib/components/OnlineDot.svelte'
   import { kindIcon } from '$lib/icons'
-  import { camerasStore } from '$lib/stores/cameras.svelte'
   import { ui, eventKindLabels } from '$lib/i18n/strings'
   import type { EventDay } from '$lib/util/time'
 
@@ -71,9 +70,6 @@
     return dateFmt.format(date)
   }
 
-  const cameras = $derived(camerasStore.cameras)
-  const onlineCount = $derived(cameras.filter((c) => c.online).length)
-  const offlineCount = $derived(cameras.length - onlineCount)
   const totalItems = $derived(eventDays.reduce((sum, d) => sum + d.items.length, 0))
 
   let sentinel: HTMLDivElement | null = $state(null)
@@ -97,12 +93,6 @@
   <div class="dk-pagehead">
     <div class="dk-titlewrap">
       <div class="dk-h1">{ui.eventsTitle}</div>
-      <div class="dk-sub">
-        <span class="gd" aria-hidden="true"></span>
-        {onlineCount}
-        {ui.online} · {offlineCount}
-        {ui.offline}
-      </div>
     </div>
   </div>
 
@@ -225,20 +215,6 @@
     letter-spacing: -0.6px;
     line-height: 1.05;
     color: var(--text);
-  }
-  .dk-sub {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    color: var(--text-2);
-  }
-  .dk-sub .gd {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--online);
-    display: inline-block;
   }
 
   /* dk-filterbar */

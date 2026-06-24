@@ -26,6 +26,7 @@ Changed
 - The moments bell now appears only on the Cameras grid, on phone and desktop. It no longer sits in the header on Events, Settings, or a camera's focus view, where it was just clutter.
 - The moment and event detail modals no longer pile their buttons into a wrapping row. Close is now an X over the top-right corner of the video, the way modals usually close, and "See on timeline" has become the filled primary action that spans the row, with Download (and, for a live moment, Open live) sitting beside it as small icon buttons. The separate "Open in Frigate" button is gone, since the app now has its own recording timeline reached through "See on timeline".
 - The moment and event detail modals now have a proper header bar. The camera name reads as a clear title with the camera id as a small subtitle below it, and the close button moved off the video into that header. The camera name no longer shows up twice, since the duplicate row under the video is gone.
+- The Events page header no longer shows the camera online and offline count. That summary belongs on the camera grid, where it stays, not on Events.
 
 Fixed
 - The connecting and error overlays in the camera focus view now stay fixed and centered when you zoom the live view. Before, the "Connecting…"/"Buffering" pill and the stream-error card were inside the zoomable layer, so pinch or wheel zoom scaled and dragged them along with the video; the retry button could end up off screen. They now sit in a fixed layer over the feed frame like the telemetry panel does.
