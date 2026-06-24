@@ -239,7 +239,9 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 14px;
+    /* tune-on-device: a touch more space so the TYPE row and the first day
+       divider don't crowd now that both are Geist. */
+    margin-bottom: 20px;
   }
   .dk-filterrow {
     display: flex;
@@ -248,10 +250,11 @@
   }
   .dk-filterrow .lbl {
     flex: 0 0 64px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    /* Geist eyebrow label. tune-on-device: 11px / 600 / 0.06em. */
+    font-family: inherit;
     font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 1.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-2);
   }
@@ -304,17 +307,18 @@
     grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
   }
 
-  /* dk-daydiv — full-width mono uppercase divider with line */
+  /* dk-daydiv — full-width Geist uppercase divider with trailing line.
+     tune-on-device: 12px / 600 / 0.05em. */
   .dk-daydiv {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 18px 2px 0;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: inherit;
     font-size: 12px;
-    font-weight: 500;
-    letter-spacing: 1.2px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--text-2);
   }

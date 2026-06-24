@@ -20,7 +20,7 @@ Added
 - Recording timeline BFF passthrough. The backend now reverse-proxies Frigate's recording VOD endpoint (HLS fMP4 playlists and segments) and the per-camera recordings-summary JSON through `/api/cameras/{id}/vod/{start}/{end}/*` and `/api/cameras/{id}/recordings-summary`. Single-camera scope, codec-agnostic, no transcode — Range is forwarded verbatim, segment bytes are cached as immutable, and playlists are not cached. Phase 1 of the recording timeline epic; no frontend yet.
 
 Changed
-- The "while you were away" glance no longer lists empty motion-only moments that had nothing to look at (the old "0 events · No events" rows), and each remaining moment drops its per-moment event count for a cleaner row. The list still fills up to its usual number of real moments.
+- The small uppercase section labels on Events and the camera grid now use the regular Geist typeface instead of the monospace one, which reads much better at that size. This covers the GROUP/CAMERA/TYPE filter labels, the TODAY/YESTERDAY day dividers, and the grid's room/group headers, and the Events filter block now sits clearly apart from the day list so the TYPE label and the first day divider no longer blur together.
 - The moments bell now appears only on the Cameras grid, on phone and desktop. It no longer sits in the header on Events, Settings, or a camera's focus view, where it was just clutter.
 
 Fixed

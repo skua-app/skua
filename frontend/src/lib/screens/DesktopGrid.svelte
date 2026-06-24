@@ -411,18 +411,20 @@
     gap: 14px;
     grid-template-columns: repeat(auto-fill, minmax(var(--tile, 280px), 1fr));
   }
+  /* Geist room/group section label with trailing line. tune-on-device:
+     11px / 600 / 0.06em, --text-2 (bumped from --text-3, which read too faint). */
   .dg-roomlabel {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 14px 2px 2px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: inherit;
     font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 1.4px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .dg-roomlabel:first-child {
     padding-top: 0;

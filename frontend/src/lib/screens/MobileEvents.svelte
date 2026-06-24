@@ -92,11 +92,7 @@
   <div class="chip-groups">
     {#if groups.length > 0}
       <div class="chip-group">
-        <span class="chip-label">
-          <Mono size={11} color="var(--text-2)" letterSpacing={1.5} uppercase
-            >{ui.filterLabelGroup}</Mono
-          >
-        </span>
+        <span class="chip-label">{ui.filterLabelGroup}</span>
         <div class="chips" role="group" aria-label={ui.groupAria}>
           <button
             type="button"
@@ -117,11 +113,7 @@
     {/if}
 
     <div class="chip-group">
-      <span class="chip-label">
-        <Mono size={11} color="var(--text-2)" letterSpacing={1.5} uppercase
-          >{ui.filterLabelCamera}</Mono
-        >
-      </span>
+      <span class="chip-label">{ui.filterLabelCamera}</span>
       <div class="chips" role="group" aria-label={ui.cameraAria}>
         <button
           type="button"
@@ -141,11 +133,7 @@
     </div>
 
     <div class="chip-group">
-      <span class="chip-label">
-        <Mono size={11} color="var(--text-2)" letterSpacing={1.5} uppercase
-          >{ui.filterLabelType}</Mono
-        >
-      </span>
+      <span class="chip-label">{ui.filterLabelType}</span>
       <div class="chips" role="group" aria-label={ui.kindAria}>
         <button
           type="button"
@@ -175,11 +163,7 @@
   {:else}
     <div class="ev-list">
       {#each eventDays as day (day.key)}
-        <div class="day-div">
-          <Mono size={12} color="var(--text-2)" letterSpacing={1} uppercase
-            >{dayLabel(day.date)}</Mono
-          >
-        </div>
+        <div class="day-div">{dayLabel(day.date)}</div>
         {#each day.items as ev (ev.id)}
           <button type="button" class="ev" onclick={() => onOpen(ev)}>
             <div class="ev-thumb">
@@ -226,7 +210,12 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 12px;
+    /* tune-on-device: a hairline + extra bottom space separate the filter
+       block from the day-grouped list so the TYPE label and the first TODAY
+       divider stop crowding. */
+    padding-bottom: 14px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
   }
   .chip-group {
     display: flex;
@@ -241,6 +230,15 @@
     flex: 0 0 54px;
     display: inline-flex;
     align-items: center;
+    /* Geist eyebrow label — far more legible than mono at small uppercase.
+       tune-on-device: 11px / 600 / 0.06em (mono's 1.5px tracking was too loose
+       for sans). */
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-2);
   }
   /* calm .chips — horizontally-scrolling pill row, scrollbar hidden */
   .chips {
@@ -296,6 +294,13 @@
   .day-div {
     padding-top: 6px;
     padding-bottom: 4px;
+    /* Geist day divider. tune-on-device: 12px / 600 / 0.05em. */
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-2);
   }
   /* calm .ev */
   .ev {
