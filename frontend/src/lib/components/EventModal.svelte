@@ -125,6 +125,22 @@
     bind:this={cardEl}
     transition:fly={{ y: 16, duration: cardDuration, easing: cubicOut }}
   >
+    <div class="em-header">
+      <div class="em-headtext">
+        <div class="em-headtitle">{camName}</div>
+        <Mono size={11} color="var(--text-3)">{event.cam_id}</Mono>
+      </div>
+      <button
+        type="button"
+        class="em-headclose"
+        onclick={onClose}
+        bind:this={closeBtn}
+        aria-label={ui.close}
+      >
+        <Icon name="close" size={18} />
+      </button>
+    </div>
+
     <div class="em-snap">
       {#if event.has_clip && !clipFailed}
         <!-- iOS Safari: `playsinline` keeps playback inside the modal instead
@@ -144,18 +160,6 @@
       {:else}
         <img src={eventSnapshotURL(event.id)} alt={`${camName} · ${kindLabel}`} loading="lazy" />
       {/if}
-      <!-- Sibling of the media element so it sits above it as the standard
-           modal-close affordance. The frame's overflow:hidden clips it
-           inside the rounded top corner. -->
-      <button
-        type="button"
-        class="em-close"
-        onclick={onClose}
-        bind:this={closeBtn}
-        aria-label={ui.close}
-      >
-        <Icon name="close" size={18} />
-      </button>
     </div>
 
     {#if event.has_clip && clipFailed}
@@ -166,10 +170,6 @@
     {/if}
 
     <div class="em-meta">
-      <div class="em-meta-row">
-        <span class="em-cam">{camName}</span>
-        <Mono size={11} color="var(--text-3)">{event.cam_id}</Mono>
-      </div>
       <div class="em-meta-row">
         <span class="em-kind">{kindLabel} · {event.label}</span>
         <Mono size={11} color="var(--text-2)" weight={500}>
@@ -237,37 +237,56 @@
     flex-direction: column;
   }
 
+  .em-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .em-headtext {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .em-headtitle {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .em-headclose {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: inherit;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
+  }
+  .em-headclose:hover {
+    background: var(--border-strong);
+    color: var(--text);
+  }
+
   .em-snap {
     position: relative;
     aspect-ratio: 16 / 9;
     background: var(--feed);
     overflow: hidden;
-    border-top-left-radius: var(--r);
-    border-top-right-radius: var(--r);
-  }
-  .em-close {
-    position: absolute;
-    top: 9px;
-    right: 9px;
-    z-index: 2;
-    width: 38px;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    color: #fff;
-    /* The only place a hardcoded colour is allowed (CLAUDE.md §9): an
-       "on top of media" chip. */
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    transition: background 0.15s ease;
-  }
-  .em-close:hover {
-    background: rgba(0, 0, 0, 0.65);
   }
   .em-snap img,
   .em-snap video {
@@ -311,12 +330,6 @@
   }
   .em-meta-row-faint {
     margin-top: 2px;
-  }
-  .em-cam {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-    letter-spacing: -0.1px;
   }
   .em-kind {
     font-size: 13px;

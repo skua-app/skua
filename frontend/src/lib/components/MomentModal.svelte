@@ -119,7 +119,21 @@
     bind:this={cardEl}
     transition:fly={{ y: 16, duration: cardDuration, easing: cubicOut }}
   >
-    <div class="mm-title">{titleText}</div>
+    <div class="mm-header">
+      <div class="mm-headtext">
+        <div class="mm-headtitle">{camName}</div>
+        <Mono size={11} color="var(--text-3)">{moment.cam_id}</Mono>
+      </div>
+      <button
+        type="button"
+        class="mm-headclose"
+        onclick={onClose}
+        bind:this={closeBtn}
+        aria-label={ui.close}
+      >
+        <Icon name="close" size={18} />
+      </button>
+    </div>
 
     <div class="mm-snap">
       <ZoomPane resetKey={moment.id}>
@@ -140,18 +154,6 @@
           <div class="mm-placeholder" aria-hidden="true"></div>
         {/if}
       </ZoomPane>
-      <!-- Sibling of ZoomPane, not a child, so zooming the clip never moves
-           or scales the close affordance. The frame's overflow:hidden clips
-           it inside the rounded corner. -->
-      <button
-        type="button"
-        class="mm-close"
-        onclick={onClose}
-        bind:this={closeBtn}
-        aria-label={ui.close}
-      >
-        <Icon name="close" size={18} />
-      </button>
     </div>
 
     {#if moment.thumb_event_id && clipFailed}
@@ -162,10 +164,6 @@
     {/if}
 
     <div class="mm-meta">
-      <div class="mm-meta-row">
-        <span class="mm-cam">{camName}</span>
-        <Mono size={11} color="var(--text-3)">{moment.cam_id}</Mono>
-      </div>
       {#if kindsLine}
         <div class="mm-meta-row">
           <span class="mm-kind">{kindsLine}</span>
@@ -262,13 +260,49 @@
     flex-direction: column;
   }
 
-  .mm-title {
-    padding: 14px 18px 6px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-2);
-    letter-spacing: -0.1px;
+  .mm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
+  }
+  .mm-headtext {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .mm-headtitle {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mm-headclose {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: inherit;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
+  }
+  .mm-headclose:hover {
+    background: var(--border-strong);
+    color: var(--text);
   }
 
   .mm-snap {
@@ -280,30 +314,6 @@
     background: var(--feed);
     overflow: hidden;
     flex-shrink: 0;
-  }
-  .mm-close {
-    position: absolute;
-    top: 9px;
-    right: 9px;
-    z-index: 2;
-    width: 38px;
-    height: 38px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 50%;
-    cursor: pointer;
-    color: #fff;
-    /* The only place a hardcoded colour is allowed (CLAUDE.md §9): an
-       "on top of media" chip. */
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    transition: background 0.15s ease;
-  }
-  .mm-close:hover {
-    background: rgba(0, 0, 0, 0.65);
   }
   .mm-snap img,
   .mm-snap video {
@@ -354,12 +364,6 @@
   }
   .mm-meta-row-faint {
     margin-top: 2px;
-  }
-  .mm-cam {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-    letter-spacing: -0.1px;
   }
   .mm-kind {
     font-size: 13px;
