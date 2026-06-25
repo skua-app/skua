@@ -1695,33 +1695,28 @@
             </ul>
           {/if}
         </div>
-        <!-- Mute button + the audio-unavailable annotation hug as one unit, so
-             the glyph tucks against mute rather than reading as a 4th control
-             with the meta cluster's full column-gap on both sides. -->
-        <div class="mute-group">
-          <button
-            type="button"
-            class="livebtn"
-            onclick={toggleFullResMute}
-            aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
-          >
-            <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
-          </button>
-          {#if activeDegraded}
-            <!-- Non-interactive status glyph: the active segment is playing the
-                 audio-less video-only rendition (audio-flap 503 fallback). Not a
-                 control — no onclick, ignores pointer events — a small dimmed
-                 annotation subordinate to the mute button beside it. -->
-            <span
-              class="audio-off"
-              role="img"
-              aria-label={ui.timelineAudioUnavailable}
-              title={ui.timelineAudioUnavailable}
-            >
-              <Icon name="audioOff" size={18} />
-            </span>
-          {/if}
-        </div>
+        <!-- Mute toggle. When the active chunk is video-only (audio-flap 503
+             fallback) it carries no audio, so the button shows the struck-
+             speaker icon and goes disabled — same button, same place, only the
+             icon + disabled state swap, so the row never reflows on toggle. -->
+        <button
+          type="button"
+          class="livebtn"
+          onclick={toggleFullResMute}
+          disabled={activeDegraded}
+          aria-label={activeDegraded
+            ? ui.timelineAudioUnavailable
+            : fullResMuted
+              ? ui.timelineUnmute
+              : ui.timelineMute}
+          title={activeDegraded
+            ? ui.timelineAudioUnavailable
+            : fullResMuted
+              ? ui.timelineUnmute
+              : ui.timelineMute}
+        >
+          <Icon name={activeDegraded ? 'audioOff' : fullResMuted ? 'mute' : 'unmute'} size={20} />
+        </button>
       {/if}
       <!-- Fullscreen is available even in preview-only mode, so it sits OUTSIDE
            the !previewOnly guard as the last meta button. -->
@@ -2016,31 +2011,16 @@
       color 0.18s ease,
       border-color 0.18s ease;
   }
-  .livebtn:active {
+  /* Don't run the press dip on a disabled control (the degraded mute button). */
+  .livebtn:active:not(:disabled) {
     transform: translateY(1px);
   }
-  /* Mute button + its audio-unavailable annotation read as one unit: a tight
-     internal gap hugs the glyph against mute, while the meta cluster's 14px
-     column-gap now sits between the speed chip, this group, and fullscreen —
-     not around the glyph. */
-  .mute-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex: 0 0 auto;
-  }
-  /* Quiet, non-interactive status glyph (audio-unavailable on a video-only
-     segment). Deliberately NOT a .livebtn: no 46px box, no border/background,
-     dimmed and small so it reads as an annotation subordinate to the mute
-     button beside it. Never presses, never captures pointer events. */
-  .audio-off {
-    display: inline-grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
+  /* Disabled control (the mute button while the active chunk is video-only and
+     carries no audio): dimmed and non-interactive, but still the same 46px
+     button in place — the icon swaps to the struck speaker with no reflow. */
+  .livebtn:disabled {
     color: var(--text-3);
     cursor: default;
-    pointer-events: none;
   }
   /* VHS rewind/fast-forward buttons sit a touch smaller than play/pause — they
      flank it. */
