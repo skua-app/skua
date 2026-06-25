@@ -1471,16 +1471,27 @@
   // video-only (audio-flap 503), or surface the genuine "No recording" overlay.
   function handleFullResError(msg: string) {
     if (DECODE_ERROR_STRINGS.has(msg)) {
-      // Already proven decodable this session → this is a transient glitch
-      // (decode error while scrubbing / near the live edge), not a real codec
-      // incompatibility. Ignore it: do not latch preview-only, do not error.
-      if (decodeProven) return
-      enterPreviewOnly()
-      return
+      // Not yet proven decodable → a genuine undecodable codec (e.g. H.265 with
+      // no hardware decoder): drop to preview-only and stay there.
+      if (!decodeProven) {
+        enterPreviewOnly()
+        return
+      }
+      // decodeProven here. Safari surfaces an audio-flap 503 on the v+a segment
+      // as a DECODE-class MediaError (media_error_4 / DEMUXER_COULD_NOT_PARSE),
+      // not a network error, so it lands in this branch too. pendingPlay tells
+      // the two apart: true means the chunk never STARTED — the seek→seg-1
+      // splice 503 masquerading as a decode error, recoverable video-only, so
+      // fall through to the fallback ladder. false means a transient decode
+      // blip DURING active playback (the case this proven-decode ignore exists
+      // for) — keep ignoring it.
+      if (!pendingPlay) return
+      // else fall through to the single-sourced fallback ladder below.
     }
-    // Non-decode error on a chunk that still carries audio: try the same range
-    // video-only first. A genuine empty range fails this too and lands on the
-    // terminal branch below; an audio-flap 503 recovers on this reload.
+    // Fallback ladder, reached by any non-decode error OR a pre-start
+    // decodeProven decode-class error. On a chunk that still carries audio, try
+    // the same range video-only first. A genuine empty range fails this too and
+    // lands on the terminal branch below; an audio-flap 503 recovers here.
     if (!activeDegraded && activeStart !== null && activeEnd !== null) {
       if (degradeActiveToVideoOnly()) return
     }
