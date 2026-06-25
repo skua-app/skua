@@ -508,8 +508,11 @@
   async function loadClipsAround(center: number) {
     const id = camId
     const half = clipLoadSpan / 2
-    const lo = Math.max(playbackFloor, center - half)
-    const hi = Math.min(liveEdge, center + half)
+    // The BFF preview-clips route requires integer unix seconds
+    // (validUnixSeconds), same as review/audio/coverage — floor the bounds so a
+    // fractional playhead (position is fractional after playback) can't 400.
+    const lo = Math.floor(Math.max(playbackFloor, center - half))
+    const hi = Math.floor(Math.min(liveEdge, center + half))
     try {
       const list = await fetchPreviewClips(id, lo, hi)
       if (camId !== id) return
