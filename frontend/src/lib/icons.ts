@@ -34,6 +34,7 @@ export type IconName =
   | 'pause'
   | 'mute'
   | 'unmute'
+  | 'audioOff'
   | 'mic'
   | 'micOff'
   | 'fullscreen'
@@ -83,6 +84,10 @@ export const ICONS: Record<IconName, IconDef> = {
   pause: { paths: 'M7 5h3v14H7zM14 5h3v14h-3z', fill: 'currentColor', stroke: 'none' },
   mute: { paths: ['M11 5L6 9H3v6h3l5 4z', 'M22 9l-6 6', 'M16 9l6 6'] },
   unmute: { paths: ['M11 5L6 9H3v6h3l5 4z', 'M16 8a5 5 0 010 8', 'M19.5 4.5a9 9 0 010 15'] },
+  // Status glyph for a segment with no audio: the same speaker body as `mute`
+  // with a single diagonal slash across it (distinct from `mute`'s two-stroke
+  // X of sound waves). Non-interactive indicator on the recording timeline.
+  audioOff: { paths: ['M11 5L6 9H3v6h3l5 4z', 'M4 4l16 16'] },
   mic: {
     paths: ['M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3z', 'M19 11a7 7 0 01-14 0', 'M12 18v3']
   },

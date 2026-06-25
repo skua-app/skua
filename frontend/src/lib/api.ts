@@ -765,6 +765,21 @@ export function timelineMasterURL(camId: string, start: number, end: number): st
   return `/api/cameras/${encodeURIComponent(camId)}/vod/${s}/${e}/master.m3u8`
 }
 
+// timelineVideoOnlyURL is the audio-less companion to timelineMasterURL for a
+// [start,end) window: it points at Frigate's index-v1.m3u8 rendition (the
+// video-only variant) instead of master.m3u8. Same /vod/{start}/{end}/ prefix,
+// so the playlist's child init/segment URIs (relative) resolve identically.
+// The player falls back to this when a window's combined video+audio segment
+// 503s — Frigate's nginx-vod refuses to splice adjacent recording segments
+// whose audio-track counts differ (a camera's RTSP audio flapping), but the
+// video-only rendition still serves. Floors start/end like timelineMasterURL
+// so no caller can emit a fractional VOD slot.
+export function timelineVideoOnlyURL(camId: string, start: number, end: number): string {
+  const s = Math.floor(start)
+  const e = Math.floor(end)
+  return `/api/cameras/${encodeURIComponent(camId)}/vod/${s}/${e}/index-v1.m3u8`
+}
+
 // fetchRecordingCodecs reads the CODECS attribute of a recording window's HLS
 // master playlist so the FE can decide, before attempting full-res playback,
 // whether this device can decode the camera's recording codec (e.g. H.265 on

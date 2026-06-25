@@ -23,6 +23,7 @@
   import { timelineStore } from '$lib/stores/timeline.svelte'
   import {
     timelineMasterURL,
+    timelineVideoOnlyURL,
     fetchPreviewClips,
     fetchPreviewFrameList,
     fetchRecordingCodecs,
@@ -213,6 +214,13 @@
   let startB = $state<number | null>(null)
   let endA = $state<number | null>(null)
   let endB = $state<number | null>(null)
+  // Per-buffer "degraded to video-only" flag. Set true only when a buffer's
+  // chunk was reloaded as the audio-less index-v1.m3u8 rendition after an
+  // audio-flap 503 (see degradeActiveToVideoOnly). A fresh chunk, a prefetch,
+  // and a cleared idle buffer all load with audio, so every set*/clearIdle
+  // helper resets the flag — it is only ever raised by the degrade path.
+  let degradedA = $state(false)
+  let degradedB = $state(false)
   // Which buffer currently drives the picture. The other is the prefetch
   // target. A swap flips this flag; all the active/idle derivations follow.
   let active = $state<'a' | 'b'>('a')
@@ -228,6 +236,7 @@
   const activeStart = $derived(active === 'a' ? startA : startB)
   const activeEnd = $derived(active === 'a' ? endA : endB)
   const activeSrc = $derived(active === 'a' ? srcA : srcB)
+  const activeDegraded = $derived(active === 'a' ? degradedA : degradedB)
   const idleStart = $derived(active === 'a' ? startB : startA)
   const idleSrc = $derived(active === 'a' ? srcB : srcA)
 
@@ -236,10 +245,12 @@
       startA = start
       endA = end
       srcA = src
+      degradedA = false
     } else {
       startB = start
       endB = end
       srcB = src
+      degradedB = false
     }
   }
   function setIdleChunk(start: number, end: number, src: string) {
@@ -247,10 +258,12 @@
       startB = start
       endB = end
       srcB = src
+      degradedB = false
     } else {
       startA = start
       endA = end
       srcA = src
+      degradedA = false
     }
     idlePrimed = false
   }
@@ -262,10 +275,12 @@
       srcB = ''
       startB = null
       endB = null
+      degradedB = false
     } else {
       srcA = ''
       startA = null
       endA = null
+      degradedA = false
     }
     idlePrimed = false
   }
@@ -395,6 +410,8 @@
       startB = null
       endA = null
       endB = null
+      degradedA = false
+      degradedB = false
       idlePrimed = false
       previewDuration = 0
       // New clip swaps previewSrc, so the new file must be re-primed.
@@ -1406,6 +1423,8 @@
     startB = null
     endA = null
     endB = null
+    degradedA = false
+    degradedB = false
     idlePrimed = false
     showFullRes = false
     pendingPlay = false
@@ -1415,9 +1434,41 @@
     mode = 'scrubbing'
   }
 
+  // Audio-flap 503 fallback. Reload the ACTIVE buffer's chunk over the SAME
+  // [start,end] range from the audio-less index-v1.m3u8 rendition. Some cam5
+  // (H.264-record) windows have adjacent recording segments whose audio-track
+  // counts differ (the camera's RTSP audio flapping); Frigate's nginx-vod
+  // refuses to splice them and 503s the combined video+audio segment while the
+  // video-only rendition serves 200. We swap the src in place (NOT through
+  // setActiveChunk — keep start/end as-is) and mark the buffer degraded so the
+  // no-audio glyph shows. The reload restarts the chunk from its start; for a
+  // seek-triggered 503 that start is ≈ the seeked second, so the jump is
+  // negligible and currentTime is intentionally not preserved. The activeSrc-
+  // keyed readyPoll re-keys on the new src and drives play() once it is ready;
+  // onPlaying clears pendingPlay. Returns false when there is no active range
+  // to reload — the caller takes the terminal "No recording" path instead.
+  function degradeActiveToVideoOnly(): boolean {
+    const aStart = activeStart
+    const aEnd = activeEnd
+    if (aStart === null || aEnd === null) return false
+    const url = timelineVideoOnlyURL(camId, aStart, aEnd)
+    if (active === 'a') {
+      srcA = url
+      degradedA = true
+    } else {
+      srcB = url
+      degradedB = true
+    }
+    showFullRes = false // hold the preview poster over the reload
+    playerError = false
+    pendingPlay = true
+    lastSeekAt = performance.now()
+    return true
+  }
+
   // Backstop for the proactive codec gate: classify an HlsVideo error and
-  // either fall back to preview-only (decode-class) or surface the genuine
-  // "No recording" overlay (everything else).
+  // either fall back to preview-only (decode-class), retry the active chunk
+  // video-only (audio-flap 503), or surface the genuine "No recording" overlay.
   function handleFullResError(msg: string) {
     if (DECODE_ERROR_STRINGS.has(msg)) {
       // Already proven decodable this session → this is a transient glitch
@@ -1427,7 +1478,18 @@
       enterPreviewOnly()
       return
     }
+    // Non-decode error on a chunk that still carries audio: try the same range
+    // video-only first. A genuine empty range fails this too and lands on the
+    // terminal branch below; an audio-flap 503 recovers on this reload.
+    if (!activeDegraded && activeStart !== null && activeEnd !== null) {
+      if (degradeActiveToVideoOnly()) return
+    }
+    // Terminal: already video-only, or no range to reload. Surface "No
+    // recording" and clear the playback hang — pendingPlay + the readiness
+    // poll would otherwise keep retrying play() against a dead chunk forever.
     playerError = true
+    pendingPlay = false
+    stopReadyPoll()
   }
 
   // Smart back: the timeline is entered from focus, grid, AND events, so return
@@ -1630,6 +1692,20 @@
         >
           <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
         </button>
+        {#if activeDegraded}
+          <!-- Non-interactive status glyph: the active segment is playing the
+               audio-less video-only rendition (audio-flap 503 fallback). Not a
+               control — no onclick, ignores pointer events — just a quiet mark
+               beside the still-functional mute button. -->
+          <span
+            class="livebtn status"
+            role="img"
+            aria-label={ui.timelineAudioUnavailable}
+            title={ui.timelineAudioUnavailable}
+          >
+            <Icon name="audioOff" size={20} />
+          </span>
+        {/if}
       {/if}
       <!-- Fullscreen is available even in preview-only mode, so it sits OUTSIDE
            the !previewOnly guard as the last meta button. -->
@@ -1926,6 +2002,17 @@
   }
   .livebtn:active {
     transform: translateY(1px);
+  }
+  /* Quiet, non-interactive status glyph (audio-unavailable on a video-only
+     segment). Reuses .livebtn sizing for alignment in the meta cluster but
+     drops the control affordance: no border/background, dimmed, never presses
+     and never captures pointer events. */
+  .livebtn.status {
+    border: none;
+    background: transparent;
+    color: var(--text-3);
+    cursor: default;
+    pointer-events: none;
   }
   /* VHS rewind/fast-forward buttons sit a touch smaller than play/pause — they
      flank it. */
