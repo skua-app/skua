@@ -1125,7 +1125,10 @@
     // seek to small jumps near it; bigger jumps fall through to a fresh chunk.
     const cur = el && aStart !== null ? aStart! + el.currentTime : null
     const nearCurrent = cur !== null && Math.abs(t - cur) <= CHUNK_REJOIN_SLACK
-    if (within && el && nearCurrent) {
+    // A degraded (video-only) active chunk must not be reused on a settle —
+    // re-attach master so audio is retried at the new position; on the bad-
+    // boundary second it will simply degrade again, elsewhere audio returns.
+    if (within && el && nearCurrent && !activeDegraded) {
       lastSeekAt = performance.now()
       el.currentTime = t - aStart!
       void el.play().catch(() => {})
@@ -1715,7 +1718,7 @@
               ? ui.timelineUnmute
               : ui.timelineMute}
         >
-          <Icon name={activeDegraded ? 'audioOff' : fullResMuted ? 'mute' : 'unmute'} size={20} />
+          <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
         </button>
       {/if}
       <!-- Fullscreen is available even in preview-only mode, so it sits OUTSIDE
