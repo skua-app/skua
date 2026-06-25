@@ -1695,28 +1695,33 @@
             </ul>
           {/if}
         </div>
-        <button
-          type="button"
-          class="livebtn"
-          onclick={toggleFullResMute}
-          aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
-        >
-          <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
-        </button>
-        {#if activeDegraded}
-          <!-- Non-interactive status glyph: the active segment is playing the
-               audio-less video-only rendition (audio-flap 503 fallback). Not a
-               control — no onclick, ignores pointer events — just a quiet mark
-               beside the still-functional mute button. -->
-          <span
-            class="livebtn status"
-            role="img"
-            aria-label={ui.timelineAudioUnavailable}
-            title={ui.timelineAudioUnavailable}
+        <!-- Mute button + the audio-unavailable annotation hug as one unit, so
+             the glyph tucks against mute rather than reading as a 4th control
+             with the meta cluster's full column-gap on both sides. -->
+        <div class="mute-group">
+          <button
+            type="button"
+            class="livebtn"
+            onclick={toggleFullResMute}
+            aria-label={fullResMuted ? ui.timelineUnmute : ui.timelineMute}
           >
-            <Icon name="audioOff" size={20} />
-          </span>
-        {/if}
+            <Icon name={fullResMuted ? 'mute' : 'unmute'} size={20} />
+          </button>
+          {#if activeDegraded}
+            <!-- Non-interactive status glyph: the active segment is playing the
+                 audio-less video-only rendition (audio-flap 503 fallback). Not a
+                 control — no onclick, ignores pointer events — a small dimmed
+                 annotation subordinate to the mute button beside it. -->
+            <span
+              class="audio-off"
+              role="img"
+              aria-label={ui.timelineAudioUnavailable}
+              title={ui.timelineAudioUnavailable}
+            >
+              <Icon name="audioOff" size={18} />
+            </span>
+          {/if}
+        </div>
       {/if}
       <!-- Fullscreen is available even in preview-only mode, so it sits OUTSIDE
            the !previewOnly guard as the last meta button. -->
@@ -2014,13 +2019,25 @@
   .livebtn:active {
     transform: translateY(1px);
   }
+  /* Mute button + its audio-unavailable annotation read as one unit: a tight
+     internal gap hugs the glyph against mute, while the meta cluster's 14px
+     column-gap now sits between the speed chip, this group, and fullscreen —
+     not around the glyph. */
+  .mute-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+  }
   /* Quiet, non-interactive status glyph (audio-unavailable on a video-only
-     segment). Reuses .livebtn sizing for alignment in the meta cluster but
-     drops the control affordance: no border/background, dimmed, never presses
-     and never captures pointer events. */
-  .livebtn.status {
-    border: none;
-    background: transparent;
+     segment). Deliberately NOT a .livebtn: no 46px box, no border/background,
+     dimmed and small so it reads as an annotation subordinate to the mute
+     button beside it. Never presses, never captures pointer events. */
+  .audio-off {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
     color: var(--text-3);
     cursor: default;
     pointer-events: none;
