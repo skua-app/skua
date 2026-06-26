@@ -6,10 +6,9 @@
 // `paths` for stroke-only glyphs, plus optional `rects`/`lines`/`circles` for
 // mixed-primitive icons. Icon.svelte renders each list in order.
 //
-// Deliberate hand-rolled exceptions, kept off Lucide on purpose: cols1/cols2
-// (the column-density toggle has no Lucide equivalent), and skipBack/skipForward
-// (circular-arrow semantics that must not collide with the rewind/fastForward
-// double-triangle pair). The four-bracket brand mark lives in AppHeader, not here.
+// cols1/cols2 are deliberate hand-rolled exceptions, kept off Lucide on purpose:
+// the column-density toggle has no Lucide equivalent. The four-bracket brand mark
+// lives in AppHeader, not here.
 
 import type { EventKind } from '$lib/api'
 
@@ -73,8 +72,6 @@ export type IconName =
   | 'themeAuto'
   | 'grip'
   | 'edit'
-  | 'skipBack'
-  | 'skipForward'
   | 'rewind'
   | 'fastForward'
   | 'person'
@@ -303,12 +300,6 @@ export const ICONS: Record<IconName, IconDef> = {
       'M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z'
     ]
   },
-  // Skip-back / skip-forward: a rounded circular arrow (counter-clockwise for
-  // back, clockwise for forward), deliberately distinct from a double-triangle
-  // — that glyph is reserved for the VHS rewind/fast-forward pair. Arc plus an
-  // arrowhead at the open top corner. Hand-rolled on purpose; not from Lucide.
-  skipBack: { paths: ['M3 12a9 9 0 1 0 3-6.7L3 8', 'M3 3v5h5'] },
-  skipForward: { paths: ['M21 12a9 9 0 1 1-3-6.7L21 8', 'M21 3v5h-5'] },
   rewind: {
     paths: [
       'M12 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 12 18z',
