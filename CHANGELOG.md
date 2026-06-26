@@ -30,6 +30,7 @@ Changed
 - The moment and event detail modals no longer pile their buttons into a wrapping row. Close is now an X over the top-right corner of the video, the way modals usually close, and "See on timeline" has become the filled primary action that spans the row, with Download (and, for a live moment, Open live) sitting beside it as small icon buttons. The separate "Open in Frigate" button is gone, since the app now has its own recording timeline reached through "See on timeline".
 - The moment and event detail modals now have a proper header bar. The camera name reads as a clear title with the camera id as a small subtitle below it, and the close button moved off the video into that header. The camera name no longer shows up twice, since the duplicate row under the video is gone.
 - The Events page header no longer shows the camera online and offline count. That summary belongs on the camera grid, where it stays, not on Events.
+- The mobile header no longer shows the camera online and offline count next to the page title. The title now stands alone; the desktop camera grid still carries its own status line.
 
 Fixed
 - Recording timeline: the scrub preview no longer fails to load once the playhead sits on a fractional second.
