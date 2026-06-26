@@ -1890,7 +1890,11 @@
     /* No bottom tab bar on desktop — drop the mobile tab-bar clearance, pin the
        column to the viewport, and clip any overflow so there is no page scroll. */
     .page {
-      height: 100dvh;
+      /* Subtract the sticky AppHeader so the column fits under it without
+         overflowing. 64px is .dk-top's desktop height; the fallback covers
+         desktop, where --app-header-h is not published (only the mobile header
+         publishes it via ResizeObserver). */
+      height: calc(100dvh - var(--app-header-h, 64px));
       min-height: 0;
       overflow: hidden;
       padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
