@@ -81,7 +81,20 @@
   --text-3: rgba(244, 245, 247, 0.38);
 
   /* Semantic */
-  --accent: oklch(0.78 0.1 200);
+  /* Per-accent palette — the single source of truth for each accent in each
+     theme. These are the dark values; both light blocks below override the
+     same four tokens with saturated/darker variants so the accents don't wash
+     out against white surfaces. The selected accent is mapped onto --accent
+     via the [data-accent] selectors below (set by prefsStore.applyAccent). */
+  --acc-cyan: oklch(0.78 0.1 200);
+  --acc-sage: oklch(0.78 0.07 150);
+  --acc-amber: oklch(0.78 0.1 75);
+  --acc-violet: oklch(0.75 0.1 290);
+
+  /* Pre-selection fallback; [data-accent='…'] overrides this once prefs load.
+     var() indirection means --accent always tracks the active theme's
+     per-accent value because --acc-* is re-resolved on this same element. */
+  --accent: var(--acc-cyan);
   --accent-soft: color-mix(in oklab, var(--accent) 15%, transparent);
   /* Accent variant used for active TEXT and ICONS. In dark it equals
      --accent (pixel-identical); light overrides darken it for contrast
@@ -99,6 +112,22 @@
   --r-xs: 8px;
   --ctrl-h: 38px;
   --shadow: 0 10px 30px -14px rgba(0, 0, 0, 0.6);
+}
+
+/* Map the selected accent onto --accent. Resolved entirely in CSS so it
+   cascades correctly across light, dark, and auto: each --acc-* is themed,
+   and --accent simply points at the chosen one. */
+:root[data-accent='cyan'] {
+  --accent: var(--acc-cyan);
+}
+:root[data-accent='sage'] {
+  --accent: var(--acc-sage);
+}
+:root[data-accent='amber'] {
+  --accent: var(--acc-amber);
+}
+:root[data-accent='violet'] {
+  --accent: var(--acc-violet);
 }
 
 /* Light-mode token overrides.
@@ -125,6 +154,12 @@
   --input-bg: rgba(20, 22, 26, 0.05);
   --input-bg-disabled: rgba(20, 22, 26, 0.09);
   --accent-ink: color-mix(in oklab, var(--accent), #000 26%);
+  /* Saturated/darker accents for light surfaces — the dark values read washed
+     out on white. First pass; tune on device. */
+  --acc-cyan: oklch(0.6 0.13 215);
+  --acc-sage: oklch(0.58 0.12 150);
+  --acc-amber: oklch(0.66 0.14 70);
+  --acc-violet: oklch(0.56 0.16 290);
 }
 @media (prefers-color-scheme: light) {
   :root.theme-auto {
@@ -146,6 +181,11 @@
     --input-bg: rgba(20, 22, 26, 0.05);
     --input-bg-disabled: rgba(20, 22, 26, 0.09);
     --accent-ink: color-mix(in oklab, var(--accent), #000 26%);
+    /* Saturated/darker accents for light surfaces — see .theme-light. */
+    --acc-cyan: oklch(0.6 0.13 215);
+    --acc-sage: oklch(0.58 0.12 150);
+    --acc-amber: oklch(0.66 0.14 70);
+    --acc-violet: oklch(0.56 0.16 290);
   }
 }
 

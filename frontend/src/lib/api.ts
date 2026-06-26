@@ -38,13 +38,6 @@ export type Prefs = {
   grid_fps: GridFps
 }
 
-export const ACCENT_VALUES: Record<Accent, string> = {
-  cyan: 'oklch(0.78 0.10 200)',
-  sage: 'oklch(0.78 0.07 150)',
-  amber: 'oklch(0.78 0.10 75)',
-  violet: 'oklch(0.75 0.10 290)'
-}
-
 // EventKind mirrors backend/internal/events.Kind exactly. 'motion' is not
 // a valid kind — Frigate's `motion` events collapse into `other` on the BFF.
 export type EventKind = 'person' | 'vehicle' | 'animal' | 'other'

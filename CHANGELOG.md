@@ -32,6 +32,7 @@ Changed
 - The Events page header no longer shows the camera online and offline count. That summary belongs on the camera grid, where it stays, not on Events.
 - The mobile header no longer shows the camera online and offline count next to the page title. The title now stands alone; the desktop camera grid still carries its own status line.
 - The event-type filter chips on Events (mobile and desktop) are now icon-only — each shows just its kind glyph in a roughly square chip, with the kind name kept as an accessible label and hover tooltip. The "All" chip still reads as text.
+- The four accent colours now have their own saturated, darker values in light mode so they no longer look washed out on white surfaces; dark mode is unchanged. Accent selection is now theme-aware and resolved entirely in CSS, so the swatches and the live accent track light, dark, and system-auto correctly.
 
 Fixed
 - Recording timeline: the scrub preview no longer fails to load once the playhead sits on a fractional second.
