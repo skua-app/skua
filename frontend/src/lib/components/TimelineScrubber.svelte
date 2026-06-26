@@ -134,6 +134,14 @@
   // liveFrac < 1 means the right edge runs past now. Each marks an empty span.
   const floorFrac = $derived(timeToFraction(playbackFloor, windowStart, windowEnd))
   const liveFrac = $derived(timeToFraction(liveEdge, windowStart, windowEnd))
+  // RAW, unclamped live fraction — unlike liveFrac (clamped to [0,1] for the
+  // void band) this can fall outside [0,1]. The in-track Live capsule renders
+  // only while it is within [0,1]; once the live edge pans off the right
+  // (frac > 1) or left (frac < 0) the capsule is simply not drawn, and the
+  // track's overflow:hidden clips the partial case near the edge.
+  const liveFracRaw = $derived(
+    windowEnd > windowStart ? (liveEdge - windowStart) / (windowEnd - windowStart) : 0
+  )
 
   // Review-lane bands: each segment mapped onto the viewport. An active
   // segment (end null) extends to the live edge. timeToFraction clamps to
@@ -247,19 +255,6 @@
     const hi = trackWidth - LABEL_HALF_W
     if (hi < LABEL_HALF_W) return x // track too narrow to clamp meaningfully
     return Math.min(Math.max(x, LABEL_HALF_W), hi)
-  }
-
-  // Approximate half-width of the LIVE capsule in px (dot + label + chevron +
-  // padding). Same clamp idiom as clampLabelPx but with the capsule's own
-  // half-width, so the button parks fully inside the right end once the live
-  // edge scrolls off-screen instead of clipping under .track's edge. The button
-  // CENTRE tracks liveFrac while on-screen, so it pans/zooms with the content.
-  const LIVE_BTN_HALF_W = 40
-  function clampLivePx(fraction: number): number {
-    const x = fraction * trackWidth
-    const hi = trackWidth - LIVE_BTN_HALF_W
-    if (hi < LIVE_BTN_HALF_W) return x // track too narrow to clamp meaningfully
-    return Math.min(Math.max(x, LIVE_BTN_HALF_W), hi)
   }
 
   // Hour-boundary dividers, computed from TIME on a fixed 3600s grid (NOT from
@@ -455,6 +450,29 @@
       {/each}
     </div>
 
+    <!-- Live control: a CHILD of .track (the bar itself), placed with its LEFT
+         edge at the live-edge fraction so the capsule lies just inside the right
+         hatch band and rides with the content as the user pans/zooms. Rendered
+         only while the live edge is on-screen ([0,1]); the track's
+         overflow:hidden clips the partial case near the right edge — no
+         right-edge parking. Sits BEFORE .playhead in DOM order so the playhead
+         line still draws on top of it. onpointerdown stopPropagation keeps a
+         press on the capsule from starting a track scrub. -->
+    {#if onGoLive && liveEdge > 0 && liveFracRaw >= 0 && liveFracRaw <= 1}
+      <button
+        type="button"
+        class="live-jump-btn"
+        style:left="{liveFracRaw * 100}%"
+        onpointerdown={(e) => e.stopPropagation()}
+        onclick={onGoLive}
+        aria-label={ui.timelineGoLive}
+      >
+        <OnlineDot online={true} size={6} />
+        <Mono size={11} weight={600} color="var(--text)" letterSpacing={0.5}>{ui.liveTag}</Mono>
+        <Icon name="chevRight" size={13} />
+      </button>
+    {/if}
+
     <span
       class="playhead"
       class:dragging
@@ -480,21 +498,6 @@
          bordered .track frame, so the flag's centre lands on the line. -->
     <span class="flag-bubble">{clock}</span>
   </span>
-
-  <!-- Live control: a SIBLING of .track inside the wrapper (same idiom as the
-       time flag) so it is not a child of the drag surface — a click can never
-       start a seek. Positioned at the live-edge fraction, its centre clamped to
-       stay fully inside the track, and vertically centred on the track row.
-       Only the button takes pointer events. -->
-  {#if onGoLive && liveEdge > 0}
-    <div class="live-jump" style:transform="translateX({clampLivePx(liveFrac)}px)">
-      <button type="button" class="live-jump-btn" onclick={onGoLive} aria-label={ui.timelineGoLive}>
-        <OnlineDot online={true} size={6} />
-        <Mono size={11} weight={600} color="var(--text)" letterSpacing={0.5}>{ui.liveTag}</Mono>
-        <Icon name="chevRight" size={13} />
-      </button>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -753,25 +756,18 @@
     border-right: 4px solid transparent;
     border-top: 4px solid var(--accent);
   }
-  /* Live control wrapper: same positioning idiom as .playhead-flag — absolutely
-     placed at the wrapper origin and slid horizontally by translateX. top is the
-     track's vertical centre (26px flag reserve + half the 60px track = 56px); the
-     inner button lifts by half its own height to sit centred on that line. The
-     wrapper takes no pointer events; only the button does. Slides smoothly as the
-     live edge pans/zooms, matching the flag's transition. */
-  .live-jump {
-    position: absolute;
-    top: 56px;
-    left: 0;
-    pointer-events: none;
-    transition: transform 120ms linear;
-    will-change: transform;
-  }
-  /* Compact interactive capsule (NOT a passive badge): green dot + mono LIVE +
-     chevron, on --surface with a --border hairline. Centred on the live-edge x
-     and the track row via the translate. Tokens only, no new colours. */
+  /* Live control: a compact interactive capsule (NOT a passive badge) living
+     INSIDE the track — green dot + mono LIVE + chevron, on --surface with a
+     --border hairline. `left` is set inline at the live-edge fraction so the
+     capsule's LEFT edge sits at the live edge (lying just inside the right hatch
+     band); it rides with the content on pan/zoom and is clipped by the track's
+     overflow when the edge scrolls off. Vertically centred on the 60px track
+     row, which keeps it clear of the review/audio lanes at the top. Tokens
+     only, no new colours. */
   .live-jump-btn {
-    transform: translate(-50%, -50%);
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -781,7 +777,6 @@
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
-    pointer-events: auto;
     cursor: pointer;
     -webkit-appearance: none;
     appearance: none;
@@ -798,8 +793,8 @@
     border-color: var(--border-strong);
   }
   .live-jump-btn:active {
-    /* Press dip composes with the centring translate. */
-    transform: translate(-50%, calc(-50% + 1px));
+    /* Press dip composes with the vertical-centring translate. */
+    transform: translateY(calc(-50% + 1px));
   }
   .live-jump-btn:focus-visible {
     outline: 2px solid var(--accent);
@@ -810,8 +805,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .playhead,
-    .playhead-flag,
-    .live-jump {
+    .playhead-flag {
       transition: none;
     }
   }
