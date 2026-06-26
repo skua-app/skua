@@ -246,6 +246,10 @@ export const ui = {
   timelineFastForward: 'Перемотка вперёд',
   timelineAudioUnavailable: 'Нет звука для этого фрагмента',
   timelineJumpLive: 'Перейти к эфиру',
+  legendAlert: 'Тревога',
+  legendDetection: 'Обнаружение',
+  legendAudio: 'Звук',
+  legendRecorded: 'Запись',
   // theme (device-local)
   themeLabel: 'Тема',
   themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',

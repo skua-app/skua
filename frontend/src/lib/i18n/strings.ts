@@ -244,6 +244,10 @@ export const ui = {
   timelineFastForward: 'Fast-forward',
   timelineAudioUnavailable: 'No audio for this segment',
   timelineJumpLive: 'Jump to live',
+  legendAlert: 'Alert',
+  legendDetection: 'Detection',
+  legendAudio: 'Audio',
+  legendRecorded: 'Recorded',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',

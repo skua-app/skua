@@ -1788,6 +1788,28 @@
         <Mono size={11} color="var(--text-3)" wrap>{ui.timelineEmpty}</Mono>
       </div>
     {/if}
+
+    <!-- Lane colour legend. Desktop only (hidden < 900px); a quiet inline row of
+         swatch+label pairs so the scrubber's lane colours are readable. The
+         swatch colours mirror TimelineScrubber's lanes exactly. -->
+    <div class="legend" aria-hidden="true">
+      <span class="legend-item">
+        <span class="swatch alert"></span>
+        <span class="legend-label">{ui.legendAlert}</span>
+      </span>
+      <span class="legend-item">
+        <span class="swatch detection"></span>
+        <span class="legend-label">{ui.legendDetection}</span>
+      </span>
+      <span class="legend-item">
+        <span class="swatch audio"></span>
+        <span class="legend-label">{ui.legendAudio}</span>
+      </span>
+      <span class="legend-item">
+        <span class="swatch recorded"></span>
+        <span class="legend-label">{ui.legendRecorded}</span>
+      </span>
+    </div>
   </div>
 </div>
 
@@ -2196,5 +2218,52 @@
   }
   .scrub-note {
     min-height: 16px;
+  }
+  /* Lane colour legend — desktop only. Hidden below the 900px breakpoint where
+     the player fits exactly one viewport and any extra row would force a scroll;
+     it's revealed in the desktop @media below. A quiet inline row. */
+  .legend {
+    display: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+  }
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .legend-label {
+    /* Normal sans (NOT mono), small and quiet. */
+    font-size: 11px;
+    color: var(--text-3);
+  }
+  /* Tiny rounded chips matching the lane capsule shape (border-radius:999px). */
+  .swatch {
+    width: 14px;
+    height: 6px;
+    border-radius: 999px;
+    flex: 0 0 auto;
+  }
+  /* Each swatch mirrors a TimelineScrubber lane colour exactly. */
+  .swatch.alert {
+    background: var(--warn);
+  }
+  .swatch.detection {
+    background: var(--accent);
+    opacity: 0.7;
+  }
+  .swatch.audio {
+    /* SYNC: duplicates TimelineScrubber's .audio one-off violet literal (no
+       app.css token on this branch) — keep both in step. */
+    background: oklch(0.72 0.14 300);
+  }
+  .swatch.recorded {
+    background: var(--border-strong);
+  }
+  @media (min-width: 900px) {
+    .legend {
+      display: flex;
+    }
   }
 </style>

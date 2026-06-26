@@ -575,7 +575,9 @@
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
     /* Deliberate one-off violet (no design token): keeps the audio lane
        visually distinct from the amber alert and cyan detection review bands,
-       which sit just above. */
+       which sit just above. SYNC: the timeline legend swatch
+       (cam/[id]/timeline/+page.svelte, .swatch.audio) hard-codes this same
+       literal — keep both in step until a shared app.css token exists. */
     background: oklch(0.72 0.14 300);
   }
   /* Out-of-footage band: the span before recording started / beyond now. A
