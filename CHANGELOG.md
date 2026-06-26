@@ -35,6 +35,7 @@ Changed
 - The four accent colours now have their own saturated, darker values in light mode so they no longer look washed out on white surfaces; dark mode is unchanged. Accent selection is now theme-aware and resolved entirely in CSS, so the swatches and the live accent track light, dark, and system-auto correctly.
 
 Fixed
+- Light theme: text on solid accent fills (the moments bell badge on mobile and desktop, the recording-timeline clock bubble) is now light instead of near-black, so it stays legible on the new darker, more saturated light accents. Dark theme is unchanged.
 - Recording timeline: the scrub preview no longer fails to load once the playhead sits on a fractional second.
 - Recording timeline: cam5 (H.264) windows whose audio track flaps no longer hang playback. The player now falls back to video-only for that segment and keeps audio everywhere else; a muted-speaker glyph marks segments with no audio.
 - Recording timeline on desktop: the player now fits one screen with no page scroll, the video fills the height above the controls instead of being capped, and the controls read as one centered bar instead of spreading to the screen edges. Mobile is unchanged.

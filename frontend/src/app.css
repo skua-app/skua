@@ -133,8 +133,8 @@
 /* Light-mode token overrides.
    Two entry points: explicit `.theme-light` (user-chosen) and
    `.theme-auto` under a `prefers-color-scheme: light` media query (system).
-   --accent, --accent-soft, --on-accent, --offline, and shape tokens are
-   intentionally unchanged across themes. */
+   --accent-soft, --offline, and shape tokens are intentionally unchanged
+   across themes. */
 :root.theme-light {
   color-scheme: light;
   --bg: #eef0ec;
@@ -154,6 +154,11 @@
   --input-bg: rgba(20, 22, 26, 0.05);
   --input-bg-disabled: rgba(20, 22, 26, 0.09);
   --accent-ink: color-mix(in oklab, var(--accent), #000 26%);
+  /* Text on SOLID accent fills (bell badge, timeline flag bubble). The dark
+     near-black default vanishes on the darker/saturated light accents, so flip
+     it to the near-white --text value for contrast. (--accent-ink, used on the
+     pale --accent-soft fill, stays dark.) */
+  --on-accent: #f5f6f7;
   /* Saturated/darker accents for light surfaces — the dark values read washed
      out on white. First pass; tune on device. */
   --acc-cyan: oklch(0.6 0.13 215);
@@ -181,6 +186,8 @@
     --input-bg: rgba(20, 22, 26, 0.05);
     --input-bg-disabled: rgba(20, 22, 26, 0.09);
     --accent-ink: color-mix(in oklab, var(--accent), #000 26%);
+    /* Light text on solid accent fills — see .theme-light. */
+    --on-accent: #f5f6f7;
     /* Saturated/darker accents for light surfaces — see .theme-light. */
     --acc-cyan: oklch(0.6 0.13 215);
     --acc-sage: oklch(0.58 0.12 150);
