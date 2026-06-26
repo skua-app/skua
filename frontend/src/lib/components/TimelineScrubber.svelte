@@ -1,6 +1,10 @@
 <script lang="ts">
   import { timeToFraction } from '$lib/timeline'
   import type { ReviewSegment, AudioMarker, CoverageSegment } from '$lib/api'
+  import OnlineDot from '$lib/components/OnlineDot.svelte'
+  import Icon from '$lib/components/Icon.svelte'
+  import Mono from '$lib/components/Mono.svelte'
+  import { ui } from '$lib/i18n/strings'
 
   type Props = {
     windowStart: number
@@ -33,6 +37,10 @@
     // the scrubber stays stateless about the span (reads windowEnd-windowStart
     // as the current span).
     onZoom?: (targetSpan: number) => void
+    // Live control: when set, a "LIVE" capsule is drawn at the live-edge
+    // position on the track and clicking it navigates away (the consumer routes
+    // to the camera's live focus view). Omitted → no capsule.
+    onGoLive?: () => void
   }
 
   let {
@@ -47,7 +55,8 @@
     onSeek,
     onScrubStart,
     onScrubEnd,
-    onZoom
+    onZoom,
+    onGoLive
   }: Props = $props()
 
   // Width in CSS pixels, kept reactive via a ResizeObserver — same pattern
@@ -238,6 +247,19 @@
     const hi = trackWidth - LABEL_HALF_W
     if (hi < LABEL_HALF_W) return x // track too narrow to clamp meaningfully
     return Math.min(Math.max(x, LABEL_HALF_W), hi)
+  }
+
+  // Approximate half-width of the LIVE capsule in px (dot + label + chevron +
+  // padding). Same clamp idiom as clampLabelPx but with the capsule's own
+  // half-width, so the button parks fully inside the right end once the live
+  // edge scrolls off-screen instead of clipping under .track's edge. The button
+  // CENTRE tracks liveFrac while on-screen, so it pans/zooms with the content.
+  const LIVE_BTN_HALF_W = 40
+  function clampLivePx(fraction: number): number {
+    const x = fraction * trackWidth
+    const hi = trackWidth - LIVE_BTN_HALF_W
+    if (hi < LIVE_BTN_HALF_W) return x // track too narrow to clamp meaningfully
+    return Math.min(Math.max(x, LIVE_BTN_HALF_W), hi)
   }
 
   // Hour-boundary dividers, computed from TIME on a fixed 3600s grid (NOT from
@@ -458,6 +480,21 @@
          bordered .track frame, so the flag's centre lands on the line. -->
     <span class="flag-bubble">{clock}</span>
   </span>
+
+  <!-- Live control: a SIBLING of .track inside the wrapper (same idiom as the
+       time flag) so it is not a child of the drag surface — a click can never
+       start a seek. Positioned at the live-edge fraction, its centre clamped to
+       stay fully inside the track, and vertically centred on the track row.
+       Only the button takes pointer events. -->
+  {#if onGoLive && liveEdge > 0}
+    <div class="live-jump" style:transform="translateX({clampLivePx(liveFrac)}px)">
+      <button type="button" class="live-jump-btn" onclick={onGoLive} aria-label={ui.timelineGoLive}>
+        <OnlineDot online={true} size={6} />
+        <Mono size={11} weight={600} color="var(--text)" letterSpacing={0.5}>{ui.liveTag}</Mono>
+        <Icon name="chevRight" size={13} />
+      </button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -716,9 +753,65 @@
     border-right: 4px solid transparent;
     border-top: 4px solid var(--accent);
   }
+  /* Live control wrapper: same positioning idiom as .playhead-flag — absolutely
+     placed at the wrapper origin and slid horizontally by translateX. top is the
+     track's vertical centre (26px flag reserve + half the 60px track = 56px); the
+     inner button lifts by half its own height to sit centred on that line. The
+     wrapper takes no pointer events; only the button does. Slides smoothly as the
+     live edge pans/zooms, matching the flag's transition. */
+  .live-jump {
+    position: absolute;
+    top: 56px;
+    left: 0;
+    pointer-events: none;
+    transition: transform 120ms linear;
+    will-change: transform;
+  }
+  /* Compact interactive capsule (NOT a passive badge): green dot + mono LIVE +
+     chevron, on --surface with a --border hairline. Centred on the live-edge x
+     and the track row via the translate. Tokens only, no new colours. */
+  .live-jump-btn {
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 22px;
+    padding: 0 7px 0 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    pointer-events: auto;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
+    white-space: nowrap;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition:
+      background 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .live-jump-btn:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+  .live-jump-btn:active {
+    /* Press dip composes with the centring translate. */
+    transform: translate(-50%, calc(-50% + 1px));
+  }
+  .live-jump-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .live-jump-btn :global(svg) {
+    color: var(--text-3);
+  }
   @media (prefers-reduced-motion: reduce) {
     .playhead,
-    .playhead-flag {
+    .playhead-flag,
+    .live-jump {
       transition: none;
     }
   }

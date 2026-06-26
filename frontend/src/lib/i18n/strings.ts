@@ -243,7 +243,7 @@ export const ui = {
   timelineRewind: 'Rewind',
   timelineFastForward: 'Fast-forward',
   timelineAudioUnavailable: 'No audio for this segment',
-  timelineJumpLive: 'Jump to live',
+  timelineGoLive: 'Go to live view',
   legendAlert: 'Alert',
   legendDetection: 'Detection',
   legendAudio: 'Audio',
