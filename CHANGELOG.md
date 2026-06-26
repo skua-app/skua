@@ -31,6 +31,7 @@ Changed
 - The moment and event detail modals now have a proper header bar. The camera name reads as a clear title with the camera id as a small subtitle below it, and the close button moved off the video into that header. The camera name no longer shows up twice, since the duplicate row under the video is gone.
 - The Events page header no longer shows the camera online and offline count. That summary belongs on the camera grid, where it stays, not on Events.
 - The mobile header no longer shows the camera online and offline count next to the page title. The title now stands alone; the desktop camera grid still carries its own status line.
+- The event-type filter chips on Events (mobile and desktop) are now icon-only — each shows just its kind glyph in a roughly square chip, with the kind name kept as an accessible label and hover tooltip. The "All" chip still reads as text.
 
 Fixed
 - Recording timeline: the scrub preview no longer fails to load once the playhead sits on a fractional second.

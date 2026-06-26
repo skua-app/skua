@@ -153,11 +153,13 @@
         {#each kindOrder as k}
           <button
             type="button"
-            class="pill"
+            class="pill icon-only"
             class:active={activeKinds.has(k)}
+            aria-label={eventKindLabels[k]}
+            title={eventKindLabels[k]}
             onclick={() => onToggleKind(k)}
           >
-            <Icon name={kindIcon[k]} size={15} />{eventKindLabels[k]}</button
+            <Icon name={kindIcon[k]} size={15} /></button
           >
         {/each}
       </div>
@@ -281,6 +283,13 @@
   }
   .pill:active {
     transform: translateY(1px);
+  }
+  /* icon-only TYPE pill: even padding for a roughly square chip, icon centered,
+     no label gap to collapse since the text child is gone. */
+  .pill.icon-only {
+    gap: 0;
+    padding: 6px 7px;
+    justify-content: center;
   }
 
   /* dk-evgrid card grid */
