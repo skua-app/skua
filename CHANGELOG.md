@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-06-26
+
 Added
 - Recording timeline. Scrub a camera's recorded history on a 1-hour window with an instant low-res preview as you drag, then release (or press play) to watch the full-resolution recording from any point. Reach it from a camera's focus view with the new History button, or from any event with "See on timeline", which opens the timeline centred on the moment the event began. On a device that can't decode the camera's recording codec (e.g. H.265 without a hardware decoder), the timeline falls back to a preview/scrub-only mode — the scrubber and low-res preview keep working and an honest hint explains why full-resolution playback is unavailable. The player also gained 10-second skip-back/forward buttons and a speed chip that cycles playback through 0.5×, 1×, 2×, and 4×, plus press-and-hold rewind / fast-forward buttons that rush the preview through the recording (the rate ramps up the longer you hold) with a VHS-style on-frame badge, releasing to settle full-resolution playback where you land. A thin activity lane along the top of the scrubber now marks Frigate's review segments — alerts in amber, detections in cyan — at their wall-clock spots, following the playhead as you pan and zoom so you can see at a glance when something happened. A second thin lane marks the moments Frigate's audio detection heard a sound, in green, and it stays hidden when there's no audio activity in view.
 - A small colour legend under the recording timeline scrubber (desktop only) that labels the lane colours — Alert, Detection, Audio, and Recorded — so you can tell at a glance what each band means. It stays hidden on phones to keep the player on one screen.
@@ -651,7 +653,9 @@ Reconfiguration note
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/skua-app/skua/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/skua-app/skua/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/skua-app/skua/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/skua-app/skua/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/skua-app/skua/releases/tag/v0.11.1
