@@ -47,8 +47,8 @@
   import Mono from '$lib/components/Mono.svelte'
   import { ui } from '$lib/i18n/strings'
 
-  // Scrubber window: a fixed 3-hour span per camera. Full-res chunk: 10 min.
-  const WINDOW_SECONDS = 3 * 3600
+  // Scrubber window: a fixed 1-hour span per camera. Full-res chunk: 10 min.
+  const WINDOW_SECONDS = 3600
   const CHUNK_SECONDS = 10 * 60
   // Max distance (seconds) between the landed time and the full-res element's
   // current playback point for which an in-buffer currentTime seek is reliable.
@@ -81,8 +81,8 @@
   const camId = $derived(page.params.id ?? '')
   const camera = $derived(camerasStore.cameras.find((c) => c.id === camId) ?? null)
 
-  // Visible span of the scrubber viewport, in wall-clock seconds. Fixed at the
-  // 3h window this phase; A-2 makes it adjustable (zoom). The viewport itself
+  // Visible span of the scrubber viewport, in wall-clock seconds. Defaults to
+  // the 1h window; A-2 makes it adjustable (zoom). The viewport itself
   // (windowStart/windowEnd) is DERIVED from the playhead + this span below, so
   // the filmstrip pans under a centred playhead instead of the playhead
   // chasing a fixed window.
@@ -388,7 +388,7 @@
       // past, but full-res must still play/stop at real now.
       liveEdge = now
       // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
-      // the default last-3h window, never NaN.
+      // the default last-1h window, never NaN.
       const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
       if (Number.isFinite(tSec)) {
         // Deep-link: a real event time is always a valid past second, so just
@@ -398,7 +398,7 @@
         position = tSec > liveEdge ? liveEdge : tSec
       } else {
         // Default: rest the playhead centred in the last viewSpan up to live so
-        // the viewport shows the last 3h; autoplay then runs it forward to live.
+        // the viewport shows the last 1h; autoplay then runs it forward to live.
         position = liveEdge - viewSpan / 2
       }
       mode = 'scrubbing'
