@@ -31,6 +31,7 @@ Changed
 Fixed
 - Recording timeline: the scrub preview no longer fails to load once the playhead sits on a fractional second.
 - Recording timeline: cam5 (H.264) windows whose audio track flaps no longer hang playback. The player now falls back to video-only for that segment and keeps audio everywhere else; a muted-speaker glyph marks segments with no audio.
+- Recording timeline on desktop: the player now fits one screen with no page scroll, the video fills the height above the controls instead of being capped, and the controls read as one centered bar instead of spreading to the screen edges. Mobile is unchanged.
 - The connecting and error overlays in the camera focus view now stay fixed and centered when you zoom the live view. Before, the "Connecting…"/"Buffering" pill and the stream-error card were inside the zoomable layer, so pinch or wheel zoom scaled and dragged them along with the video; the retry button could end up off screen. They now sit in a fixed layer over the feed frame like the telemetry panel does.
 - The About screen no longer shows its tagline twice. The line "A calmer front-end for Frigate" now appears only once, in the identity card.
 - A quick downward flick on the moments sheet now closes it instead of springing back. Before, only a slow drag that pulled the sheet far enough would dismiss it; a fast short flick snapped back. A slow short drag still settles back to its detent.

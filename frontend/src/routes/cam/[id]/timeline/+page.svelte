@@ -1599,10 +1599,8 @@
 
   <div class="controls">
     {#if !previewOnly}
-      <!-- Left flex spacer balances the trailing meta cluster so the transport
-           stays centred in the bar. The VHS rewind/fast-forward pair (C-ii)
-           will flank play/pause inside .transport. -->
-      <span class="edge" aria-hidden="true"></span>
+      <!-- Centred transport cluster: the VHS rewind/fast-forward pair (C-ii)
+           flanks play/pause inside .transport. -->
       <div class="transport">
         <button
           type="button"
@@ -1830,23 +1828,34 @@
     aspect-ratio: auto;
     border-radius: 0;
   }
-  /* Desktop (matches the layout's 900px isDesktop breakpoint): on a wide
-     viewport a full-width 16:9 frame would push the controls + scrubber below
-     the fold. Cap the height so the whole player fits, driving width off the
-     height via aspect-ratio. The 36px is the .page's 18px horizontal padding on
-     each side. .page is a flex column, so width:auto needs align-self:center to
-     stay centred instead of stretching. */
+  /* Desktop (matches the layout's 900px isDesktop breakpoint): the whole player
+     fits exactly one viewport with no scroll. The column is pinned to 100dvh
+     with overflow hidden; header, controls and scrubber keep their natural
+     height (flex:0 0 auto) and the video frame grows to fill the leftover
+     space. The frame drops its fixed 16:9 aspect-ratio so it takes whatever
+     height is left — the media layers already object-fit:contain, so the
+     picture letterboxes cleanly. */
   @media (min-width: 900px) {
-    .frame {
-      height: min(56vh, calc((100vw - 36px) * 9 / 16));
-      width: auto;
-      align-self: center;
-    }
-    /* No bottom tab bar on desktop — drop the mobile tab-bar clearance back to
-       the original padding so the height-capped player + controls + scrubber
-       still fit without introducing a new scroll. */
+    /* No bottom tab bar on desktop — drop the mobile tab-bar clearance, pin the
+       column to the viewport, and clip any overflow so there is no page scroll. */
     .page {
+      height: 100dvh;
+      min-height: 0;
+      overflow: hidden;
       padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+    }
+    .bar,
+    .controls,
+    .scrub {
+      flex: 0 0 auto;
+    }
+    .frame {
+      flex: 1 1 auto;
+      min-height: 0;
+      height: auto;
+      width: 100%;
+      aspect-ratio: auto;
+      align-self: stretch;
     }
   }
   /* Two stacked players. Opacity swaps between the low-res preview and the
@@ -1950,6 +1959,10 @@
     stroke: currentColor;
   }
 
+  /* One centred bar: the transport cluster, a gap, then the meta cluster, both
+     centred as a single group (justify-content:center). A max-width keeps the
+     group from stretching across a wide desktop; margin:0 auto centres the
+     capped bar in the column. */
   .controls {
     display: flex;
     flex-wrap: wrap;
@@ -1957,11 +1970,9 @@
     justify-content: center;
     column-gap: 14px;
     row-gap: 10px;
-  }
-  /* Left spacer (= the trailing meta cluster's flex weight) keeps the transport
-     cluster centred in the bar on the single-row (desktop) layout. */
-  .edge {
-    flex: 1 1 0;
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
   }
   /* Centred transport cluster: rewind, play/pause, fast-forward. Tight internal
      gap so the three read as one unit. */
@@ -1972,29 +1983,22 @@
     gap: 8px;
     flex: 0 1 auto;
   }
-  /* Trailing meta cluster: speed chip, mute — pinned to the right. The clock
-     now lives in the scrubber's time flag, not here. */
+  /* Meta cluster: speed chip, mute, fullscreen. Sized to content so it reads as
+     part of the one centred group. The clock now lives in the scrubber's time
+     flag, not here. */
   .meta {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
     gap: 14px;
   }
   /* Five transport buttons plus the meta cluster genuinely overflow a phone-
      width bar, so below this width the meta cluster wraps to its own centred
-     second row and the flex spacer is dropped (it would otherwise push the
-     transport off-centre on the wrapped row). Desktop keeps the single centred
-     row. */
+     second row (justify-content:center on .controls keeps each row centred).
+     Desktop keeps the single centred row. */
   @media (max-width: 540px) {
     .controls {
       column-gap: 10px;
-    }
-    .edge {
-      display: none;
-    }
-    .meta {
-      flex: 0 0 auto;
     }
   }
   /* Mirrors MobileFocus .livebtn token styling. */
