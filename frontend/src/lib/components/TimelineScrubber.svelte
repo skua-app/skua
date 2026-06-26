@@ -1,9 +1,7 @@
 <script lang="ts">
   import { timeToFraction } from '$lib/timeline'
   import type { ReviewSegment, AudioMarker, CoverageSegment } from '$lib/api'
-  import OnlineDot from '$lib/components/OnlineDot.svelte'
   import Icon from '$lib/components/Icon.svelte'
-  import Mono from '$lib/components/Mono.svelte'
   import { ui } from '$lib/i18n/strings'
 
   type Props = {
@@ -467,9 +465,8 @@
         onclick={onGoLive}
         aria-label={ui.timelineGoLive}
       >
-        <OnlineDot online={true} size={6} />
-        <Mono size={11} weight={600} color="var(--text)" letterSpacing={0.5}>{ui.liveTag}</Mono>
-        <Icon name="chevRight" size={13} />
+        <span class="live-jump-label">{ui.liveTag}</span>
+        <Icon name="chevRight" size={15} />
       </button>
     {/if}
 
@@ -756,24 +753,27 @@
     border-right: 4px solid transparent;
     border-top: 4px solid var(--accent);
   }
-  /* Live control: a compact interactive capsule (NOT a passive badge) living
-     INSIDE the track — green dot + mono LIVE + chevron, on --surface with a
-     --border hairline. `left` is set inline at the live-edge fraction so the
-     capsule's LEFT edge sits at the live edge (lying just inside the right hatch
-     band); it rides with the content on pan/zoom and is clipped by the track's
-     overflow when the edge scrolls off. Vertically centred on the 60px track
-     row, which keeps it clear of the review/audio lanes at the top. Tokens
-     only, no new colours. */
+  /* Live control: a compact BUTTON (the .back idiom, scaled down) living INSIDE
+     the track — plain Geist "LIVE" + chevron on --surface with a --border
+     hairline, reading as actionable rather than a passive badge. `left` is set
+     inline at the live-edge fraction; a small margin-left nudges the button a
+     few px right of that edge so it does not butt against the hatch band. It
+     rides with the content on pan/zoom and is clipped by the track's overflow
+     when the edge scrolls off. Vertically centred on the 60px track row, which
+     keeps it clear of the review/audio lanes at the top. Tokens only. */
   .live-jump-btn {
     position: absolute;
     top: 50%;
+    /* Gap from the live edge — nudge right so the button clears the hatch.
+       First-pass px — tune on device. */
+    margin-left: 6px;
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    height: 22px;
-    padding: 0 7px 0 8px;
-    border-radius: 999px;
+    height: 26px;
+    padding: 0 8px 0 10px;
+    border-radius: var(--r-sm);
     border: 1px solid var(--border);
     background: var(--surface);
     color: var(--text);
@@ -785,12 +785,20 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     transition:
-      background 0.18s ease,
+      color 0.18s ease,
       border-color 0.18s ease;
   }
+  .live-jump-label {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+  }
   .live-jump-btn:hover {
-    background: var(--surface-2);
     border-color: var(--border-strong);
+  }
+  .live-jump-btn:hover :global(svg) {
+    color: var(--text);
   }
   .live-jump-btn:active {
     /* Press dip composes with the vertical-centring translate. */
@@ -801,7 +809,7 @@
     outline-offset: 2px;
   }
   .live-jump-btn :global(svg) {
-    color: var(--text-3);
+    color: var(--text-2);
   }
   @media (prefers-reduced-motion: reduce) {
     .playhead,
