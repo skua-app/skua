@@ -45,6 +45,7 @@
   import ZoomPane from '$lib/components/ZoomPane.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
+  import OnlineDot from '$lib/components/OnlineDot.svelte'
   import { ui } from '$lib/i18n/strings'
 
   // Scrubber window: a fixed 1-hour span per camera. Full-res chunk: 10 min.
@@ -359,6 +360,12 @@
   const previewVisible = $derived(
     !fullResVisible && !framesVisible && previewSrc !== '' && previewReady
   )
+
+  // True when the playhead is effectively at the live edge (within a few
+  // seconds). Gated on liveEdge having been captured (it is 0 before the entry
+  // effect runs) so the jump-to-live chip doesn't flash before the first frame.
+  // Drives the chip's visibility: shown only when the user is BEHIND live.
+  const atLive = $derived(liveEdge > 0 && liveEdge - position < 5)
 
   // On camId change: capture the playable bounds, place the playhead, reset to
   // scrubbing, drop any loaded chunk, and pull the summary for the recording
@@ -1198,6 +1205,16 @@
     ensurePlaybackAt(position)
   }
 
+  // Jump-to-live chip: place the playhead at the live edge and settle there
+  // through the exact same path a drag-release uses — ensurePlaybackAt handles
+  // coverage-snap, chunk load and play, so playback resumes at live with no
+  // duplicated logic. (On a preview-only device ensurePlaybackAt no-ops the
+  // full-res settle; the playhead still moves to live.)
+  function jumpToLive() {
+    position = liveEdge
+    ensurePlaybackAt(liveEdge)
+  }
+
   // Zoom: the scrubber requests an absolute target span (pinch distance ratio
   // or wheel step). We clamp to [MIN_SPAN, MAX_SPAN] and round to a whole
   // second. Because windowStart/windowEnd are derived as position ± viewSpan/2
@@ -1746,6 +1763,18 @@
       {onZoom}
     />
 
+    <!-- Jump-to-live chip: an overlay pinned just inside the right end of the
+         scrubber track and vertically centred on the track row. Shown only when
+         the playhead sits behind live; tapping settles full-res at the live
+         edge. As an overlay it adds no column height to the no-scroll desktop
+         skeleton, and it stays a normal tap target on mobile. -->
+    {#if !atLive}
+      <button type="button" class="live-chip" onclick={jumpToLive} aria-label={ui.timelineJumpLive}>
+        <OnlineDot online={true} size={6} />
+        <Mono size={11} weight={600} color="var(--text)" letterSpacing={0.5}>{ui.liveTag}</Mono>
+      </button>
+    {/if}
+
     {#if timelineStore.loading}
       <div class="scrub-note loading">
         <Mono size={11} color="var(--text-3)">{ui.timelineLoading}</Mono>
@@ -2123,9 +2152,47 @@
     stroke: currentColor;
   }
   .scrub {
+    /* position:relative anchors the absolutely-positioned jump-to-live chip to
+       the scrubber column. */
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  /* Jump-to-live chip: a rounded capsule pinned just inside the right end of the
+     scrubber track. The TimelineScrubber reserves 26px above its 60px track for
+     the time flag, so the track's vertical centre sits 26 + 30 = 56px below the
+     .scrub top — anchor the chip there and lift by half its height to centre it
+     on the track row. Pinned to the right end; the time flag tracks the centred
+     playhead, so the two never collide. Built from tokens only: --surface fill,
+     --border hairline, the green --online dot (OnlineDot) and a mono LIVE tag. */
+  .live-chip {
+    position: absolute;
+    top: 56px;
+    right: 10px;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    -webkit-appearance: none;
+    appearance: none;
+    font-family: inherit;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition:
+      background 0.18s ease,
+      border-color 0.18s ease;
+  }
+  .live-chip:active {
+    /* Press dip composes with the centring translate. */
+    transform: translateY(calc(-50% + 1px));
   }
   .scrub-note {
     min-height: 16px;

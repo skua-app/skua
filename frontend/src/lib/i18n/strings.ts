@@ -243,6 +243,7 @@ export const ui = {
   timelineRewind: 'Rewind',
   timelineFastForward: 'Fast-forward',
   timelineAudioUnavailable: 'No audio for this segment',
+  timelineJumpLive: 'Jump to live',
   // theme (device-local)
   themeLabel: 'Theme',
   themeDesc: 'Match the system, or lock to dark or light.',

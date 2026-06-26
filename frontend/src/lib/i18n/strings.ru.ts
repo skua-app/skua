@@ -245,6 +245,7 @@ export const ui = {
   timelineRewind: 'Перемотка назад',
   timelineFastForward: 'Перемотка вперёд',
   timelineAudioUnavailable: 'Нет звука для этого фрагмента',
+  timelineJumpLive: 'Перейти к эфиру',
   // theme (device-local)
   themeLabel: 'Тема',
   themeDesc: 'Подстраиваться под систему или зафиксировать тёмную/светлую.',
