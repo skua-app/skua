@@ -4,7 +4,6 @@
   import { glanceStore } from '$lib/stores/glance.svelte'
   import { themeStore, type Theme } from '$lib/stores/theme.svelte'
   import { ui } from '$lib/i18n/strings'
-  import { ACCENT_VALUES } from '$lib/api'
   import type { Accent, NameStyle, GlanceWindowHours, GlanceMaxMoments, GridFps } from '$lib/api'
 
   const themeOptions: { value: Theme; label: string }[] = [
@@ -122,7 +121,7 @@
               type="button"
               class="acc-sw"
               class:on={prefsStore.accent === opt.value}
-              style:background={ACCENT_VALUES[opt.value]}
+              style:background={`var(--acc-${opt.value})`}
               aria-label={opt.label}
               onclick={() => prefsStore.setAccent(opt.value)}
             ></button>

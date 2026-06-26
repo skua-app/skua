@@ -20,7 +20,15 @@
 
   let width = $state(typeof window !== 'undefined' ? window.innerWidth : 0)
   const isDesktop = $derived(width >= 900)
-  const isFocus = $derived(page.route.id === '/cam/[id]')
+  // Both the single-camera focus view and the recording timeline are immersive:
+  // on MOBILE they render their own top bar, so the global AppHeader must stay
+  // hidden there to avoid a duplicate header row and a doubled safe-area top
+  // inset. On DESKTOP these routes have no in-screen global nav, so the
+  // AppHeader still renders (its grid control-bar is route-'/'-gated, so only
+  // brand + tabs + theme + bell appear).
+  const isImmersive = $derived(
+    page.route.id === '/cam/[id]' || page.route.id === '/cam/[id]/timeline'
+  )
 
   // All bootstrap goes through onMount, not $effect: each side-effect must
   // run exactly once per session. Previous $effect-based registerSW could
@@ -40,8 +48,14 @@
       console.error('[layout] registerSW failed:', err)
     }
 
+    // Capture the prefs load so surfaceGlance() can await it: glance.load()
+    // reads prefsStore.glance* at call time, so the first surface must wait for
+    // prefs to land or it fetches with the default window/max and the
+    // badge/cap look reset after a restart. prefs.load() never rejects; the
+    // Promise.resolve() fallback covers the synchronous-throw branch.
+    let prefsReady: Promise<void> = Promise.resolve()
     try {
-      prefsStore.load()
+      prefsReady = prefsStore.load()
     } catch (err) {
       console.error('[layout] prefsStore.load failed:', err)
     }
@@ -79,6 +93,11 @@
     // intent re-surfaces the peek across that reload only.
     async function surfaceGlance(): Promise<void> {
       try {
+        // Wait for prefs before any glance.load(): the fetch query is built
+        // from prefsStore.glance* at call time, so racing ahead of prefs would
+        // use the store defaults (max 20 / 24h) and reset the badge/cap on a
+        // cold launch. On resume prefs are already loaded, so this is a no-op.
+        await prefsReady
         if (glanceStore.wasSurfaced()) {
           // Post-reload re-surface: skip the heartbeat (its verdict
           // is poisoned by our own pre-reload ping; startPing keeps
@@ -151,7 +170,7 @@
 <svelte:window bind:innerWidth={width} />
 
 <div class="min-h-screen bg-[var(--bg)] text-[var(--text)]">
-  {#if !isFocus}
+  {#if !isImmersive || isDesktop}
     <AppHeader {isDesktop} />
   {/if}
 

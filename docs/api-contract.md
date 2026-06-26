@@ -125,28 +125,6 @@ type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
 // → image/jpeg; Cache-Control: public, max-age=31536000, immutable
 // ETag passed through from Frigate, else derived from event id.
 
-// GET /api/events/:id/review
-//   Resolves the Frigate review segment that contains the tracked-
-//   object event with id `:id`. The BFF derives the event's
-//   timestamp from the id's "<unix>.<frac>-<hash>" prefix, queries
-//   Frigate's /api/review for the ±10 min window around that
-//   timestamp (Limit=100), and scans the returned segments'
-//   data.detections for an exact id match. Detection ids are
-//   globally unique, so the camera does not have to be passed and
-//   a cross-camera scan is safe. The recall window is wide; the
-//   exact id match supplies precision.
-//
-//   200 → { "review_id": "<frigate-review-id>" }
-//   Cache-Control: no-store.
-//
-//   Errors:
-//     - invalid id format / unparseable prefix → 404 not_found
-//     - no review in the window contains the id → 404 not_found
-//     - upstream context deadline → 504 upstream_timeout
-//     - any other upstream failure → 502 upstream_error
-//
-// type EventReviewResponse = { review_id: string }
-
 // GET  /api/events/:id/clip.mp4
 // HEAD /api/events/:id/clip.mp4              (http.ServeContent skips the body)
 // GET  /api/events/:id/clip.mp4?download=1   (Content-Disposition: attachment)
@@ -500,12 +478,15 @@ type Moment = {
 //          1 hour through 7 days). Controls how far back the "while you
 //          were away" window extends.
 //   max:   optional positive integer (default 20, clamped to 1..200).
-//          Caps the number of moments returned and is forwarded to
-//          Frigate as the upstream review-list limit.
+//          Caps the number of REAL moments returned.
 //   The BFF makes a single GET /api/review call against Frigate with
-//   `after = now - hours` (unix seconds) and `limit = max`. Frigate
-//   returns review segments newest-first; the BFF preserves that
-//   order and defensively truncates to `max`. The window is purely
+//   `after = now - hours` (unix seconds) and an over-fetched
+//   `limit = min(max * 4, 200)`. Moments with no tracked-object
+//   detections (empty motion-only segments) are omitted, so the
+//   upstream page is over-fetched to let the output `max` count real
+//   moments. Frigate returns review segments newest-first; the BFF
+//   preserves that order and truncates the surviving moments to `max`.
+//   `unseen_count` counts only the moments actually returned. The window is purely
 //   time-based: there is no `cleared_at`-style clamp, and moments
 //   already at-or-before the household `seen_through` watermark stay
 //   in the response (they render with `seen: true`, not dropped).
@@ -727,4 +708,286 @@ type CameraOrderErrorBody = {
   error: 'invalid_body' | 'internal'
   message: string  // English, ready to display
 }
+
+// === Recording timeline (Phase 1, unreleased) ===
+//
+// Thin BFF passthrough for Frigate's recording VOD endpoint plus the
+// per-camera recordings summary. Single camera; codec-agnostic; no
+// transcode, no retag, no buffering — the BFF only validates camera
+// id / time slots / filename, forwards Range verbatim, and streams
+// the upstream body. Frigate emits an HLS fMP4 ladder
+// (master.m3u8 → index-*.m3u8 → init-*.mp4 + seg-*.m4s) under
+// /vod/{cam}/start/{start}/end/{end}/. Every URI inside the playlists
+// is relative, so the path-embedded {start}/{end} survive relative
+// resolution and clients fetch every child playlist / segment back
+// through the same /api/cameras/{id}/vod/{start}/{end}/ prefix
+// without any playlist-body rewriting in the BFF.
+
+// GET  /api/cameras/{id}/vod/{start}/{end}/*
+// HEAD /api/cameras/{id}/vod/{start}/{end}/*
+//   {id}    camera id (must be present in the camera registry).
+//   {start},{end}  integer unix seconds — passed verbatim into the
+//     upstream URL. The BFF only enforces digit-only / non-empty so
+//     the upstream URL stays parseable; Frigate decides whether the
+//     range is valid against its recording retention.
+//   {*}     the relative playlist or segment filename: master.m3u8,
+//     index-*.m3u8, init-*.mp4, or seg-*.m4s. Restricted to
+//     [A-Za-z0-9._-] with `.` / `..` and any `/` or `\` explicitly
+//     rejected — the catch-all slot is the SSRF / path-traversal
+//     surface and is the only validation gate between the client and
+//     the upstream URL composition.
+//
+//   The BFF forwards the incoming Range header verbatim and passes
+//   the upstream status code, Content-Type, Content-Length,
+//   Content-Range, Accept-Ranges, and ETag through unchanged. HEAD
+//   skips the body copy.
+//
+//   Cache-Control by suffix:
+//     - .m3u8                → "no-store" (playlist mutates while
+//                              the window includes now)
+//     - .mp4 (init) / .m4s   → "public, max-age=31536000, immutable"
+//                              (segment bytes are write-once for a
+//                              given time range)
+//   Content-Disposition is not touched — Frigate's VOD does not send
+//   attachment for these.
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - non-numeric start or end         → 400 invalid_range
+//     - malformed {*} (traversal, slash,
+//       non-allowed bytes)               → 404 not_found
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport       → 502 upstream_error
+//   Frigate's VOD endpoint may return 416 / 404 / etc. directly;
+//   those statuses are passed through verbatim.
+
+// GET /api/cameras/{id}/recordings-summary[?timezone=]
+//   Verbatim pass-through of Frigate's
+//   /api/{cam}/recordings/summary. The timezone query is forwarded
+//   only when non-empty (Frigate uses it to bucket entries by the
+//   caller's local day). The response shape is owned upstream and
+//   not yet typed by the BFF — clients consume it as opaque JSON.
+//   Content-Type is copied through from upstream (fallback
+//   "application/json"); the body is streamed verbatim.
+//
+//   Errors mirror the VOD path: invalid_id (400), not_found (404),
+//   upstream_timeout (504), upstream_error (502).
+
+// GET /api/cameras/{id}/review?start=&end=
+//   The windowed list of Frigate review segments (grouped alert / detection
+//   activity) overlapping [start,end), reshaped into the lean shape the
+//   recording-timeline scrubber renders as a thin activity lane along the top
+//   of the bar. The BFF queries Frigate's /api/review with cameras={id},
+//   after=start-1800 (a fixed 30-min lookback — Frigate filters review items
+//   on start_time, so the lookback catches a segment that started just before
+//   the window but overlaps it; a rare, very-long active segment that started
+//   more than 30 min before the left edge may still be missed there),
+//   before=end, and limit=500, then re-emits an array, one entry per segment:
+//
+//     [ { "id": <string>, "severity": <string>,
+//         "start": <float64>, "end": <float64|null> }, ... ]
+//
+//   severity is Frigate's value passed through ("alert" | "detection"). start
+//   is the segment's wall-clock start (unix seconds, subseconds preserved).
+//   end is null while the segment is still active (Frigate's end_time null) —
+//   the FE draws an active segment out to the live edge.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store.
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - any other upstream failure       → 502 upstream_error
+
+// GET /api/cameras/{id}/audio-events?start=&end=
+//   The windowed list of Frigate audio-detection events overlapping
+//   [start,end), reshaped into the lean shape the recording-timeline scrubber
+//   renders as a thin activity lane directly under the review lane. The source
+//   is Frigate's /api/events filtered to data.type=="audio" (the same endpoint
+//   the events list uses; the BFF drops the object events). The BFF queries
+//   /api/events with cameras={id}, after=start-300 (a fixed 5-min lookback —
+//   Frigate filters events on start_time, so the lookback catches an audio
+//   event that started just before the window but overlaps it; audio events are
+//   short, well under a couple of minutes), before=end, and limit=500, then
+//   re-emits an array, one entry per audio event:
+//
+//     [ { "id": <string>, "label": <string>,
+//         "start": <float64>, "end": <float64|null> }, ... ]
+//
+//   label is the raw Frigate audio class ("speech", "bark", ...). start is the
+//   event's wall-clock start (unix seconds, subseconds preserved). end is null
+//   while the event is still active (Frigate's end_time null) — the FE draws an
+//   active marker out to the live edge.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store.
+//
+//   Limit caveat: /api/events has no audio-only upstream filter, so limit=500
+//   caps the raw mixed object+audio list BEFORE the type filter — in a very
+//   busy window object events could crowd out audio, acceptable at household
+//   rates and bounded by the time window.
+//
+//   Errors (same table as /review):
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - any other upstream failure       → 502 upstream_error
+
+// GET /api/cameras/{id}/recordings?start=&end=
+//   The windowed recording-COVERAGE lane for the recording-timeline scrubber:
+//   the spans of recorded footage overlapping [start,end), rendered as a
+//   neutral recorded fill with the gaps between spans left as empty track. The
+//   BFF reads Frigate's per-segment /api/{cam}/recordings (the raw ~10s
+//   recording segments) with after=start-60 (a fixed 60-s lookback — Frigate
+//   filters segments on start_time, so the lookback catches a segment that
+//   started just before the window's left edge and straddles it) and
+//   before=end, then sorts the segments ascending and coalesces contiguous
+//   ones — bridging gaps up to COVERAGE_GAP_MERGE (5 s) so sub-second boundary
+//   jitter does not fragment continuous recording — into a small set of
+//   coverage ranges:
+//
+//     [ { "start": <float64>, "end": <float64> }, ... ]
+//
+//   sorted ascending. Recorded ranges are the entries; gaps are the spans
+//   BETWEEN them. start/end are wall-clock unix seconds (subseconds preserved).
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store.
+//
+//   Errors (same table as /review):
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - any other upstream failure       → 502 upstream_error
+//   A non-2xx upstream status is passed through with an empty JSON array (like
+//   /preview-clips) so the FE degrades to no coverage.
+
+// GET /api/cameras/{id}/preview-frame-list?start=&end=
+//   The chronological list of preview FRAMES Frigate has rendered for
+//   [start,end), each rewritten to the BFF /preview-frame proxy. The
+//   frame analogue of /preview-clips. The scrubber uses it to seek the open
+//   (in-progress) current hour frame-by-frame before that hour's preview
+//   mp4 clip has been assembled. The BFF reads Frigate's preview-frames
+//   list (/api/preview/{cam}/start/{start}/end/{end}/frames) and re-emits
+//   a reduced array, one entry per frame:
+//
+//     [ { "ts": <float64>, "src": <string> }, ... ]
+//
+//   ts is the frame's wall-clock timestamp (unix seconds, parsed from the
+//   substring after the filename's last '-' so hyphenated camera ids
+//   parse). src is REWRITTEN to the BFF route
+//   "/api/cameras/{id}/preview-frame/{file}" — the client never reaches
+//   Frigate's /api/preview path directly. Entries whose filename fails the
+//   traversal whitelist (validPreviewFrame) or whose timestamp does not
+//   parse are dropped. Upstream order (chronological) is preserved.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store (the open hour's frame list grows).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport, or
+//       undecodable upstream body        → 502 upstream_error
+//   A non-2xx upstream status is passed through with an empty JSON array
+//   so the FE degrades to "no frames".
+
+// GET /api/cameras/{id}/preview-clips?start=&end=
+//   The list of real preview CLIPS Frigate has for [start,end) — the same
+//   source Frigate's own History timeline scrubs against (distinct from
+//   the degenerate single preview.mp4 concat). The BFF reads Frigate's
+//   clips list (/api/preview/{cam}/start/{start}/end/{end}) and re-emits a
+//   reduced array, one entry per clip:
+//
+//     [ { "start": <float64>, "end": <float64>, "src": <string> }, ... ]
+//
+//   src is REWRITTEN to the BFF route
+//   "/api/cameras/{id}/preview-clip/{file}" — the client never reaches
+//   Frigate's /clips/previews path directly. Entries whose filename fails
+//   the traversal whitelist (validPreviewClip) are dropped. Ordering is
+//   preserved from upstream.
+//   {id}    camera id (must be present in the camera registry).
+//   start,end  integer unix seconds, end > start.
+//   Cache-Control: no-store (the current hour's clip list grows).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - missing / non-numeric start|end,
+//       or end <= start                  → 400 invalid_range
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport, or
+//       undecodable upstream body        → 502 upstream_error
+//   A non-2xx upstream status is passed through with an empty JSON array
+//   so the FE degrades to "no preview".
+
+// GET  /api/cameras/{id}/preview-clip/{file}
+// HEAD /api/cameras/{id}/preview-clip/{file}
+//   Thin passthrough for an individual static Frigate preview clip file
+//   (/clips/previews/{cam}/{file}). {file} is the clip name
+//   "{firstTs}-{lastTs}.mp4" (digits, dots, hyphens, .mp4 suffix only),
+//   gated by the traversal whitelist — the SSRF surface for the static
+//   file route.
+//   {id}    camera id (must be present in the camera registry).
+//
+//   Range is forwarded verbatim; the upstream status code, Content-Type,
+//   Content-Length, Content-Range, Accept-Ranges, and ETag pass through;
+//   HEAD skips the body. Content-Disposition is dropped (Frigate sends
+//   attachment; dropping it keeps the clip playing inline in a
+//   <video src>). Cache-Control: no-store (the current hour's clip is
+//   still being written).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - malformed {file} (traversal,
+//       slash, bad bytes, wrong suffix)  → 404 not_found
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport       → 502 upstream_error
+//   Frigate's static endpoint may return 416 / 404 / etc. directly; those
+//   statuses are passed through verbatim.
+
+// GET  /api/cameras/{id}/preview-frame/{file}
+// HEAD /api/cameras/{id}/preview-frame/{file}
+//   Thin passthrough for a single static Frigate preview FRAME image
+//   (/api/preview/{file}/thumbnail.webp → image/webp). Used to scrub the
+//   open (in-progress) current hour by webp frame before that hour's mp4
+//   preview clip has been assembled. {file} is the frame name
+//   "preview_{cam}-{unix.frac}.webp" (must start "preview_", end ".webp",
+//   bytes in [A-Za-z0-9._-] only), gated by the traversal whitelist
+//   (validPreviewFrame) — the SSRF surface for the static frame route. The
+//   camera is NOT a separate upstream path segment; the filename already
+//   encodes it, so {id} is used only for auth / registry consistency with
+//   the other camera-scoped routes.
+//   {id}    camera id (must be present in the camera registry).
+//
+//   Range is forwarded verbatim; the upstream status code, Content-Type,
+//   Content-Length, Content-Range, Accept-Ranges, and ETag pass through;
+//   HEAD skips the body. Content-Disposition is dropped (renders inline).
+//   Cache-Control: public, max-age=31536000, immutable — a given frame
+//   file is content-addressed by its timestamp and never changes (UNLIKE
+//   the no-store clip / list routes).
+//
+//   Errors:
+//     - invalid camera id                → 400 invalid_id
+//     - camera not in registry           → 404 not_found
+//     - malformed {file} (traversal,
+//       slash, bad bytes, wrong
+//       prefix/suffix)                   → 404 not_found
+//     - context deadline                 → 504 upstream_timeout
+//     - other upstream / transport       → 502 upstream_error
+//   Frigate's static endpoint may return 416 / 404 / etc. directly; those
+//   statuses are passed through verbatim.
 ```

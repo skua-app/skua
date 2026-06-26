@@ -1,10 +1,10 @@
 <script lang="ts">
   import { fly, fade } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
+  import { goto } from '$app/navigation'
   import type { EventItem } from '$lib/api'
-  import { eventSnapshotURL, eventClipURL, fetchEventReview } from '$lib/api'
+  import { eventSnapshotURL, eventClipURL } from '$lib/api'
   import { camerasStore } from '$lib/stores/cameras.svelte'
-  import { configStore } from '$lib/stores/config.svelte'
   import { eventKindLabels, ui } from '$lib/i18n/strings'
   import { formatDuration } from '$lib/util/time'
   import Mono from '$lib/components/Mono.svelte'
@@ -36,40 +36,6 @@
   )
   const duration = $derived(formatDuration(event.duration_seconds))
 
-  // Frigate UI deep-link.
-  //
-  // Events now resolve their containing review segment via
-  // GET /api/events/{id}/review and deep-link to the review timeline
-  // (/review?id=<review_id>) when one is found, falling back to
-  // /explore?event_id=<id> when no review contains the event. The
-  // button is usable immediately (Explore link) and upgrades to the
-  // timeline link once the resolver responds, so a slow round-trip
-  // never blocks the user.
-  //
-  // Verified against Frigate 0.17 on 2026-05-20: the UI is a SPA, so
-  // /review?id=<id>, /events/<id>, /explore?event_id=<id>, and
-  // /?camera=<cam> all return 200 unconditionally. 0.17 retired the
-  // dedicated event-detail route used in 0.16; the review timeline
-  // is the closest "scroll-to-this-activity" affordance, with
-  // Explore as the safe fallback when no review covers the event.
-  let reviewId = $state<string | null>(null)
-  $effect(() => {
-    const id = event.id
-    reviewId = null
-    void fetchEventReview(id).then((found) => {
-      // Stale-assign guard: only commit if we're still on the same
-      // event the request was made for.
-      if (id === event.id) reviewId = found
-    })
-  })
-  const deepLink = $derived(
-    configStore.frigateUIURL
-      ? reviewId
-        ? `${configStore.frigateUIURL}/review?id=${encodeURIComponent(reviewId)}`
-        : `${configStore.frigateUIURL}/explore?event_id=${encodeURIComponent(event.id)}&camera=${encodeURIComponent(event.cam_id)}`
-      : ''
-  )
-
   let closeBtn = $state<HTMLButtonElement | null>(null)
   let cardEl = $state<HTMLDivElement | null>(null)
 
@@ -77,7 +43,7 @@
   // failure on devices that can't handle the clip's native codec/resolution
   // (e.g. budget Android SoCs vs. 1440p HEVC). Don't inspect video.error.code:
   // browsers vary, and we treat every failure the same way (show the snapshot
-  // poster + a pointer at Download / Open in Frigate, both already in the
+  // poster + a pointer at Download / See on timeline, both already in the
   // action row). Reset when switching to another event id.
   let clipFailed = $state(false)
   $effect(() => {
@@ -139,6 +105,13 @@
   function onBackdropClick(e: MouseEvent) {
     if (e.target === e.currentTarget) onClose()
   }
+
+  // Deep-link to this camera's recording timeline, centred on the event start.
+  // Computed reactively from the (non-null while mounted) event prop so the
+  // click handler never dereferences a stale/null event.
+  const timelineHref = $derived(
+    `/cam/${encodeURIComponent(event.cam_id)}/timeline?t=${Math.floor(new Date(event.started_at).getTime() / 1000)}`
+  )
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -152,6 +125,22 @@
     bind:this={cardEl}
     transition:fly={{ y: 16, duration: cardDuration, easing: cubicOut }}
   >
+    <div class="em-header">
+      <div class="em-headtext">
+        <div class="em-headtitle">{camName}</div>
+        <Mono size={11} color="var(--text-3)">{event.cam_id}</Mono>
+      </div>
+      <button
+        type="button"
+        class="em-headclose"
+        onclick={onClose}
+        bind:this={closeBtn}
+        aria-label={ui.close}
+      >
+        <Icon name="close" size={18} />
+      </button>
+    </div>
+
     <div class="em-snap">
       {#if event.has_clip && !clipFailed}
         <!-- iOS Safari: `playsinline` keeps playback inside the modal instead
@@ -182,10 +171,6 @@
 
     <div class="em-meta">
       <div class="em-meta-row">
-        <span class="em-cam">{camName}</span>
-        <Mono size={11} color="var(--text-3)">{event.cam_id}</Mono>
-      </div>
-      <div class="em-meta-row">
         <span class="em-kind">{kindLabel} · {event.label}</span>
         <Mono size={11} color="var(--text-2)" weight={500}>
           {event.score !== null ? event.score.toFixed(2) : '—'}
@@ -198,9 +183,6 @@
     </div>
 
     <div class="em-actions">
-      <button type="button" class="em-btn em-btn-secondary" onclick={onClose} bind:this={closeBtn}>
-        {ui.close}
-      </button>
       {#if event.has_clip}
         <a
           class="em-btn em-btn-secondary em-btn-icon"
@@ -212,12 +194,20 @@
           <Icon name="download" size={20} />
         </a>
       {/if}
-      {#if deepLink}
-        <a class="em-btn em-btn-primary" href={deepLink} target="_blank" rel="noopener noreferrer">
-          <Icon name="link" size={16} />
-          {ui.openInFrigate}
-        </a>
-      {/if}
+      <a
+        class="em-btn em-btn-primary"
+        href={timelineHref}
+        onclick={(e) => {
+          // Navigate FIRST; the route change unmounts this modal. Do NOT call
+          // onClose() here — nulling the modal mid-click would tear it down
+          // synchronously while its $derived re-reads event.* (see MomentModal).
+          e.preventDefault()
+          void goto(timelineHref)
+        }}
+      >
+        <Icon name="history" size={16} />
+        {ui.timelineSeeOnTimeline}
+      </a>
     </div>
   </div>
 </div>
@@ -247,12 +237,56 @@
     flex-direction: column;
   }
 
+  .em-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .em-headtext {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .em-headtitle {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .em-headclose {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: inherit;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
+  }
+  .em-headclose:hover {
+    background: var(--border-strong);
+    color: var(--text);
+  }
+
   .em-snap {
+    position: relative;
     aspect-ratio: 16 / 9;
     background: var(--feed);
     overflow: hidden;
-    border-top-left-radius: var(--r);
-    border-top-right-radius: var(--r);
   }
   .em-snap img,
   .em-snap video {
@@ -296,12 +330,6 @@
   }
   .em-meta-row-faint {
     margin-top: 2px;
-  }
-  .em-cam {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-    letter-spacing: -0.1px;
   }
   .em-kind {
     font-size: 13px;

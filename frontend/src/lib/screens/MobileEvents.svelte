@@ -2,7 +2,10 @@
   import type { Camera, EventItem, EventKind, Group } from '$lib/api'
   import { eventSnapshotURL } from '$lib/api'
   import EmptyState from '$lib/components/EmptyState.svelte'
+  import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
+  import OnlineDot from '$lib/components/OnlineDot.svelte'
+  import { kindIcon } from '$lib/icons'
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { ui, eventKindLabels } from '$lib/i18n/strings'
   import { relativeTime, formatDuration } from '$lib/util/time'
@@ -92,11 +95,7 @@
   <div class="chip-groups">
     {#if groups.length > 0}
       <div class="chip-group">
-        <span class="chip-label">
-          <Mono size={10} color="var(--text-3)" letterSpacing={1.5} uppercase
-            >{ui.filterLabelGroup}</Mono
-          >
-        </span>
+        <span class="chip-label">{ui.filterLabelGroup}</span>
         <div class="chips" role="group" aria-label={ui.groupAria}>
           <button
             type="button"
@@ -117,11 +116,7 @@
     {/if}
 
     <div class="chip-group">
-      <span class="chip-label">
-        <Mono size={10} color="var(--text-3)" letterSpacing={1.5} uppercase
-          >{ui.filterLabelCamera}</Mono
-        >
-      </span>
+      <span class="chip-label">{ui.filterLabelCamera}</span>
       <div class="chips" role="group" aria-label={ui.cameraAria}>
         <button
           type="button"
@@ -134,18 +129,16 @@
             type="button"
             class="pill"
             class:active={activeCams.has(cam.id)}
-            onclick={() => onToggleCam(cam.id)}>{cam.name}</button
+            onclick={() => onToggleCam(cam.id)}
+          >
+            <OnlineDot online={cam.online} size={6} />{cam.name}</button
           >
         {/each}
       </div>
     </div>
 
     <div class="chip-group">
-      <span class="chip-label">
-        <Mono size={10} color="var(--text-3)" letterSpacing={1.5} uppercase
-          >{ui.filterLabelType}</Mono
-        >
-      </span>
+      <span class="chip-label">{ui.filterLabelType}</span>
       <div class="chips" role="group" aria-label={ui.kindAria}>
         <button
           type="button"
@@ -156,9 +149,13 @@
         {#each kindOrder as k}
           <button
             type="button"
-            class="pill"
+            class="pill icon-only"
             class:active={activeKinds.has(k)}
-            onclick={() => onToggleKind(k)}>{eventKindLabels[k]}</button
+            aria-label={eventKindLabels[k]}
+            title={eventKindLabels[k]}
+            onclick={() => onToggleKind(k)}
+          >
+            <Icon name={kindIcon[k]} size={15} /></button
           >
         {/each}
       </div>
@@ -175,11 +172,7 @@
   {:else}
     <div class="ev-list">
       {#each eventDays as day (day.key)}
-        <div class="day-div">
-          <Mono size={11} color="var(--text-3)" letterSpacing={1} uppercase
-            >{dayLabel(day.date)}</Mono
-          >
-        </div>
+        <div class="day-div">{dayLabel(day.date)}</div>
         {#each day.items as ev (ev.id)}
           <button type="button" class="ev" onclick={() => onOpen(ev)}>
             <div class="ev-thumb">
@@ -197,7 +190,10 @@
                 <Mono size={13} color="var(--text-2)">{relativeTime(ev.started_at, now)}</Mono>
               </div>
               <div class="l2">
-                <span class="ev-kind">{eventKindLabels[ev.kind] ?? ev.kind}</span>
+                <span class="ev-kindwrap">
+                  <Icon name={kindIcon[ev.kind]} size={14} />
+                  <span class="ev-kind">{eventKindLabels[ev.kind] ?? ev.kind}</span>
+                </span>
                 <Mono size={12} color="var(--accent-ink)" weight={500}
                   >{ev.score !== null
                     ? ev.score.toFixed(2)
@@ -226,7 +222,12 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 12px;
+    /* tune-on-device: a hairline + extra bottom space separate the filter
+       block from the day-grouped list so the TYPE label and the first TODAY
+       divider stop crowding. */
+    padding-bottom: 14px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
   }
   .chip-group {
     display: flex;
@@ -236,9 +237,20 @@
     min-width: 0;
   }
   .chip-label {
-    flex: 0 0 46px;
+    /* 54px (was 46px) so the longest sub-label ("CAMERA") still fits on one
+       line at the raised 11px size. */
+    flex: 0 0 54px;
     display: inline-flex;
     align-items: center;
+    /* Geist eyebrow label — far more legible than mono at small uppercase.
+       tune-on-device: 11px / 600 / 0.06em (mono's 1.5px tracking was too loose
+       for sans). */
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-2);
   }
   /* calm .chips — horizontally-scrolling pill row, scrollbar hidden */
   .chips {
@@ -285,6 +297,13 @@
     border-color: transparent;
     color: var(--accent-ink);
   }
+  /* icon-only TYPE pill: even padding for a roughly square chip, icon centered,
+     no label gap to collapse since the text child is gone. */
+  .pill.icon-only {
+    gap: 0;
+    padding: 6px 7px;
+    justify-content: center;
+  }
 
   .ev-list {
     display: flex;
@@ -294,6 +313,13 @@
   .day-div {
     padding-top: 6px;
     padding-bottom: 4px;
+    /* Geist day divider. tune-on-device: 12px / 600 / 0.05em. */
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-2);
   }
   /* calm .ev */
   .ev {
@@ -358,6 +384,13 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+  }
+  /* tune-on-device: ~14px kind icon + label, small gap. */
+  .ev-kindwrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     min-width: 0;
   }
   .ev-kind {

@@ -37,8 +37,6 @@
   })
 
   const cameras = $derived(camerasStore.cameras)
-  const onlineCount = $derived(cameras.filter((c) => c.online).length)
-  const offlineCount = $derived(cameras.length - onlineCount)
 
   const navItems: { label: string; href: string; icon: IconName }[] = [
     { label: ui.cameras, href: '/', icon: 'cams' },
@@ -59,10 +57,6 @@
   }
   const mobileTitle = $derived(titleByRoute[page.route.id ?? ''] ?? '')
   const showControlBar = $derived(page.route.id === '/')
-  // Settings has its own master/detail breadcrumb beneath the header and no
-  // wall context, so the camera-status caption is noise there. Cameras (/)
-  // and Events (/events) still get it inline next to the title.
-  const showStatus = $derived(page.route.id !== '/settings')
   const activeGroup = $derived(
     prefsStore.gridFilter ? groupsStore.groups.find((g) => g.id === prefsStore.gridFilter) : null
   )
@@ -190,7 +184,7 @@
           size={20}
         />
       </button>
-      {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
+      {#if page.route.id === '/' && glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
           type="button"
           class="dk-iconbtn"
@@ -211,16 +205,8 @@
     <div class="head-row">
       <div class="head-title">
         <span class="title-xl">{mobileTitle}</span>
-        {#if showStatus}
-          <span class="head-caption">
-            <span class="gd" aria-hidden="true"></span>
-            {onlineCount}
-            {ui.online} · {offlineCount}
-            {ui.offline}
-          </span>
-        {/if}
       </div>
-      {#if glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
+      {#if page.route.id === '/' && glanceStore.loaded && (glanceStore.unseenCount > 0 || glanceStore.moments.length > 0)}
         <button
           type="button"
           class="bell"
@@ -238,58 +224,60 @@
 
     {#if showControlBar}
       <div class="control-bar">
-        <div class="grpfilter" bind:this={grpfilterEl}>
-          <button
-            type="button"
-            class="ctrl filter-btn"
-            class:open={filterOpen}
-            aria-label={ui.groupFilterLabel}
-            aria-haspopup="listbox"
-            aria-expanded={filterOpen}
-            onclick={() => (filterOpen = !filterOpen)}
-          >
-            <span class="fb-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
-            <span class="fb-chev" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
-          </button>
-          {#if filterOpen}
-            <ul class="grp-menu" role="listbox">
-              <li>
-                <button
-                  type="button"
-                  class="grp-opt"
-                  class:on={prefsStore.gridFilter === null}
-                  role="option"
-                  aria-selected={prefsStore.gridFilter === null}
-                  onclick={() => selectGroup(null)}
-                >
-                  <span class="check" aria-hidden="true">
-                    {#if prefsStore.gridFilter === null}<Icon name="check" size={15} />{/if}
-                  </span>
-                  <span class="g-name">{ui.filterAllCams}</span>
-                  <Mono size={11} color="inherit" class="g-count">{cameras.length}</Mono>
-                </button>
-              </li>
-              {#each groupsStore.groups as g (g.id)}
+        {#if groupsStore.groups.length > 0}
+          <div class="grpfilter" bind:this={grpfilterEl}>
+            <button
+              type="button"
+              class="ctrl filter-btn"
+              class:open={filterOpen}
+              aria-label={ui.groupFilterLabel}
+              aria-haspopup="listbox"
+              aria-expanded={filterOpen}
+              onclick={() => (filterOpen = !filterOpen)}
+            >
+              <span class="fb-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
+              <span class="fb-chev" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
+            </button>
+            {#if filterOpen}
+              <ul class="grp-menu" role="listbox">
                 <li>
                   <button
                     type="button"
                     class="grp-opt"
-                    class:on={prefsStore.gridFilter === g.id}
+                    class:on={prefsStore.gridFilter === null}
                     role="option"
-                    aria-selected={prefsStore.gridFilter === g.id}
-                    onclick={() => selectGroup(g.id)}
+                    aria-selected={prefsStore.gridFilter === null}
+                    onclick={() => selectGroup(null)}
                   >
                     <span class="check" aria-hidden="true">
-                      {#if prefsStore.gridFilter === g.id}<Icon name="check" size={15} />{/if}
+                      {#if prefsStore.gridFilter === null}<Icon name="check" size={15} />{/if}
                     </span>
-                    <span class="g-name">{g.name}</span>
-                    <Mono size={11} color="inherit" class="g-count">{cameraCount(g.id)}</Mono>
+                    <span class="g-name">{ui.filterAllCams}</span>
+                    <Mono size={11} color="inherit" class="g-count">{cameras.length}</Mono>
                   </button>
                 </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
+                {#each groupsStore.groups as g (g.id)}
+                  <li>
+                    <button
+                      type="button"
+                      class="grp-opt"
+                      class:on={prefsStore.gridFilter === g.id}
+                      role="option"
+                      aria-selected={prefsStore.gridFilter === g.id}
+                      onclick={() => selectGroup(g.id)}
+                    >
+                      <span class="check" aria-hidden="true">
+                        {#if prefsStore.gridFilter === g.id}<Icon name="check" size={15} />{/if}
+                      </span>
+                      <span class="g-name">{g.name}</span>
+                      <Mono size={11} color="inherit" class="g-count">{cameraCount(g.id)}</Mono>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
         <div class="control-right">
           <Segmented
             value={prefsStore.gridMode}
@@ -367,25 +355,6 @@
     letter-spacing: -0.4px;
     color: var(--text);
   }
-  .head-caption {
-    flex: 0 1 auto;
-    min-width: 0;
-    font-size: 13px;
-    color: var(--text-2);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .head-caption .gd {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--online);
-    margin-right: 6px;
-    vertical-align: 1px;
-  }
-
   .control-bar {
     display: flex;
     align-items: center;
@@ -398,6 +367,9 @@
     align-items: center;
     gap: 8px;
     flex: 0 0 auto;
+    /* Pin the mode + density cluster to the right whether or not the group
+       filter is present (it is hidden when there are no groups). */
+    margin-left: auto;
   }
 
   /* shared .ctrl frame for pill controls */

@@ -1,4 +1,4 @@
-import { fetchPrefs, updatePrefs, ACCENT_VALUES } from '$lib/api'
+import { fetchPrefs, updatePrefs } from '$lib/api'
 import type {
   Prefs,
   Accent,
@@ -52,7 +52,9 @@ class PrefsStore {
 
   private applyAccent() {
     if (typeof document !== 'undefined') {
-      document.documentElement.style.setProperty('--accent', ACCENT_VALUES[this.accent])
+      // Set the attribute; CSS [data-accent='…'] resolves it to the active
+      // theme's per-accent value, so light/dark/auto all cascade correctly.
+      document.documentElement.dataset.accent = this.accent
     }
   }
 

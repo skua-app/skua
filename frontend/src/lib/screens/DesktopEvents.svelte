@@ -2,7 +2,9 @@
   import type { Camera, EventItem, EventKind, Group } from '$lib/api'
   import EmptyState from '$lib/components/EmptyState.svelte'
   import EventCardWide from '$lib/components/EventCardWide.svelte'
-  import { camerasStore } from '$lib/stores/cameras.svelte'
+  import Icon from '$lib/components/Icon.svelte'
+  import OnlineDot from '$lib/components/OnlineDot.svelte'
+  import { kindIcon } from '$lib/icons'
   import { ui, eventKindLabels } from '$lib/i18n/strings'
   import type { EventDay } from '$lib/util/time'
 
@@ -68,9 +70,6 @@
     return dateFmt.format(date)
   }
 
-  const cameras = $derived(camerasStore.cameras)
-  const onlineCount = $derived(cameras.filter((c) => c.online).length)
-  const offlineCount = $derived(cameras.length - onlineCount)
   const totalItems = $derived(eventDays.reduce((sum, d) => sum + d.items.length, 0))
 
   let sentinel: HTMLDivElement | null = $state(null)
@@ -94,12 +93,6 @@
   <div class="dk-pagehead">
     <div class="dk-titlewrap">
       <div class="dk-h1">{ui.eventsTitle}</div>
-      <div class="dk-sub">
-        <span class="gd" aria-hidden="true"></span>
-        {onlineCount}
-        {ui.online} · {offlineCount}
-        {ui.offline}
-      </div>
     </div>
   </div>
 
@@ -140,7 +133,9 @@
             type="button"
             class="pill"
             class:active={activeCams.has(cam.id)}
-            onclick={() => onToggleCam(cam.id)}>{cam.name}</button
+            onclick={() => onToggleCam(cam.id)}
+          >
+            <OnlineDot online={cam.online} size={6} />{cam.name}</button
           >
         {/each}
       </div>
@@ -158,9 +153,13 @@
         {#each kindOrder as k}
           <button
             type="button"
-            class="pill"
+            class="pill icon-only"
             class:active={activeKinds.has(k)}
-            onclick={() => onToggleKind(k)}>{eventKindLabels[k]}</button
+            aria-label={eventKindLabels[k]}
+            title={eventKindLabels[k]}
+            onclick={() => onToggleKind(k)}
+          >
+            <Icon name={kindIcon[k]} size={15} /></button
           >
         {/each}
       </div>
@@ -219,27 +218,15 @@
     line-height: 1.05;
     color: var(--text);
   }
-  .dk-sub {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    color: var(--text-2);
-  }
-  .dk-sub .gd {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--online);
-    display: inline-block;
-  }
 
   /* dk-filterbar */
   .dk-filterbar {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 14px;
+    /* tune-on-device: a touch more space so the TYPE row and the first day
+       divider don't crowd now that both are Geist. */
+    margin-bottom: 20px;
   }
   .dk-filterrow {
     display: flex;
@@ -248,12 +235,13 @@
   }
   .dk-filterrow .lbl {
     flex: 0 0 64px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 1.5px;
+    /* Geist eyebrow label. tune-on-device: 11px / 600 / 0.06em. */
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .dk-chips {
     display: flex;
@@ -296,6 +284,13 @@
   .pill:active {
     transform: translateY(1px);
   }
+  /* icon-only TYPE pill: even padding for a roughly square chip, icon centered,
+     no label gap to collapse since the text child is gone. */
+  .pill.icon-only {
+    gap: 0;
+    padding: 6px 7px;
+    justify-content: center;
+  }
 
   /* dk-evgrid card grid */
   .dk-evgrid {
@@ -304,19 +299,20 @@
     grid-template-columns: repeat(auto-fill, minmax(236px, 1fr));
   }
 
-  /* dk-daydiv — full-width mono uppercase divider with line */
+  /* dk-daydiv — full-width Geist uppercase divider with trailing line.
+     tune-on-device: 12px / 600 / 0.05em. */
   .dk-daydiv {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 18px 2px 0;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 1.2px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .dk-daydiv:first-child {
     padding-top: 0;

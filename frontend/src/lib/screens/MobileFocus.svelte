@@ -42,6 +42,7 @@
     onShowTelemetry: () => void
     onBack: () => void
     videoSnippet: Snippet
+    overlaySnippet: Snippet
   }
 
   let {
@@ -70,7 +71,8 @@
     downloadSnapshot,
     onShowTelemetry,
     onBack,
-    videoSnippet
+    videoSnippet,
+    overlaySnippet
   }: Props = $props()
 
   function pad(n: number): string {
@@ -212,6 +214,13 @@
           {/if}
         </div>
       {/if}
+
+      <!-- Stream-status overlay (connecting/buffering pill + error card).
+           Rendered as a sibling of ZoomPane so pinch/wheel zoom never moves
+           or scales it; the elements are absolute inset:0 and fill this
+           relatively-positioned frame. Last child so the error card and its
+           retry button sit above the video and the other overlays. -->
+      {@render overlaySnippet()}
     </div>
 
     <div class="livebar">
@@ -245,6 +254,15 @@
         aria-label={ui.statsLabel}
       >
         <Icon name="activity" size={20} />
+      </button>
+      <button
+        type="button"
+        class="livebtn"
+        onclick={() => camera?.id && goto(`/cam/${camera.id}/timeline`)}
+        disabled={!camera?.id}
+        aria-label={ui.timelineHistory}
+      >
+        <Icon name="history" size={20} />
       </button>
       {#if pipSupported}
         <button
@@ -554,6 +572,11 @@
     overflow-x: auto;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    /* overflow-x: auto also clips the cross axis, cutting the 2px accent ring
+       off the top of the active thumb (.mini.on .cam). Pad the top to match
+       the bottom (parity with the desktop .dk-filmstrip) so the full ring
+       shows. */
+    padding-top: 4px;
     padding-bottom: 4px;
     margin: 0 -18px;
     padding-left: 18px;

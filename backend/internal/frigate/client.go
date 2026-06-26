@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 )
 
 type Client struct {
@@ -122,4 +123,194 @@ func (c *Client) GetConfig(ctx context.Context) (*ConfigResponse, error) {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
 	return &cfg, nil
+}
+
+// OpenVOD issues a Frigate recording VOD request for the supplied camera
+// and [start, end] window, returning the raw upstream *http.Response so
+// the caller can stream the body through. start and end are integer
+// unix-seconds STRINGS passed verbatim (the handler validates them as
+// digit-only before calling); rest is the already-validated relative
+// playlist or segment filename (master.m3u8, index-*.m3u8, init-*.mp4,
+// or seg-*.m4s). method is the caller's HTTP method (GET or HEAD).
+// When rangeHeader is non-empty it is forwarded as the upstream Range
+// header so byte-range playback flows end-to-end. The caller owns the
+// returned response body and is responsible for closing it. Any status
+// code is returned to the caller; non-2xx is not treated as an error
+// here (same contract as OpenPreview).
+func (c *Client) OpenVOD(ctx context.Context, method, cam, start, end, rest, rangeHeader string) (*http.Response, error) {
+	reqURL := c.baseURL + "/vod/" + url.PathEscape(cam) +
+		"/start/" + start +
+		"/end/" + end +
+		"/" + rest
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate vod: %w", err)
+	}
+	return resp, nil
+}
+
+// GetPreviewFrames fetches the list of preview-frame filenames Frigate
+// has rendered for a camera over the [start, end] bucket from its
+// /api/preview/{cam}/start/{start}/end/{end}/frames endpoint (note the
+// /api/preview/ prefix — distinct from the preview.mp4 path). start and
+// end are integer unix-seconds STRINGS passed verbatim (the handler
+// validates them as digit-only before calling). Returns the raw upstream
+// *http.Response so the BFF handler can read and reduce the body; the
+// caller owns the body and is responsible for closing it. Any status
+// code is returned to the caller; non-2xx is not treated as an error
+// here (same contract as OpenVOD / GetRecordingsSummary).
+func (c *Client) GetPreviewFrames(ctx context.Context, cam, start, end string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/preview/" + url.PathEscape(cam) +
+		"/start/" + start +
+		"/end/" + end +
+		"/frames"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview frames: %w", err)
+	}
+	return resp, nil
+}
+
+// ListPreviewClips fetches the list of preview CLIPS Frigate has for a
+// camera over the [start, end] window from its
+// /api/preview/{cam}/start/{start}/end/{end} endpoint (note: NO trailing
+// /frames — this is the clips list, distinct from GetPreviewFrames). It
+// returns a JSON array of {camera, src, type, start, end} entries — the
+// same source Frigate's own History timeline scrubs against. start and
+// end are integer unix-seconds STRINGS passed verbatim (the handler
+// validates them as digit-only before calling). Returns the raw upstream
+// *http.Response so the BFF handler can read and reduce the body; the
+// caller owns the body and is responsible for closing it. Any status code
+// is returned to the caller; non-2xx is not treated as an error here
+// (same contract as OpenVOD / GetPreviewFrames).
+func (c *Client) ListPreviewClips(ctx context.Context, cam, start, end string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/preview/" + url.PathEscape(cam) +
+		"/start/" + start +
+		"/end/" + end
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview clips: %w", err)
+	}
+	return resp, nil
+}
+
+// OpenPreviewClip issues a request for an individual static preview clip
+// file from Frigate's /clips/previews/{cam}/{file} path (a static file
+// path, NOT under /api — built like OpenVOD's /vod/ prefix). file is the
+// already-validated clip filename ("{firstTs}-{lastTs}.mp4"); method is
+// the caller's HTTP method (GET or HEAD). When rangeHeader is non-empty
+// it is forwarded as the upstream Range header so byte-range playback
+// flows end-to-end. The caller owns the returned response body and is
+// responsible for closing it. Any status code is returned to the caller;
+// non-2xx is not treated as an error here (same contract as OpenVOD).
+func (c *Client) OpenPreviewClip(ctx context.Context, method, cam, file, rangeHeader string) (*http.Response, error) {
+	reqURL := c.baseURL + "/clips/previews/" + url.PathEscape(cam) + "/" + file
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview clip: %w", err)
+	}
+	return resp, nil
+}
+
+// OpenPreviewFrame issues a request for a single static preview FRAME
+// image from Frigate's /api/preview/{file}/thumbnail.webp path. Unlike the
+// preview-clip / frames-list paths, the camera is NOT a separate path
+// segment — the frame filename itself already encodes it (Frigate names
+// these "preview_{cam}-{unix.frac}.webp", e.g.
+// preview_cam2-1781852889.819418.webp), so only the file is interpolated.
+// file is the already-validated frame filename; method is the caller's
+// HTTP method (GET or HEAD). When rangeHeader is non-empty it is forwarded
+// as the upstream Range header (defensive — these images are small). The
+// caller owns the returned response body and is responsible for closing it.
+// Any status code is returned to the caller; non-2xx is not treated as an
+// error here (same contract as OpenPreviewClip).
+func (c *Client) OpenPreviewFrame(ctx context.Context, method, file, rangeHeader string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/preview/" + url.PathEscape(file) + "/thumbnail.webp"
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	if rangeHeader != "" {
+		req.Header.Set("Range", rangeHeader)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate preview frame: %w", err)
+	}
+	return resp, nil
+}
+
+// GetRecordingsSummary fetches the per-day recordings summary for a
+// camera from Frigate's /api/{cam}/recordings/summary endpoint. The
+// optional timezone query parameter is forwarded only when non-empty
+// (Frigate uses it to bucket entries by the caller's local day).
+// Returns the raw upstream *http.Response so the BFF handler can copy
+// the Content-Type and stream the JSON body verbatim — the response
+// shape is owned upstream and not yet typed here. Any status code is
+// returned to the caller; non-2xx is not an error.
+func (c *Client) GetRecordingsSummary(ctx context.Context, cam, timezone string) (*http.Response, error) {
+	reqURL := c.baseURL + "/api/" + url.PathEscape(cam) + "/recordings/summary"
+	if timezone != "" {
+		q := url.Values{}
+		q.Set("timezone", timezone)
+		reqURL = reqURL + "?" + q.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate recordings summary: %w", err)
+	}
+	return resp, nil
+}
+
+// GetRecordings fetches the per-segment recordings list for a camera over
+// the [after, before] window from Frigate's /api/{cam}/recordings endpoint.
+// Frigate returns the raw ~10s recording segments (each with start_time /
+// end_time and bookkeeping fields) that the BFF coalesces into coverage
+// ranges for the scrubber's recorded/gap lane. after and before are integer
+// unix-seconds STRINGS passed verbatim as query params (the handler validates
+// them as digit-only before calling); both are always set. Returns the raw
+// upstream *http.Response so the BFF handler can read and reduce the body;
+// the caller owns the body and is responsible for closing it. Any status code
+// is returned to the caller; non-2xx is not treated as an error here (same
+// contract as GetRecordingsSummary).
+func (c *Client) GetRecordings(ctx context.Context, cam, after, before string) (*http.Response, error) {
+	q := url.Values{}
+	q.Set("after", after)
+	q.Set("before", before)
+	reqURL := c.baseURL + "/api/" + url.PathEscape(cam) + "/recordings?" + q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate recordings: %w", err)
+	}
+	return resp, nil
 }

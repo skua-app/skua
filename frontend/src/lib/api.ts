@@ -38,13 +38,6 @@ export type Prefs = {
   grid_fps: GridFps
 }
 
-export const ACCENT_VALUES: Record<Accent, string> = {
-  cyan: 'oklch(0.78 0.10 200)',
-  sage: 'oklch(0.78 0.07 150)',
-  amber: 'oklch(0.78 0.10 75)',
-  violet: 'oklch(0.75 0.10 290)'
-}
-
 // EventKind mirrors backend/internal/events.Kind exactly. 'motion' is not
 // a valid kind — Frigate's `motion` events collapse into `other` on the BFF.
 export type EventKind = 'person' | 'vehicle' | 'animal' | 'other'
@@ -186,24 +179,6 @@ export function eventSnapshotURL(id: string): string {
 export function eventClipURL(id: string, download = false): string {
   const base = `/api/events/${encodeURIComponent(id)}/clip.mp4`
   return download ? `${base}?download=1` : base
-}
-
-// fetchEventReview asks the BFF to resolve the Frigate review segment
-// that contains the supplied tracked-object event id. On 200 it
-// returns the review id string; on 404 or any error (network, server,
-// timeout) it resolves to null so callers can degrade gracefully —
-// the event modal falls back to the Explore deep-link when no review
-// is found. The Frigate review URL is constructed in the caller from
-// configStore.frigateUIURL, which already gates the deep-link button.
-export async function fetchEventReview(eventId: string): Promise<string | null> {
-  try {
-    const res = await apiFetch<{ review_id: string }>(
-      `/api/events/${encodeURIComponent(eventId)}/review`
-    )
-    return res.review_id || null
-  } catch {
-    return null
-  }
 }
 
 // momentPreviewURL returns the BFF route that resolves a moment id
@@ -732,4 +707,228 @@ export async function saveRuntimeConfig(values: RuntimeConfigURLs): Promise<Runt
 export async function restartRuntimeConfig(): Promise<void> {
   const res = await fetch('/api/runtime-config/restart', { method: 'POST' })
   if (!res.ok) throw await parseRuntimeConfigError(res)
+}
+
+// Recording timeline (Phase 2a). The recordings-summary shape is owned by
+// Frigate upstream and passed through verbatim by the BFF — no reshape, no
+// re-typing on the server. These types mirror the captured payload so the
+// frontend can consume it directly. `hour` is a two-digit local-hour
+// string "00".."23"; `duration` is seconds of recording in that wall-clock
+// hour, 0..3600. Frigate returns days newest-first and hours within a day
+// descending — consumers must not assume any order.
+export type RecordingHour = {
+  hour: string
+  events: number
+  motion: number
+  objects: number
+  duration: number
+}
+
+export type RecordingDay = {
+  day: string
+  events: number
+  hours: RecordingHour[]
+}
+
+export type RecordingsSummary = RecordingDay[]
+
+export async function fetchRecordingsSummary(
+  camId: string,
+  timezone?: string
+): Promise<RecordingsSummary> {
+  const params = new URLSearchParams()
+  if (timezone) params.set('timezone', timezone)
+  const qs = params.toString()
+  return apiFetch<RecordingsSummary>(
+    `/api/cameras/${encodeURIComponent(camId)}/recordings-summary${qs ? `?${qs}` : ''}`
+  )
+}
+
+// timelineMasterURL is the only URL the player needs to start playback for
+// a [start,end) recording window. The child index/init/segment URIs inside
+// Frigate's HLS playlists are relative, so they resolve back through this
+// same /vod/{start}/{end}/ prefix — the start/end values survive in the
+// path without any cookie or query-string state.
+export function timelineMasterURL(camId: string, start: number, end: number): string {
+  // The VOD route slots are integer unix seconds (the BFF rejects a fractional
+  // path as invalid_range). Floor here so no caller can structurally emit a
+  // fractional slot — belt-and-suspenders over the caller's own integer math.
+  const s = Math.floor(start)
+  const e = Math.floor(end)
+  return `/api/cameras/${encodeURIComponent(camId)}/vod/${s}/${e}/master.m3u8`
+}
+
+// timelineVideoOnlyURL is the audio-less companion to timelineMasterURL for a
+// [start,end) window: it points at Frigate's index-v1.m3u8 rendition (the
+// video-only variant) instead of master.m3u8. Same /vod/{start}/{end}/ prefix,
+// so the playlist's child init/segment URIs (relative) resolve identically.
+// The player falls back to this when a window's combined video+audio segment
+// 503s — Frigate's nginx-vod refuses to splice adjacent recording segments
+// whose audio-track counts differ (a camera's RTSP audio flapping), but the
+// video-only rendition still serves. Floors start/end like timelineMasterURL
+// so no caller can emit a fractional VOD slot.
+export function timelineVideoOnlyURL(camId: string, start: number, end: number): string {
+  const s = Math.floor(start)
+  const e = Math.floor(end)
+  return `/api/cameras/${encodeURIComponent(camId)}/vod/${s}/${e}/index-v1.m3u8`
+}
+
+// fetchRecordingCodecs reads the CODECS attribute of a recording window's HLS
+// master playlist so the FE can decide, before attempting full-res playback,
+// whether this device can decode the camera's recording codec (e.g. H.265 on
+// a phone with no hardware HEVC decoder). Frigate's master.m3u8 carries it on
+// the first #EXT-X-STREAM-INF line, e.g. CODECS="hev1.1.6.L150.00,mp4a.40.2".
+// Plain text fetch (the master is m3u8, not JSON, so apiFetch does not apply);
+// returns that CODECS string, or null when the fetch is non-2xx, fails, times
+// out, or the body carries no CODECS — callers degrade to preview-only. Never
+// throws.
+export async function fetchRecordingCodecs(
+  camId: string,
+  start: number,
+  end: number
+): Promise<string | null> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(timelineMasterURL(camId, start, end), { signal: ctrl.signal })
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) return null
+  let text: string
+  try {
+    text = await res.text()
+  } catch {
+    return null
+  }
+  const line = text.split('\n').find((l) => l.startsWith('#EXT-X-STREAM-INF'))
+  if (!line) return null
+  const m = line.match(/CODECS="([^"]*)"/)
+  return m && m[1] ? m[1] : null
+}
+
+// PreviewClip is one entry of the preview-clips list: a real Frigate
+// preview clip's wall-clock span plus its BFF /preview-clip src URL. This
+// is the same clip model Frigate's own History timeline scrubs against —
+// the scrubber plays the clip whose [start,end] contains the playhead and
+// maps the position within that span onto the clip's currentTime.
+export type PreviewClip = {
+  start: number
+  end: number
+  src: string
+}
+
+// fetchPreviewClips returns the preview clips covering [start,end) for a
+// camera, each with a BFF /preview-clip src (the client never reaches
+// Frigate's /clips/previews path directly). On an empty window the array
+// is empty; callers degrade to a blank preview.
+export async function fetchPreviewClips(
+  camId: string,
+  start: number,
+  end: number
+): Promise<PreviewClip[]> {
+  return apiFetch<PreviewClip[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/preview-clips?start=${start}&end=${end}`
+  )
+}
+
+// PreviewFrame is one entry of the preview-frame list: a single Frigate
+// preview frame's wall-clock timestamp (unix seconds) plus its BFF
+// /preview-frame src URL. The open current hour has no assembled mp4
+// preview clip yet, so the scrubber seeks it frame-by-frame — picking the
+// frame whose ts is nearest the playhead and swapping the <img> src.
+export type PreviewFrame = {
+  ts: number
+  src: string
+}
+
+// fetchPreviewFrameList returns the chronological preview frames covering
+// [start,end) for a camera, each with a BFF /preview-frame src (the client
+// never reaches Frigate's /api/preview path directly). Used to scrub the
+// open current hour before its mp4 preview clip exists. On an empty window
+// the array is empty; callers degrade to a blank frame.
+export async function fetchPreviewFrameList(
+  camId: string,
+  start: number,
+  end: number
+): Promise<PreviewFrame[]> {
+  return apiFetch<PreviewFrame[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/preview-frame-list?start=${start}&end=${end}`
+  )
+}
+
+// ReviewSegment is one Frigate review segment (grouped alert / detection
+// activity) reduced to what the scrubber's activity lane needs: its severity
+// and wall-clock span. end is null while the segment is still active — the
+// lane draws an active segment out to the live edge.
+export type ReviewSegment = {
+  id: string
+  severity: 'alert' | 'detection'
+  start: number
+  end: number | null
+}
+
+// fetchReview returns the review segments overlapping [start,end) for a
+// camera (the BFF widens the upstream lower bound by a fixed lookback to
+// catch a segment that started just before the window). On an empty window
+// the array is empty; callers degrade to a blank activity lane.
+export async function fetchReview(
+  camId: string,
+  start: number,
+  end: number
+): Promise<ReviewSegment[]> {
+  return apiFetch<ReviewSegment[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/review?start=${start}&end=${end}`
+  )
+}
+
+// CoverageSegment is one coalesced range of recorded footage: the BFF merges
+// Frigate's raw ~10s recording segments into a small set of [start,end) spans.
+// The scrubber renders these as a neutral recorded fill; gaps are the spans
+// BETWEEN entries, left as empty track.
+export type CoverageSegment = {
+  start: number
+  end: number
+}
+
+// fetchCoverage returns the recorded-coverage ranges overlapping [start,end)
+// for a camera. Recorded ranges are the entries; gaps are the spans between
+// them. On an empty window the array is empty and the coverage layer is blank;
+// on error callers degrade to a blank layer.
+export async function fetchCoverage(
+  camId: string,
+  start: number,
+  end: number
+): Promise<CoverageSegment[]> {
+  return apiFetch<CoverageSegment[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/recordings?start=${start}&end=${end}`
+  )
+}
+
+// AudioMarker is one Frigate audio-detection event reduced to what the
+// scrubber's audio lane needs: its sound class and wall-clock span. end is null
+// while the event is still active — the lane draws an active marker out to the
+// live edge.
+export type AudioMarker = {
+  id: string
+  label: string
+  start: number
+  end: number | null
+}
+
+// fetchAudioEvents returns the audio-detection events overlapping [start,end)
+// for a camera (the BFF widens the upstream lower bound by a fixed lookback to
+// catch an event that started just before the window). On an empty window the
+// array is empty and the lane hides; on error callers degrade to a blank lane.
+export async function fetchAudioEvents(
+  camId: string,
+  start: number,
+  end: number
+): Promise<AudioMarker[]> {
+  return apiFetch<AudioMarker[]>(
+    `/api/cameras/${encodeURIComponent(camId)}/audio-events?start=${start}&end=${end}`
+  )
 }

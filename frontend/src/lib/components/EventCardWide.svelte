@@ -4,6 +4,7 @@
   import { camerasStore } from '$lib/stores/cameras.svelte'
   import { eventKindLabels } from '$lib/i18n/strings'
   import { relativeTime } from '$lib/util/time'
+  import { kindIcon } from '$lib/icons'
   import Icon from './Icon.svelte'
 
   type Props = {
@@ -38,7 +39,7 @@
       width="320"
       height="180"
     />
-    <span class="ktag">{kindLabel}</span>
+    <span class="ktag"><Icon name={kindIcon[event.kind]} size={14} /></span>
     {#if event.score !== null}
       <span class="sc">{event.score.toFixed(2)}</span>
     {/if}
@@ -87,20 +88,19 @@
     object-fit: cover;
     display: block;
   }
+  /* Icon-only kind chip; the readable kind word stays in .rm below.
+     tune-on-device: 14px icon, 5px padding. */
   .ktag {
     position: absolute;
     left: 11px;
     top: 11px;
-    padding: 4px 9px;
+    display: grid;
+    place-items: center;
+    padding: 5px;
     border-radius: 7px;
     background: rgba(8, 10, 12, 0.55);
     border: 1px solid rgba(255, 255, 255, 0.18);
     color: #fff;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
   }

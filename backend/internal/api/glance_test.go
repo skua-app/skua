@@ -350,9 +350,10 @@ func TestHandleGlance_HoursFiltersOlderSegments(t *testing.T) {
 }
 
 func TestHandleGlance_MaxTruncatesAndForwardsLimit(t *testing.T) {
-	// 25 segments at distinct times. With ?max=10 the BFF forwards
-	// limit=10 to Frigate AND defensively truncates if upstream returns
-	// more. Newest-first order is preserved.
+	// 25 segments at distinct times. With ?max=10 the BFF over-fetches
+	// limit = 10*glanceEmptyOverfetchFactor from Frigate (so the empty
+	// filter can still fill 10 real moments) AND truncates the surviving
+	// moments to 10. Newest-first order is preserved.
 	now := time.Now()
 	var items []events.FrigateReviewItem
 	for i := 0; i < 25; i++ {
@@ -372,8 +373,9 @@ func TestHandleGlance_MaxTruncatesAndForwardsLimit(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
 	}
-	if gotQuery.Get("limit") != "10" {
-		t.Errorf("upstream limit = %q, want 10", gotQuery.Get("limit"))
+	wantLimit := strconv.Itoa(10 * glanceEmptyOverfetchFactor)
+	if gotQuery.Get("limit") != wantLimit {
+		t.Errorf("upstream limit = %q, want %s (over-fetch)", gotQuery.Get("limit"), wantLimit)
 	}
 	var body glanceResponse
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
@@ -406,6 +408,101 @@ func TestHandleGlance_MaxClampedToCeiling(t *testing.T) {
 	if gotQuery.Get("limit") != strconv.Itoa(glanceMaxMomentsCeil) {
 		t.Errorf("upstream limit = %q, want %d (ceiling clamp)",
 			gotQuery.Get("limit"), glanceMaxMomentsCeil)
+	}
+}
+
+// emptySegment builds a review item with no tracked-object detections —
+// the motion-only "0 events" case the glance handler now drops. Objects /
+// zones are left empty too so it carries no kinds; the empty-moment
+// predicate keys solely on len(DetectionIDs).
+func emptySegment(id, cam string, start float64, end *float64, severity string) events.FrigateReviewItem {
+	return events.FrigateReviewItem{
+		ID:        id,
+		Camera:    cam,
+		StartTime: start,
+		EndTime:   end,
+		Severity:  severity,
+	}
+}
+
+func TestHandleGlance_OmitsEmptyMoments(t *testing.T) {
+	// One real moment with detections, one empty motion-only segment. The
+	// empty one is dropped from the response AND from unseen_count.
+	now := time.Now()
+	tReal := float64(now.Add(-30 * time.Minute).Unix())
+	tEmpty := float64(now.Add(-20 * time.Minute).Unix())
+	items := []events.FrigateReviewItem{
+		segment("rev-real", "camA", tReal, ptrF(tReal+10), "alert", "person"),
+		emptySegment("rev-empty", "camB", tEmpty, ptrF(tEmpty+10), "detection"),
+	}
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, nil, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body glanceResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Moments) != 1 {
+		t.Fatalf("moments len = %d, want 1 (empty motion-only moment dropped)", len(body.Moments))
+	}
+	if body.Moments[0].ID != "rev-real" {
+		t.Errorf("moments[0].id = %q, want rev-real", body.Moments[0].ID)
+	}
+	if body.UnseenCount != 1 {
+		t.Errorf("unseen_count = %d, want 1 (empty moment not counted)", body.UnseenCount)
+	}
+}
+
+func TestHandleGlance_FillsToMaxRealMomentsWithEmptiesInterleaved(t *testing.T) {
+	// Empties interleaved with real moments. With ?max=5 the result still
+	// fills 5 real moments (the over-fetch + filter), stays newest-first,
+	// and unseen_count equals the unseen moments actually returned.
+	now := time.Now()
+	var items []events.FrigateReviewItem
+	for i := 0; i < 20; i++ {
+		started := float64(now.Add(-time.Duration(i*30) * time.Second).Unix())
+		id := fmt.Sprintf("rev-%02d", i)
+		cam := fmt.Sprintf("cam%02d", i)
+		if i%2 == 0 {
+			// Even indices are real moments (newest is i=0).
+			items = append(items, segment(id, cam, started, ptrF(started+5), "detection", "person"))
+		} else {
+			items = append(items, emptySegment(id, cam, started, ptrF(started+5), "detection"))
+		}
+	}
+	router, _, _ := glanceRouterWith(t, frigateReviewHandler(t, items, nil, nil, nil))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/glance?max=5", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	var body glanceResponse
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Moments) != 5 {
+		t.Fatalf("moments len = %d, want 5 real moments", len(body.Moments))
+	}
+	// Newest-first, real ids only: rev-00, rev-02, rev-04, rev-06, rev-08.
+	wantIDs := []string{"rev-00", "rev-02", "rev-04", "rev-06", "rev-08"}
+	for i, want := range wantIDs {
+		if body.Moments[i].ID != want {
+			t.Errorf("moments[%d].id = %q, want %q (newest-first, empties skipped)", i, body.Moments[i].ID, want)
+		}
+		if len(body.Moments[i].DetectionIDs) == 0 {
+			t.Errorf("moments[%d] has no detections; empty moment leaked through", i)
+		}
+	}
+	// All five are unseen (nothing pre-seeded), so unseen_count == 5.
+	if body.UnseenCount != 5 {
+		t.Errorf("unseen_count = %d, want 5 (count of unseen returned)", body.UnseenCount)
 	}
 }
 

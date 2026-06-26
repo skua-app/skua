@@ -117,65 +117,67 @@
         </div>
       </div>
       <div class="dk-controls">
-        <div class="dk-drop">
-          <button
-            type="button"
-            class="dk-dropbtn"
-            class:open={filterOpen}
-            aria-label={ui.groupFilterLabel}
-            aria-haspopup="listbox"
-            aria-expanded={filterOpen}
-            onclick={() => (filterOpen = !filterOpen)}
-          >
-            <span class="db-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
-            <span class="ck" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
-          </button>
-          {#if filterOpen}
+        {#if groupsStore.groups.length > 0}
+          <div class="dk-drop">
             <button
               type="button"
-              class="dk-catch"
-              tabindex={-1}
-              aria-label={ui.close}
-              onclick={() => (filterOpen = false)}
-            ></button>
-            <ul class="dk-menu" role="listbox">
-              <li>
-                <button
-                  type="button"
-                  class="dk-opt"
-                  class:on={prefsStore.gridFilter === null}
-                  role="option"
-                  aria-selected={prefsStore.gridFilter === null}
-                  onclick={() => selectGroup(null)}
-                >
-                  <span class="ck" aria-hidden="true">
-                    {#if prefsStore.gridFilter === null}<Icon name="check" size={15} />{/if}
-                  </span>
-                  <span class="nm">{ui.filterAllCams}</span>
-                  <Mono size={11} color="inherit" class="ct">{allCameras.length}</Mono>
-                </button>
-              </li>
-              {#each groupsStore.groups as g (g.id)}
+              class="dk-dropbtn"
+              class:open={filterOpen}
+              aria-label={ui.groupFilterLabel}
+              aria-haspopup="listbox"
+              aria-expanded={filterOpen}
+              onclick={() => (filterOpen = !filterOpen)}
+            >
+              <span class="db-label">{activeGroup ? activeGroup.name : ui.filterAllCams}</span>
+              <span class="ck" aria-hidden="true"><Icon name="chevDown" size={16} /></span>
+            </button>
+            {#if filterOpen}
+              <button
+                type="button"
+                class="dk-catch"
+                tabindex={-1}
+                aria-label={ui.close}
+                onclick={() => (filterOpen = false)}
+              ></button>
+              <ul class="dk-menu" role="listbox">
                 <li>
                   <button
                     type="button"
                     class="dk-opt"
-                    class:on={prefsStore.gridFilter === g.id}
+                    class:on={prefsStore.gridFilter === null}
                     role="option"
-                    aria-selected={prefsStore.gridFilter === g.id}
-                    onclick={() => selectGroup(g.id)}
+                    aria-selected={prefsStore.gridFilter === null}
+                    onclick={() => selectGroup(null)}
                   >
                     <span class="ck" aria-hidden="true">
-                      {#if prefsStore.gridFilter === g.id}<Icon name="check" size={15} />{/if}
+                      {#if prefsStore.gridFilter === null}<Icon name="check" size={15} />{/if}
                     </span>
-                    <span class="nm">{g.name}</span>
-                    <Mono size={11} color="inherit" class="ct">{cameraCount(g.id)}</Mono>
+                    <span class="nm">{ui.filterAllCams}</span>
+                    <Mono size={11} color="inherit" class="ct">{allCameras.length}</Mono>
                   </button>
                 </li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
+                {#each groupsStore.groups as g (g.id)}
+                  <li>
+                    <button
+                      type="button"
+                      class="dk-opt"
+                      class:on={prefsStore.gridFilter === g.id}
+                      role="option"
+                      aria-selected={prefsStore.gridFilter === g.id}
+                      onclick={() => selectGroup(g.id)}
+                    >
+                      <span class="ck" aria-hidden="true">
+                        {#if prefsStore.gridFilter === g.id}<Icon name="check" size={15} />{/if}
+                      </span>
+                      <span class="nm">{g.name}</span>
+                      <Mono size={11} color="inherit" class="ct">{cameraCount(g.id)}</Mono>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </div>
+        {/if}
         <Segmented
           value={prefsStore.gridMode}
           options={gridModeOptions}
@@ -409,18 +411,20 @@
     gap: 14px;
     grid-template-columns: repeat(auto-fill, minmax(var(--tile, 280px), 1fr));
   }
+  /* Geist room/group section label with trailing line. tune-on-device:
+     11px / 600 / 0.06em, --text-2 (bumped from --text-3, which read too faint). */
   .dg-roomlabel {
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 14px 2px 2px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: inherit;
     font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 1.4px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--text-3);
+    color: var(--text-2);
   }
   .dg-roomlabel:first-child {
     padding-top: 0;

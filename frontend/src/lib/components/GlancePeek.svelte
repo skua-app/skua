@@ -2,6 +2,7 @@
   import { fade } from 'svelte/transition'
   import { cubicOut } from 'svelte/easing'
   import { goto } from '$app/navigation'
+  import { page } from '$app/state'
   import type { GlanceMoment } from '$lib/api'
   import { eventThumbnailURL } from '$lib/api'
   import Icon from '$lib/components/Icon.svelte'
@@ -60,6 +61,26 @@
   // the user can review the cluster and switch between detections inside it.
   let modalMoment = $state<GlanceMoment | null>(null)
 
+  // GlancePeek lives in the persistent root layout, so navigating away (e.g.
+  // a moment's "See on timeline" → /cam/[id]/timeline) does NOT unmount it.
+  // Tear down the peek surface and any open moment modal on a route change so
+  // they don't strand over the new screen. The modal/peek are closed AFTER
+  // navigation has committed (a fresh reactive flush), not synchronously
+  // inside the dying modal's click handler, which avoids the null-prop
+  // deref race. Guard the initial mount by seeding lastUrl from the current
+  // URL so the first run is a no-op. Track pathname AND search so a
+  // same-camera deep-link that only changes the query (a moment's "See on
+  // timeline": /cam/x/timeline → /cam/x/timeline?t=NNN) still counts as a
+  // navigation and tears the peek/modal down.
+  let lastUrl = `${page.url.pathname}${page.url.search}`
+  $effect(() => {
+    const url = `${page.url.pathname}${page.url.search}`
+    if (url === lastUrl) return
+    lastUrl = url
+    if (modalMoment) modalMoment = null
+    if (glanceStore.peekOpen) glanceStore.closePeek()
+  })
+
   // One-minute tick so "5 min ago" doesn't drift while the surface is open.
   let now = $state(new Date())
   $effect(() => {
@@ -76,11 +97,6 @@
   function kindsLine(moment: GlanceMoment): string {
     const parts = moment.kinds.map((k) => eventKindLabels[k] ?? k)
     return parts.length > 0 ? parts.join(' · ') : ui.eventsEmpty
-  }
-  function countChipText(moment: GlanceMoment): string {
-    const n = moment.detection_ids.length
-    const tpl = n === 1 ? ui.glanceEventOne : ui.glanceEventMany
-    return tpl.replace('{n}', String(n))
   }
   function newestTime(moment: GlanceMoment): string {
     const newest = moment.ended_at ?? moment.started_at
@@ -164,6 +180,23 @@
   let dragStartY = 0
   let dragStartT = 0
   let curT = 0
+  // Flick bookkeeping (non-reactive): the last translate sample, the time it
+  // was taken (performance.now()), and the current downward velocity in px/ms
+  // (positive = moving down). Reset at every drag start so a stale sample from
+  // a previous gesture can't trigger an accidental dismiss.
+  let lastSampleT = 0
+  let lastSampleTime = 0
+  let flickVelocity = 0
+  // Downward flick velocity above which a release dismisses the sheet even if
+  // it never travelled past the dismiss threshold. ~0.6 px/ms ≈ 600 px/s.
+  // Tune on device.
+  const FLICK_CLOSE_VELOCITY = 0.6
+
+  function resetFlickTracking() {
+    lastSampleT = curT
+    lastSampleTime = performance.now()
+    flickVelocity = 0
+  }
 
   function computeDetents() {
     const screenH = window.visualViewport?.height ?? window.innerHeight
@@ -267,10 +300,20 @@
     curT = Math.max(0, Math.min(max, dragStartT + dy))
     sheetEl.style.transform = `translateY(${curT}px)`
     setScrimForTranslate(curT)
+    // Sample velocity from the delta since the last move (positive = downward)
+    // so a fast flick can dismiss even when it doesn't travel far.
+    const nowMs = performance.now()
+    const dt = nowMs - lastSampleTime
+    if (dt > 0) {
+      flickVelocity = (curT - lastSampleT) / dt
+      lastSampleT = curT
+      lastSampleTime = nowMs
+    }
   }
   function sheetDragRelease() {
     const peekT = detents[detents.length - 1]!
-    if (curT > peekT + 70) {
+    // Dismiss on a far drag OR a fast downward flick.
+    if (curT > peekT + 70 || flickVelocity > FLICK_CLOSE_VELOCITY) {
       glanceStore.closePeek()
       return
     }
@@ -300,6 +343,7 @@
     dragStartY = e.clientY
     dragStartT = detents[detentIdx]!
     curT = dragStartT
+    resetFlickTracking()
     sheetEl.style.transition = 'none'
     e.preventDefault()
   }
@@ -370,6 +414,7 @@
         touchEngaged = true
         dragStartT = detents[detentIdx]!
         curT = dragStartT
+        resetFlickTracking()
         sheetEl.style.transition = 'none'
         e.preventDefault()
         sheetDragMove(dy)
@@ -470,10 +515,7 @@
             <span class="m-name">{camName(m.cam_id)}</span>
             <span class="m-ago">{newestTime(m)}</span>
           </div>
-          <div class="m-l2">
-            <span class="m-count">{countChipText(m)}</span>
-            <span class="m-sep"> · {kindsLine(m)}</span>
-          </div>
+          <div class="m-l2">{kindsLine(m)}</div>
         </div>
         <span class="m-chev" aria-hidden="true"><Icon name="chevRight" size={20} /></span>
       </button>
@@ -995,10 +1037,6 @@
   }
   .dk-side-list .m-l2 {
     font-size: 12.5px;
-  }
-  .m-count {
-    color: var(--text-2);
-    font-weight: 500;
   }
   .m-chev {
     flex: 0 0 auto;
