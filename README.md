@@ -99,7 +99,6 @@ Mobile PWA, installed to the iOS home screen.
 <img width="800" alt="skua_desktop_grid" src="https://github.com/user-attachments/assets/d394f798-2809-41cb-8c19-30fd1bc6a317" />
 </p>
 
-
 ## Requirements
 
 - Frigate 0.17.1 (commit `416a9b7` verified). Skua talks to
@@ -129,24 +128,24 @@ Mobile PWA, installed to the iOS home screen.
 1. Create a directory for Skua and a `compose.yaml`:
 
 ```yaml
-   services:
-     skua:
-       image: ghcr.io/skua-app/skua:latest
-       container_name: skua
-       restart: unless-stopped
-       ports:
-         - "3200:3200"
-       volumes:
-         - ./data:/data
+services:
+  skua:
+    image: ghcr.io/skua-app/skua:latest
+    container_name: skua
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    volumes:
+      - ./data:/data
 ```
 
-   Keep the `restart: unless-stopped` line — `restart: always` works
-   too. Runtime reconfiguration (the first-run wizard Save and
-   **Settings → Connection → Apply**) restarts Skua by exiting the
-   process and relies on the container restart policy to bring it
-   back. Without one (`restart: no`, `on-failure`, or no restart key
-   at all), a Save or Apply leaves Skua stopped until you start the
-   container again.
+Keep the `restart: unless-stopped` line — `restart: always` works
+too. Runtime reconfiguration (the first-run wizard Save and
+**Settings → Connection → Apply**) restarts Skua by exiting the
+process and relies on the container restart policy to bring it
+back. Without one (`restart: no`, `on-failure`, or no restart key
+at all), a Save or Apply leaves Skua stopped until you start the
+container again.
 
 2. Start the container:
 
@@ -177,9 +176,9 @@ reproducible deployments), set the URLs as environment variables and
 skip the wizard:
 
 ```yaml
-    environment:
-      FRIGATE_URL: "http://frigate:5000"
-      GO2RTC_URL: "http://frigate:1984"
+environment:
+  FRIGATE_URL: "http://frigate:5000"
+  GO2RTC_URL: "http://frigate:1984"
 ```
 
 Environment variables always win over the wizard's `/data/config.yaml`
@@ -213,29 +212,29 @@ Apply restarts Skua by exiting the process, so the container needs a
 restart policy (`restart: unless-stopped` or `always`) to come back
 automatically — without one, Apply leaves Skua stopped.
 
-| Variable | Default | Required | Notes |
-|---|---|---|---|
-| `FRIGATE_URL` | — | No | Frigate internal API base URL. Use port 5000 (no auth), not `:8971` (the authed UI port). When unset, Skua serves the first-run setup wizard and persists the entered value to `/data/config.yaml`. |
-| `FRIGATE_UI_URL` | falls back to `FRIGATE_URL` | No | Public URL of the Frigate UI, used for "Open in Frigate" deep-links from the events list. Must be reachable from the user's device. Also settable via the wizard. |
-| `GO2RTC_URL` | — | No | go2rtc REST API for WHEP signaling. Required for WebRTC live view; BFF starts without it. Also settable via the wizard. |
-| `PORT` | `3200` | No | Port the BFF listens on. |
-| `LOG_LEVEL` | `info` | No | `debug` / `info` / `warn` / `error`. |
-| `LOG_FORMAT` | `json` | No | `json` / `text`. |
-| `ONLINE_CHECK_INTERVAL` | `15s` | No | How often the BFF polls Frigate `/api/stats` to refresh camera online status. |
-| `HTTP_TIMEOUT` | `5s` | No | Default timeout for outbound HTTP calls. |
-| `SHUTDOWN_TIMEOUT` | `10s` | No | Graceful-shutdown grace period. |
-| `WHEP_TIMEOUT` | `10s` | No | Upstream timeout for go2rtc WHEP signalling. |
-| `PREFS_PATH` | `/data/prefs.json` | No | File-backed user prefs store. |
-| `GROUPS_CONFIG_PATH` | `/data/groups.yaml` | No | Camera-group YAML; auto-created on first `POST /api/groups`. |
-| `CAMERA_NAMES_CONFIG_PATH` | `/data/camera_names.yaml` | No | Per-camera display name overrides; auto-created on first `PUT /api/camera-names/{cam_id}`. Cameras without an entry fall back to the Frigate-sourced name from `cameras.yaml`. |
-| `CAMERAS_CONFIG_PATH` | `/data/cameras.yaml` | No | Camera registry persisted from Frigate config; auto-created at first startup when Frigate is reachable. Used as a fallback snapshot when Frigate is unreachable on subsequent starts. |
-| `CAPABILITIES_CONFIG_PATH` | `/data/capabilities.yaml` | No | Per-camera `talk_back` / `ptz` overrides — not exposed by Frigate's config, hand-edited on the host until a future editor lands. |
-| `STREAM_OVERRIDES_CONFIG_PATH` | `/data/stream_overrides.yaml` | No | Per-camera go2rtc stream-name overrides; applied only inside the WHEP handler. `GET /api/cameras` still surfaces Frigate-truth stream names. |
-| `CAMERA_ORDER_CONFIG_PATH` | `/data/camera_order.yaml` | No | Household-shared camera display order (v0.13.0). YAML list of cam_ids; auto-created on first `PUT /api/camera-order`. Applied to `GET /api/cameras` so the grid and Settings → Cameras follow the saved order; cams not yet in the file are appended in registry order. |
-| `RUNTIME_CONFIG_PATH` | `/data/config.yaml` | No | Runtime config overlay written by the first-run wizard. Stores `frigate_url`, `frigate_ui_url`, `go2rtc_url`. Env vars above always win over this file. |
-| `GLANCE_STATE_PATH` | `/data/glance.json` | No | Household seen-state for the glance feature; JSON file holding the set of seen event ids plus a `seen_through` watermark shared across the household. Auto-created on the first `POST /api/glance/seen` or `POST /api/glance/seen-all`; missing or corrupt file means never-seen. |
-| `AWAY_SESSION_GAP` | `30m` | No | How long a device may be inactive before the glance sheet treats the next visit as a return ("while you were away"). The BFF tracks per-device activity in memory via `POST /api/glance/heartbeat`, keyed on an httpOnly `skua_device` cookie. |
-| `CLIP_MAX_MIB` | `256` | No | Maximum per-event clip buffer size in MiB. The BFF reads each event clip into memory to serve Range requests for iOS Safari's `<video>` element; clips larger than this return 502. Raise it if long high-bitrate moments fail to play, lower it to tighten the RAM ceiling. Must be a positive integer. |
+| Variable                       | Default                       | Required | Notes                                                                                                                                                                                                                                                                                                    |
+| ------------------------------ | ----------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FRIGATE_URL`                  | —                             | No       | Frigate internal API base URL. Use port 5000 (no auth), not `:8971` (the authed UI port). When unset, Skua serves the first-run setup wizard and persists the entered value to `/data/config.yaml`.                                                                                                      |
+| `FRIGATE_UI_URL`               | falls back to `FRIGATE_URL`   | No       | Public URL of the Frigate UI, used for "Open in Frigate" deep-links from the events list. Must be reachable from the user's device. Also settable via the wizard.                                                                                                                                        |
+| `GO2RTC_URL`                   | —                             | No       | go2rtc REST API for WHEP signaling. Required for WebRTC live view; BFF starts without it. Also settable via the wizard.                                                                                                                                                                                  |
+| `PORT`                         | `3200`                        | No       | Port the BFF listens on.                                                                                                                                                                                                                                                                                 |
+| `LOG_LEVEL`                    | `info`                        | No       | `debug` / `info` / `warn` / `error`.                                                                                                                                                                                                                                                                     |
+| `LOG_FORMAT`                   | `json`                        | No       | `json` / `text`.                                                                                                                                                                                                                                                                                         |
+| `ONLINE_CHECK_INTERVAL`        | `15s`                         | No       | How often the BFF polls Frigate `/api/stats` to refresh camera online status.                                                                                                                                                                                                                            |
+| `HTTP_TIMEOUT`                 | `5s`                          | No       | Default timeout for outbound HTTP calls.                                                                                                                                                                                                                                                                 |
+| `SHUTDOWN_TIMEOUT`             | `10s`                         | No       | Graceful-shutdown grace period.                                                                                                                                                                                                                                                                          |
+| `WHEP_TIMEOUT`                 | `10s`                         | No       | Upstream timeout for go2rtc WHEP signalling.                                                                                                                                                                                                                                                             |
+| `PREFS_PATH`                   | `/data/prefs.json`            | No       | File-backed user prefs store.                                                                                                                                                                                                                                                                            |
+| `GROUPS_CONFIG_PATH`           | `/data/groups.yaml`           | No       | Camera-group YAML; auto-created on first `POST /api/groups`.                                                                                                                                                                                                                                             |
+| `CAMERA_NAMES_CONFIG_PATH`     | `/data/camera_names.yaml`     | No       | Per-camera display name overrides; auto-created on first `PUT /api/camera-names/{cam_id}`. Cameras without an entry fall back to the Frigate-sourced name from `cameras.yaml`.                                                                                                                           |
+| `CAMERAS_CONFIG_PATH`          | `/data/cameras.yaml`          | No       | Camera registry persisted from Frigate config; auto-created at first startup when Frigate is reachable. Used as a fallback snapshot when Frigate is unreachable on subsequent starts.                                                                                                                    |
+| `CAPABILITIES_CONFIG_PATH`     | `/data/capabilities.yaml`     | No       | Per-camera `talk_back` / `ptz` overrides — not exposed by Frigate's config, hand-edited on the host until a future editor lands.                                                                                                                                                                         |
+| `STREAM_OVERRIDES_CONFIG_PATH` | `/data/stream_overrides.yaml` | No       | Per-camera go2rtc stream-name overrides; applied only inside the WHEP handler. `GET /api/cameras` still surfaces Frigate-truth stream names.                                                                                                                                                             |
+| `CAMERA_ORDER_CONFIG_PATH`     | `/data/camera_order.yaml`     | No       | Household-shared camera display order (v0.13.0). YAML list of cam_ids; auto-created on first `PUT /api/camera-order`. Applied to `GET /api/cameras` so the grid and Settings → Cameras follow the saved order; cams not yet in the file are appended in registry order.                                  |
+| `RUNTIME_CONFIG_PATH`          | `/data/config.yaml`           | No       | Runtime config overlay written by the first-run wizard. Stores `frigate_url`, `frigate_ui_url`, `go2rtc_url`. Env vars above always win over this file.                                                                                                                                                  |
+| `GLANCE_STATE_PATH`            | `/data/glance.json`           | No       | Household seen-state for the glance feature; JSON file holding the set of seen event ids plus a `seen_through` watermark shared across the household. Auto-created on the first `POST /api/glance/seen` or `POST /api/glance/seen-all`; missing or corrupt file means never-seen.                        |
+| `AWAY_SESSION_GAP`             | `30m`                         | No       | How long a device may be inactive before the glance sheet treats the next visit as a return ("while you were away"). The BFF tracks per-device activity in memory via `POST /api/glance/heartbeat`, keyed on an httpOnly `skua_device` cookie.                                                           |
+| `CLIP_MAX_MIB`                 | `256`                         | No       | Maximum per-event clip buffer size in MiB. The BFF reads each event clip into memory to serve Range requests for iOS Safari's `<video>` element; clips larger than this return 502. Raise it if long high-bitrate moments fail to play, lower it to tighten the RAM ceiling. Must be a positive integer. |
 
 All `_PATH` variables are container-side paths. The default
 `./data:/data` volume mount in the Quick Start compose maps them all
@@ -373,8 +372,8 @@ above.
     page describes the issue and the fix is in the env file. Browser
     editing is not offered because env wins over the overlay file at
     next boot — restart the container after correcting the value.
-  The same fail-fast log line is still emitted; the camera registry
-  is loaded once at startup.
+    The same fail-fast log line is still emitted; the camera registry
+    is loaded once at startup.
 
 ### PWA not installable on iPhone
 
@@ -449,4 +448,6 @@ this one would not exist. The frontend is built with
 [SvelteKit](https://kit.svelte.dev) and
 [Tailwind CSS](https://tailwindcss.com). Display fonts are
 [Geist](https://vercel.com/font) and
-[JetBrains Mono](https://www.jetbrains.com/lp/mono/).
+[JetBrains Mono](https://www.jetbrains.com/lp/mono/). The interface
+icons are drawn from [Lucide](https://lucide.dev), used under the ISC
+license.

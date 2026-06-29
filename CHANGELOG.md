@@ -14,10 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Changed
+
+- The app's icons were redrawn on the Lucide icon set, so the glyphs across the live controls, the event filters, the tab bar, and the settings screens now share one consistent, well-tested look. The icons mean the same things they did before; only their drawing changed. The recording player's transport controls (play, pause, rewind, and fast-forward) are now lighter outline glyphs instead of solid shapes, so they match the rest of the set.
+
 ## [0.14.0] — 2026-06-26
 
 Added
-- Recording timeline. Scrub a camera's recorded history on a 1-hour window with an instant low-res preview as you drag, then release (or press play) to watch the full-resolution recording from any point. Reach it from a camera's focus view with the new History button, or from any event with "See on timeline", which opens the timeline centred on the moment the event began. On a device that can't decode the camera's recording codec (e.g. H.265 without a hardware decoder), the timeline falls back to a preview/scrub-only mode — the scrubber and low-res preview keep working and an honest hint explains why full-resolution playback is unavailable. The player also gained 10-second skip-back/forward buttons and a speed chip that cycles playback through 0.5×, 1×, 2×, and 4×, plus press-and-hold rewind / fast-forward buttons that rush the preview through the recording (the rate ramps up the longer you hold) with a VHS-style on-frame badge, releasing to settle full-resolution playback where you land. A thin activity lane along the top of the scrubber now marks Frigate's review segments — alerts in amber, detections in cyan — at their wall-clock spots, following the playhead as you pan and zoom so you can see at a glance when something happened. A second thin lane marks the moments Frigate's audio detection heard a sound, in green, and it stays hidden when there's no audio activity in view.
+
+- Recording timeline. Scrub a camera's recorded history on a 1-hour window with an instant low-res preview as you drag, then release (or press play) to watch the full-resolution recording from any point. Reach it from a camera's focus view with the new History button, or from any event with "See on timeline", which opens the timeline centred on the moment the event began. On a device that can't decode the camera's recording codec (e.g. H.265 without a hardware decoder), the timeline falls back to a preview/scrub-only mode — the scrubber and low-res preview keep working and an honest hint explains why full-resolution playback is unavailable. The player also gained a speed chip that cycles playback through 0.5×, 1×, and 2×, plus press-and-hold rewind / fast-forward buttons that rush the preview through the recording (the rate ramps up the longer you hold) with a VHS-style on-frame badge, releasing to settle full-resolution playback where you land. A thin activity lane along the top of the scrubber now marks Frigate's review segments — alerts in amber, detections in cyan — at their wall-clock spots, following the playhead as you pan and zoom so you can see at a glance when something happened. A second thin lane marks the moments Frigate's audio detection heard a sound, in green, and it stays hidden when there's no audio activity in view.
 - A small colour legend under the recording timeline scrubber (desktop only) that labels the lane colours — Alert, Detection, Audio, and Recorded — so you can tell at a glance what each band means. It stays hidden on phones to keep the player on one screen.
 - A "LIVE" button on the recording timeline scrubber that sits just inside the live edge as part of the bar itself and rides with the track as you pan and zoom, so it stays pinned to the moment "now" instead of floating over the playhead. It reads as a small button (not a status badge), sits a few pixels clear of the no-footage hatch, and when the live edge scrolls off the right it is simply clipped by the bar rather than parking at the end. Tapping it opens the camera's live view. It no longer tries to seek the recording to the live edge, where there is no footage yet.
 - Recording-coverage lane on the timeline scrubber. The scrubber now shades the spans where footage was actually recorded as a neutral grey fill and leaves real recording gaps as empty track, so on a motion-only camera you can see at a glance which parts of the window have footage and which don't, while a continuous-record camera shows a fully filled bar. The coverage follows the playhead as you pan and zoom. This replaces the old faint per-hour density wash with real sub-hour recorded/gap coverage sourced from Frigate's per-segment recordings.
@@ -26,6 +31,7 @@ Added
 - Event types now show as icons. The type filter chips, the mobile event rows, and the desktop event cards carry a small glyph for person, vehicle, animal, or other, so the kind is recognisable at a glance.
 
 Changed
+
 - The recording timeline now opens on a 1-hour scrubber window instead of 3 hours, so on entry the cursor sits about 30 minutes before live with the right edge at live. You can still zoom out to a wider span.
 - The small uppercase section labels on Events and the camera grid now use the regular Geist typeface instead of the monospace one, which reads much better at that size. This covers the GROUP/CAMERA/TYPE filter labels, the TODAY/YESTERDAY day dividers, and the grid's room/group headers, and the Events filter block now sits clearly apart from the day list so the TYPE label and the first day divider no longer blur together.
 - The moments bell now appears only on the Cameras grid, on phone and desktop. It no longer sits in the header on Events, Settings, or a camera's focus view, where it was just clutter.
@@ -37,6 +43,7 @@ Changed
 - The four accent colours now have their own saturated, darker values in light mode so they no longer look washed out on white surfaces; dark mode is unchanged. Accent selection is now theme-aware and resolved entirely in CSS, so the swatches and the live accent track light, dark, and system-auto correctly.
 
 Fixed
+
 - Light theme: text on solid accent fills (the moments bell badge on mobile and desktop, the recording-timeline clock bubble) is now light instead of near-black, so it stays legible on the new darker, more saturated light accents. Dark theme is unchanged.
 - Recording timeline: the scrub preview no longer fails to load once the playhead sits on a fractional second.
 - Recording timeline: cam5 (H.264) windows whose audio track flaps no longer hang playback. The player now falls back to video-only for that segment and keeps audio everywhere else; a muted-speaker glyph marks segments with no audio.
@@ -47,22 +54,26 @@ Fixed
 - A quick downward flick on the moments sheet now closes it instead of springing back. Before, only a slow drag that pulled the sheet far enough would dismiss it; a fast short flick snapped back. A slow short drag still settles back to its detent.
 
 Removed
+
 - Dropped the unused event-review deep-link endpoint (GET /api/events/{id}/review) and its frontend helper. It only ever fed the modal's old "Open in Frigate" button, which is gone now that events open on the app's own recording timeline.
 
 ## [0.13.0] — 2026-06-16
 
 Added
+
 - Drag-to-reorder cameras. Settings > Cameras lists every camera in one column with a drag handle; reorder by dragging and the new order saves right away. The order is shared across the household and shows up in the grid (phone and desktop) and in the focus view's camera switcher. Newly discovered cameras are appended so they never disappear from the list.
 - A "Grid frame rate" setting in Appearance to switch the camera grid between 1 Hz (default) and 2 Hz. 2 Hz refreshes the tiles twice a second for a smoother grid, at roughly double the snapshot bandwidth. The setting is shared across the household.
 - A Download button in the moment view that saves the full-resolution clip for that moment.
 
 Changed
+
 - Settings > Cameras has been reworked from inline editor cards into a single-column list. Editing a camera's friendly name and its per-camera main/sub stream overrides now happens in a focused modal opened from the row.
 - The "while you were away" glance now uses Frigate's own review segments instead of grouping raw events itself, so each moment matches a single review segment and carries its severity (alert or detection) and zones. The grouping now matches what Frigate shows.
 - The moment view now plays the full-resolution recording with audio for the whole moment, instead of stitching together the individual event clips.
 - "Open in Frigate" from a moment or an event now opens the Frigate review timeline for that activity, instead of the Explore tab.
 
 Fixed
+
 - The glance sheet no longer flashes and then vanishes right after the app starts.
 - The glance sheet can now be dragged to dismiss from anywhere on it, not just the handle. When the moment list is scrolled, dragging down scrolls the list first and pulls the sheet once it reaches the top, the way an iOS sheet behaves.
 - The camera you're watching now stays in the focus filmstrip on phones and is highlighted, matching the desktop layout.
@@ -71,11 +82,13 @@ Fixed
 - The focus play/pause button is no longer highlighted while the stream is playing; it lights up only when the stream is paused.
 
 Removed
+
 - The GET /api/moments endpoint has been removed; the glance feed at GET /api/glance is now sourced from Frigate review segments. The moment payload changed shape as part of this: the representative-event fields and the inline event list are gone, replaced by the review id, severity, zones, detection ids, and a thumbnail detection id.
 
 ## [0.12.1] — 2026-06-14
 
 Changed
+
 - The events filters now fit on tighter single-line rows on both phone and desktop, so more of the events list is visible on first paint.
 - The online/offline status now sits inline beside the page title on the mobile header and on the desktop Cameras and Events pages, instead of on its own second line. The status line is hidden on Settings.
 - The Download button in the event clip modal and the Open Live button in the moment modal are now compact icon buttons; the labelled "Open in Frigate" picks up a leading link icon.
@@ -84,6 +97,7 @@ Changed
 ## [0.12.0] — 2026-06-14
 
 Added
+
 - A refreshed interface across the whole app — grid, camera focus view, events, settings, and the "while you were away" sheet — on both phone and desktop, with a cleaner layout and clearer controls.
 - Light, dark, and auto themes. Auto follows your device's system setting. Your choice is remembered per device, so switching theme on your phone doesn't change it on other household devices.
 - Picture-in-picture button in the camera view on desktop and Android. (iPhone is excluded because Safari can't do picture-in-picture on a live stream.)
@@ -93,12 +107,14 @@ Added
 - The running app version is now shown in Settings → About.
 
 Fixed
+
 - Large event clips (long or high-quality recordings) now play instead of failing. The size limit is raised to 256 MB by default and can be changed with the CLIP_MAX_MIB setting.
 - The camera focus view now shows a recent frame immediately when you open it, instead of an older one, and switches cameras faster.
 - Various interface polish on phone: the selected camera in the focus filmstrip is no longer clipped, the camera filter closes cleanly, and zoom/pan gestures feel smoother.
 - The pop-up sheets keep their title and handle in place while the list scrolls, and can be closed with a button, a swipe down, tapping outside, or Escape.
 
 Changed
+
 - The installed app (PWA) now opens instantly even offline and no longer shows a blank screen after an update — it refreshes itself to the latest version on next launch, and shows your camera grid's last images while reconnecting.
 - When the app can't reach your Skua server it now shows a clear, retryable message instead of hanging or going blank, and recovers on its own once the server is back.
 - The app feels more native on phones: page-zoom, accidental text selection, the iOS long-press menu, and tap highlights are turned off (text fields still let you select and edit).
@@ -106,6 +122,7 @@ Changed
 - "Mark all seen" replaces the old "Clear": seen moments stay in the list marked as seen instead of disappearing, so you can still review them.
 
 Reconfiguration note
+
 - Saving the first-run setup or changing the connection in Settings restarts Skua by exiting the process, so the container needs a restart policy (restart: unless-stopped or always) to come back up. This is now called out in the setup screens and the README.
 
 ## [0.11.1] — 2026-06-03
@@ -217,7 +234,7 @@ Reconfiguration note
   boots the new overlay. Env-locked fields render read-only with a hint
   and are stripped from PUT bodies server-side.
 - `GET` / `PUT /api/runtime-config` returning `{effective, overlay,
-  locked}` and persisting the overlay file.
+locked}` and persisting the overlay file.
 - `POST /api/runtime-config/test` runs the same upstream probes the
   first-run wizard uses (Frigate `GetStats`, go2rtc `GetStreams`).
 - `POST /api/runtime-config/restart` returns `202 {status:"restarting"}`
@@ -309,7 +326,7 @@ Reconfiguration note
   per-camera (a Sub-less camera always uses Main), the LQ segment is
   greyed out with a hint, and opening such a camera while the global
   pref is `sub` no longer triggers a `StreamError` from the WHEP `400 no
-  stream configured for quality`. The global LQ choice is left untouched
+stream configured for quality`. The global LQ choice is left untouched
   so Sub-capable cameras keep it.
 - DesktopFocus stream-name labels show the camera's real go2rtc stream
   name (Frigate-truth Main/Sub) instead of a fabricated `*_h264` string.
@@ -434,17 +451,17 @@ Reconfiguration note
   auto-prune on empty entry).
 - `internal/go2rtc` REST client (`GetStreams`).
 - `GET /api/go2rtc/streams`, `GET /api/stream-overrides`, `PUT
-  /api/stream-overrides/{cam_id}` with full validation (invalid body,
+/api/stream-overrides/{cam_id}` with full validation (invalid body,
   unknown camera, unknown stream against the live `go2rtc` list,
   `go2rtc` unreachable).
 - Override store joins the orphan-cleanup chain on `POST
-  /api/cameras/refresh`.
+/api/cameras/refresh`.
 
 ### Changed
 
 - WHEP handler merges the override layer (`override.Main` over
   `cam.StreamMain`, same for Sub) and returns `400 no stream
-  configured for quality` when the resolved stream name is empty.
+configured for quality` when the resolved stream name is empty.
 
 ## [0.6.0] — 2026-05-25
 
@@ -472,7 +489,7 @@ Reconfiguration note
 
 - The connecting / buffering text on the focus screen now sits inside
   a dark blurred pill (`rgba(0, 0, 0, 0.5)` + `backdrop-filter:
-  blur(10px)`, matching the existing `.telemetry-pill` / `.ts-chip`
+blur(10px)`, matching the existing `.telemetry-pill` / `.ts-chip`
   style), so it stays readable over bright snapshots.
 
 ## [0.5.2] — 2026-05-25
@@ -514,7 +531,7 @@ Reconfiguration note
 ### Fixed
 
 - White/black screen on iOS PWA relaunch via `workbox.navigateFallback:
-  'index.html'` plus `navigateFallbackDenylist: [/^\/api\//]` so
+'index.html'` plus `navigateFallbackDenylist: [/^\/api\//]` so
   deep-link navigations resolve against the precached shell while
   `/api/*` keeps reaching the BFF.
 
@@ -582,7 +599,7 @@ Reconfiguration note
 - `AppHeader` merged with the page title row on mobile, HD/ECO toggle
   moved into the title row (route-gated on `/`).
 - Focus screens navigate between cameras via `goto(url, {
-  replaceState: true })` so a single back-tap from focus always lands
+replaceState: true })` so a single back-tap from focus always lands
   on the grid, regardless of how many cameras were hopped through.
 
 ## [0.3.1] — 2026-05-21
@@ -625,8 +642,7 @@ Reconfiguration note
 - Single-camera focus view via WHEP through `go2rtc`, sub-500 ms
   latency, runtime audio detection via the WHEP track event.
 - HD/ECO snapshot modes for the grid; ECO renders 320px-wide JPEG
-  tiles resized server-side via `golang.org/x/image/draw` at quality
-  60.
+  tiles resized server-side via `golang.org/x/image/draw` at quality 60.
 - `POST /api/webrtc/whep` proxy endpoint and `GO2RTC_URL` environment
   variable.
 - Server-side user preferences via `GET` / `PUT /api/prefs`
