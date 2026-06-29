@@ -24,6 +24,10 @@ export type IconCircle = {
 
 export type IconDef = {
   paths?: string | string[]
+  // Solid-filled sub-paths (fill currentColor, no stroke) rendered alongside
+  // the stroked primitives — lets one glyph mix a stroked outline with a
+  // filled region (e.g. the half-disc in the contrast/auto-theme icon).
+  fillPaths?: string | string[]
   rects?: IconRect[]
   lines?: IconLine[]
   circles?: IconCircle[]
@@ -277,12 +281,12 @@ export const ICONS: Record<IconName, IconDef> = {
     fill: 'currentColor',
     stroke: 'none'
   },
+  // "Auto" theme = Lucide "contrast": a stroked outer ring with the right
+  // half filled solid, so it reads as a clean contrast glyph (not a hollow
+  // outline). The half-disc is a fillPath; the ring is a stroked circle.
   themeAuto: {
-    rects: [{ x: 2, y: 3, width: 20, height: 14, rx: 2 }],
-    lines: [
-      { x1: 8, y1: 21, x2: 16, y2: 21 },
-      { x1: 12, y1: 17, x2: 12, y2: 21 }
-    ]
+    circles: [{ cx: 12, cy: 12, r: 10 }],
+    fillPaths: 'M12 18a6 6 0 0 0 0-12v12z'
   },
   grip: {
     circles: [

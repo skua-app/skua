@@ -14,6 +14,10 @@
     if (!def.paths) return [] as string[]
     return Array.isArray(def.paths) ? def.paths : [def.paths]
   })
+  const fillPathList = $derived.by(() => {
+    if (!def.fillPaths) return [] as string[]
+    return Array.isArray(def.fillPaths) ? def.fillPaths : [def.fillPaths]
+  })
 </script>
 
 <svg
@@ -30,6 +34,9 @@
 >
   {#each pathList as d}
     <path {d} />
+  {/each}
+  {#each fillPathList as d}
+    <path {d} fill="currentColor" stroke="none" />
   {/each}
   {#each def.rects ?? [] as r}
     <rect x={r.x} y={r.y} width={r.width} height={r.height} rx={r.rx ?? 0} />
