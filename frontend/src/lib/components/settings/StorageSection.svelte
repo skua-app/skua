@@ -160,8 +160,10 @@
           <div class="st-mount">
             <div class="st-row1">
               <span class="st-swatch" style:background={camColor(c.id)} aria-hidden="true"></span>
-              <span class="st-cam">{camName(c.id)}</span>
-              {#if hasFriendlyName(c.id)}<span class="st-cam-id mono">{c.id}</span>{/if}
+              <span class="st-camline">
+                <span class="st-cam">{camName(c.id)}</span>
+                {#if hasFriendlyName(c.id)}<span class="st-cam-id mono">{c.id}</span>{/if}
+              </span>
             </div>
             <div class="st-bar" aria-hidden="true">
               <span
@@ -289,6 +291,14 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 0;
+  }
+  /* Name + raw id share one baseline so the differing Geist/mono metrics don't
+     make the id appear to float; the swatch stays centered in .st-row1. */
+  .st-camline {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
     min-width: 0;
   }
   .st-cam {
