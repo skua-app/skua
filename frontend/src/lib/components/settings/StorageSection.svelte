@@ -30,6 +30,14 @@
     return camerasStore.cameras.find((c) => c.id === id)?.name ?? id
   }
 
+  // True when the camera has a real friendly name set (present in the store
+  // and its name differs from its id). Used to decide whether to surface the
+  // raw id as a secondary label without duplicating "camN camN".
+  function hasFriendlyName(id: string): boolean {
+    const cam = camerasStore.cameras.find((c) => c.id === id)
+    return cam !== undefined && cam.name !== id
+  }
+
   const PALETTE_SIZE = 12
 
   // A camera's color is its stable index in the canonical Frigate order
@@ -153,6 +161,7 @@
             <div class="st-row1">
               <span class="st-swatch" style:background={camColor(c.id)} aria-hidden="true"></span>
               <span class="st-cam">{camName(c.id)}</span>
+              {#if hasFriendlyName(c.id)}<span class="st-cam-id mono">{c.id}</span>{/if}
             </div>
             <div class="st-bar" aria-hidden="true">
               <span
@@ -290,6 +299,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+  }
+  /* Raw Frigate id shown after a friendly name as a dim mono secondary. */
+  .st-cam-id {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--text-3);
   }
   .st-subhead {
     font-size: 13px;
