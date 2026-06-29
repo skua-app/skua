@@ -203,7 +203,9 @@
     align-items: flex-end;
     justify-content: space-between;
     gap: 18px;
-    margin-bottom: 20px;
+    /* Tightened so each section's own heading reads as sitting under the
+       "Settings" page head rather than floating in a large empty band. */
+    margin-bottom: 12px;
   }
   .dk-h1 {
     font-size: 28px;

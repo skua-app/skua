@@ -18,6 +18,10 @@ Added
 
 - Storage usage screen under Settings → System. It shows each disk mount Frigate reports — recordings, clips, the database, and the cache/shared-memory mounts — with a usage bar and the used / total / free figures for each, plus a manual Refresh button. Below the mounts, a per-camera breakdown lists how much of the recordings disk each camera is using (heaviest first) with a usage bar, its share of the disk, and its recording write rate per hour. Each camera gets a distinct, stable color shown as a swatch and its bar fill, and the recordings mount is shown first with its used bar broken into the matching per-camera color segments plus a neutral remainder for clips/database/other space — so you can see at a glance which cameras fill the disk. The numbers come straight from Frigate and load when you open the screen (no background polling). Backed by a new `GET /api/storage` endpoint that normalizes and sorts Frigate's stats and per-camera recordings figures into a stable list; if the per-camera data is unavailable the mounts still load.
 
+Fixed
+
+- Settings (desktop): each section's heading now sits snug under the "Settings" page title instead of floating below a large empty gap.
+
 ## [0.15.0] — 2026-06-29
 
 Changed
