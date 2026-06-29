@@ -321,10 +321,17 @@
     transition: width 0.2s ease;
   }
   /* Stacked per-camera segments in the recordings mount bar. The track clips
-     the ends via overflow:hidden, so segments carry no individual radius. */
+     the ends via overflow:hidden, so segments carry no individual radius. A
+     2px inset shadow on the right edge separates adjacent colors so they don't
+     blend; it draws inside the box (no layout/width shift). The last segment
+     (the neutral "other" span) is excluded so there's no trailing line against
+     the free track. */
   .st-seg {
     flex: 0 0 auto;
     height: 100%;
+  }
+  .st-seg:not(:last-child) {
+    box-shadow: inset -2px 0 0 var(--bg);
   }
   /* Per-camera color swatch before the camera name. */
   .st-swatch {

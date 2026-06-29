@@ -187,19 +187,22 @@
   --acc-sage: oklch(0.58 0.12 150);
   --acc-amber: oklch(0.66 0.14 70);
   --acc-violet: oklch(0.56 0.16 290);
-  /* Darker/more saturated camera hues for white surfaces — see :root. */
-  --cam-0: oklch(0.58 0.15 15);
-  --cam-1: oklch(0.58 0.15 45);
-  --cam-2: oklch(0.58 0.15 75);
-  --cam-3: oklch(0.58 0.15 105);
-  --cam-4: oklch(0.58 0.15 135);
-  --cam-5: oklch(0.58 0.15 165);
-  --cam-6: oklch(0.58 0.15 195);
-  --cam-7: oklch(0.58 0.15 225);
-  --cam-8: oklch(0.58 0.15 255);
-  --cam-9: oklch(0.58 0.15 285);
-  --cam-10: oklch(0.58 0.15 315);
-  --cam-11: oklch(0.58 0.15 345);
+  /* Camera hues tuned per-hue for white surfaces — a flat lightness washed the
+     warm band (amber/lime) into mud, so lightness rises through yellows/greens
+     and drops for the naturally-dark blues/violets, with chroma nudged up to
+     stay vivid against white. Hues kept ~30° apart for neighbour separation. */
+  --cam-0: oklch(0.6 0.18 25);
+  --cam-1: oklch(0.66 0.16 55);
+  --cam-2: oklch(0.74 0.15 85);
+  --cam-3: oklch(0.7 0.16 115);
+  --cam-4: oklch(0.62 0.15 145);
+  --cam-5: oklch(0.6 0.12 175);
+  --cam-6: oklch(0.6 0.12 205);
+  --cam-7: oklch(0.55 0.16 235);
+  --cam-8: oklch(0.52 0.17 265);
+  --cam-9: oklch(0.55 0.18 295);
+  --cam-10: oklch(0.58 0.18 325);
+  --cam-11: oklch(0.58 0.18 355);
   --cam-other: rgba(20, 22, 26, 0.14);
 }
 @media (prefers-color-scheme: light) {
@@ -229,19 +232,19 @@
     --acc-sage: oklch(0.58 0.12 150);
     --acc-amber: oklch(0.66 0.14 70);
     --acc-violet: oklch(0.56 0.16 290);
-    /* Darker/more saturated camera hues for white surfaces — see :root. */
-    --cam-0: oklch(0.58 0.15 15);
-    --cam-1: oklch(0.58 0.15 45);
-    --cam-2: oklch(0.58 0.15 75);
-    --cam-3: oklch(0.58 0.15 105);
-    --cam-4: oklch(0.58 0.15 135);
-    --cam-5: oklch(0.58 0.15 165);
-    --cam-6: oklch(0.58 0.15 195);
-    --cam-7: oklch(0.58 0.15 225);
-    --cam-8: oklch(0.58 0.15 255);
-    --cam-9: oklch(0.58 0.15 285);
-    --cam-10: oklch(0.58 0.15 315);
-    --cam-11: oklch(0.58 0.15 345);
+    /* Per-hue tuned camera palette for white surfaces — see .theme-light. */
+    --cam-0: oklch(0.6 0.18 25);
+    --cam-1: oklch(0.66 0.16 55);
+    --cam-2: oklch(0.74 0.15 85);
+    --cam-3: oklch(0.7 0.16 115);
+    --cam-4: oklch(0.62 0.15 145);
+    --cam-5: oklch(0.6 0.12 175);
+    --cam-6: oklch(0.6 0.12 205);
+    --cam-7: oklch(0.55 0.16 235);
+    --cam-8: oklch(0.52 0.17 265);
+    --cam-9: oklch(0.55 0.18 295);
+    --cam-10: oklch(0.58 0.18 325);
+    --cam-11: oklch(0.58 0.18 355);
     --cam-other: rgba(20, 22, 26, 0.14);
   }
 }
