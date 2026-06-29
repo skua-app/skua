@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-06-29
+
 Changed
 
 - The app's icons were redrawn on the Lucide icon set, so the glyphs across the live controls, the event filters, the tab bar, and the settings screens now share one consistent, well-tested look. The icons mean the same things they did before; only their drawing changed. The recording player's transport controls (play, pause, rewind, and fast-forward) are now lighter outline glyphs instead of solid shapes, so they match the rest of the set.
@@ -669,7 +671,8 @@ replaceState: true })` so a single back-tap from focus always lands
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/skua-app/skua/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/skua-app/skua/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/skua-app/skua/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/skua-app/skua/compare/v0.12.0...v0.12.1
