@@ -10,6 +10,22 @@ type CameraStats struct {
 // StatsResponse is the subset of GET /api/stats we parse.
 type StatsResponse struct {
 	Cameras map[string]CameraStats `json:"cameras"`
+	Service ServiceStats           `json:"service"`
+}
+
+// ServiceStats is the subset of stats.service we parse. Storage maps each
+// mounted path Frigate reports to its usage figures.
+type ServiceStats struct {
+	Storage map[string]MountStat `json:"storage"`
+}
+
+// MountStat mirrors one stats.service.storage.<path> entry. Total/Used/Free
+// are in MiB (mebibytes) as reported by Frigate.
+type MountStat struct {
+	Total     float64 `json:"total"`
+	Used      float64 `json:"used"`
+	Free      float64 `json:"free"`
+	MountType string  `json:"mount_type"`
 }
 
 // ConfigResponse is the subset of GET /api/config we parse. Only the cameras

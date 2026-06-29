@@ -158,6 +158,28 @@ export async function fetchConfig(): Promise<AppConfig> {
   return apiFetch<AppConfig>('/api/config')
 }
 
+// StorageMount is one disk mount Frigate reports in stats.service.storage,
+// normalized by the BFF. The *_mib figures are mebibytes (1024-based),
+// passed through from Frigate unchanged. `type` is Frigate's mount_type.
+export type StorageMount = {
+  path: string
+  type: string
+  total_mib: number
+  used_mib: number
+  free_mib: number
+}
+
+// StorageInfo is the GET /api/storage envelope. mounts is always present and
+// never null; an empty/missing service.storage yields an empty array. The BFF
+// sorts /media paths first, then all other paths, ascending within each group.
+export type StorageInfo = {
+  mounts: StorageMount[]
+}
+
+export async function fetchStorage(): Promise<StorageInfo> {
+  return apiFetch<StorageInfo>('/api/storage')
+}
+
 export async function fetchEvents(q: EventsQuery = {}): Promise<EventsResponse> {
   const params = new URLSearchParams()
   if (q.cameras) for (const c of q.cameras) params.append('camera', c)

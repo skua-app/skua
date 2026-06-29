@@ -59,6 +59,16 @@ export const ui = {
     'Organize cameras into groups for the wall filter and the events camera picker.',
   // settings > connection section (E7.1)
   sectionConnection: 'Connection',
+  // settings > storage section
+  sectionStorage: 'Storage',
+  storageDescription:
+    'Disk usage for each mount Frigate reports. Figures come straight from Frigate and refresh only when you ask.',
+  storageRefresh: 'Refresh',
+  storageRefreshing: 'Refreshing…',
+  storageLoading: 'Loading…',
+  storageLoadError: 'Could not load storage usage.',
+  storageEmpty: 'Frigate reported no storage mounts.',
+  storageFree: 'free',
   // settings > about + master-detail nav
   sectionAbout: 'About',
   aboutTagline: 'A calmer front-end for Frigate',

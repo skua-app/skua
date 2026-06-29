@@ -7,6 +7,7 @@
   import CamerasSection from '$lib/components/settings/CamerasSection.svelte'
   import ConnectionSection from '$lib/components/settings/ConnectionSection.svelte'
   import GroupsSection from '$lib/components/settings/GroupsSection.svelte'
+  import StorageSection from '$lib/components/settings/StorageSection.svelte'
   import MobileAppearance from '$lib/components/settings/MobileAppearance.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
@@ -18,13 +19,12 @@
   import { ui } from '$lib/i18n/strings'
   import type { IconName } from '$lib/icons'
 
-  type SectionId = 'appearance' | 'cameras' | 'groups' | 'connection' | 'about'
+  type SectionId = 'appearance' | 'cameras' | 'groups' | 'connection' | 'storage' | 'about'
   type SectionItem = { id: SectionId; label: string; icon: IconName }
   type NavGroup = { label: string; items: SectionItem[] }
 
-  // Mirrors the prototype's SET_NAV grouping. Storage slots into the
-  // System group once GET /api/storage exists; that row is intentionally
-  // deferred until the endpoint lands.
+  // Mirrors the prototype's SET_NAV grouping. Storage sits in the System
+  // group, before About.
   const navGroups: NavGroup[] = [
     {
       label: ui.settingsGroupPersonalize,
@@ -40,7 +40,10 @@
     },
     {
       label: ui.settingsGroupSystem,
-      items: [{ id: 'about', label: ui.sectionAbout, icon: 'info' }]
+      items: [
+        { id: 'storage', label: ui.sectionStorage, icon: 'hardDrive' },
+        { id: 'about', label: ui.sectionAbout, icon: 'info' }
+      ]
     }
   ]
 
@@ -104,6 +107,8 @@
     <GroupsSection />
   {:else if id === 'connection'}
     <ConnectionSection />
+  {:else if id === 'storage'}
+    <StorageSection />
   {:else if id === 'about'}
     <AboutSection />
   {/if}

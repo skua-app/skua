@@ -10,7 +10,7 @@ declare global {
     // mobile Settings drill-in so the native back gesture / browser
     // back pops the drill instead of leaving the /settings route.
     interface PageState {
-      settingsSection?: 'cameras' | 'groups' | 'connection' | 'about'
+      settingsSection?: 'cameras' | 'groups' | 'connection' | 'storage' | 'about'
     }
   }
 }

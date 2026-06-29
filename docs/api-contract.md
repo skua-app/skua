@@ -88,6 +88,26 @@ type AppConfig = {
   frigate_ui_url: string   // base URL for "Open in Frigate" deep-links
 }
 
+// GET /api/storage → StorageInfo
+// Sourced from Frigate's GET /api/stats service.storage map. mounts is
+// always present, never null; an empty/missing service.storage yields
+// { mounts: [] }. The *_mib figures are mebibytes (1024-based), passed
+// through from Frigate unchanged; `type` carries Frigate's mount_type.
+// Ordering: paths under /media first, all other paths after; within each
+// group sorted by path ascending (puts recordings/clips/db on top,
+// /tmp/cache + /dev/shm at the bottom).
+// Frigate unreachable → 502 { error: "upstream_error", message }.
+type StorageInfo = {
+  mounts: StorageMount[]
+}
+type StorageMount = {
+  path: string       // mount path as Frigate reports it
+  type: string       // Frigate's mount_type
+  total_mib: number  // MiB
+  used_mib: number   // MiB
+  free_mib: number   // MiB
+}
+
 // GET /api/events?camera=&label=&before=&limit=
 //   camera, label: repeatable OR-filters (also accept comma-separated values)
 //   before:        ISO 8601; BFF translates to unix-seconds for Frigate
