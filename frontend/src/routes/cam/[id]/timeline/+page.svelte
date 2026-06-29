@@ -1981,10 +1981,6 @@
   .rush-osd.ff {
     right: 16px;
   }
-  .rush-osd :global(svg) {
-    fill: currentColor;
-    stroke: currentColor;
-  }
 
   /* One centred bar: the transport cluster, a gap, then the meta cluster, both
      centred as a single group (justify-content:center). A max-width keeps the
@@ -2065,12 +2061,6 @@
     width: 40px;
     height: 40px;
   }
-  /* Pin fill+stroke to currentColor so the filled double-triangle VHS glyphs
-     render fully (same fix as the play glyph). */
-  .livebtn.vhs :global(svg) {
-    fill: currentColor;
-    stroke: currentColor;
-  }
   /* Disable the tap-highlight / text-select on a held VHS button so a long
      touch-hold reads as a transport press, not a selection. */
   .livebtn.vhs {
@@ -2142,12 +2132,6 @@
     flex: 0 0 16px;
     color: var(--accent-ink);
     display: inline-flex;
-  }
-  /* Pin fill+stroke to currentColor so the filled-triangle play glyph and
-     the two-bar pause glyph both render fully (same fix as MobileFocus). */
-  .livebtn.playpause :global(svg) {
-    fill: currentColor;
-    stroke: currentColor;
   }
   .scrub {
     display: flex;
