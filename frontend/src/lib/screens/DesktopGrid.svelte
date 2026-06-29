@@ -108,7 +108,6 @@
   <main class="dg-main">
     <div class="dk-pagehead">
       <div class="dk-titlewrap">
-        <div class="dk-h1">{ui.cameras}</div>
         <div class="dk-sub">
           <span class="gd" aria-hidden="true"></span>
           {onlineCount}
@@ -225,26 +224,21 @@
     padding: 24px 28px;
   }
 
-  /* dk-pagehead — large title + online/offline sub on the left; controls right */
+  /* dk-pagehead — toolbar: online/offline status on the left, controls right.
+     The big "Cameras" title was dropped (the nav tab marks the route), so the
+     row centers its items instead of bottom-aligning against a tall title. */
   .dk-pagehead {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: space-between;
     gap: 18px;
     margin-bottom: 20px;
   }
   .dk-titlewrap {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 12px;
     min-width: 0;
-  }
-  .dk-h1 {
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.6px;
-    line-height: 1.05;
-    color: var(--text);
   }
   .dk-sub {
     display: flex;
