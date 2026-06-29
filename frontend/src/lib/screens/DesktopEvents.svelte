@@ -90,12 +90,6 @@
 </script>
 
 <div class="dk-page wide">
-  <div class="dk-pagehead">
-    <div class="dk-titlewrap">
-      <div class="dk-h1">{ui.eventsTitle}</div>
-    </div>
-  </div>
-
   <div class="dk-filterbar">
     {#if groups.length > 0}
       <div class="dk-filterrow">
@@ -194,29 +188,9 @@
 
 <style>
   .dk-page {
-    padding: 24px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
-  }
-
-  /* dk-pagehead */
-  .dk-pagehead {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 18px;
-    margin-bottom: 20px;
-  }
-  .dk-titlewrap {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    min-width: 0;
-  }
-  .dk-h1 {
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.6px;
-    line-height: 1.05;
-    color: var(--text);
+    /* No in-page "Events" H1 — the top-nav tab marks the route. The filter bar
+       leads directly, with enough top room to clear the sticky app header. */
+    padding: 28px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
   }
 
   /* dk-filterbar */
