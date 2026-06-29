@@ -116,9 +116,6 @@
 
 {#if isDesktop}
   <div class="dk-page wide">
-    <div class="dk-pagehead">
-      <div class="dk-h1">{ui.settings}</div>
-    </div>
     <div class="dk-settings">
       <nav class="dk-setnav" aria-label={ui.settings}>
         {#each navGroups as g (g.label)}
@@ -196,23 +193,10 @@
      DESKTOP — master / detail (dk-settings)
      ============================================================ */
   .dk-page {
-    padding: 24px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
-  }
-  .dk-pagehead {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 18px;
-    /* Tightened so each section's own heading reads as sitting under the
-       "Settings" page head rather than floating in a large empty band. */
-    margin-bottom: 12px;
-  }
-  .dk-h1 {
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.6px;
-    line-height: 1.05;
-    color: var(--text);
+    /* No in-page "Settings" H1 — the top-nav tab marks the route and each
+       pane renders its own section heading. The grid leads directly, with
+       enough top room to clear the sticky 64px app header without cramping. */
+    padding: 28px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
   }
   .dk-settings {
     display: grid;
