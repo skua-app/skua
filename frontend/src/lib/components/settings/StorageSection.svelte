@@ -29,6 +29,56 @@
   function camName(id: string): string {
     return camerasStore.cameras.find((c) => c.id === id)?.name ?? id
   }
+
+  const PALETTE_SIZE = 12
+
+  // A camera's color is its stable index in the canonical Frigate order
+  // (camerasStore.cameras), so it stays the same regardless of the usage
+  // sort, cycling past 12. A camera present in storage but gone from the
+  // store (e.g. removed) falls back to the neutral token.
+  function camColor(id: string): string {
+    const idx = camerasStore.cameras.findIndex((c) => c.id === id)
+    if (idx >= 0) return `var(--cam-${idx % PALETTE_SIZE})`
+    return 'var(--cam-other)'
+  }
+
+  // Identify the recordings mount from the data, not a hardcoded path: the
+  // disk total implied by any camera's usage_mib / usage_percent matches the
+  // recordings mount's total_mib. recordings + clips can share a filesystem
+  // and report identical totals, so prefer a path containing "record".
+  function recordingsMountPath(): string | null {
+    const cam = storageStore.cameras.find((c) => c.usage_percent > 0)
+    if (!cam) return null
+    const denom = cam.usage_mib / (cam.usage_percent / 100)
+    if (!Number.isFinite(denom) || denom <= 0) return null
+    const matches = storageStore.mounts.filter(
+      (m) => m.total_mib > 0 && Math.abs(m.total_mib - denom) / denom <= 0.01
+    )
+    const first = matches[0]
+    if (!first) return null
+    if (matches.length === 1) return first.path
+    const rec = matches.find((m) => m.path.toLowerCase().includes('record'))
+    return (rec ?? first).path
+  }
+
+  const recPath = $derived(recordingsMountPath())
+
+  // Render the recordings mount first, then the rest in backend order. Derive
+  // a local list — never mutate the store array.
+  const orderedMounts = $derived.by(() => {
+    if (recPath === null) return storageStore.mounts
+    const rec = storageStore.mounts.find((m) => m.path === recPath)
+    if (!rec) return storageStore.mounts
+    return [rec, ...storageStore.mounts.filter((m) => m.path !== recPath)]
+  })
+
+  // Unaccounted "other" used space on the recordings mount (clips/db/etc.):
+  // the used fraction beyond the sum of the per-camera shares. Never negative,
+  // and intentionally not normalized — camera segments stay honest share-of-disk.
+  function otherPct(used: number, total: number): number {
+    const sum = storageStore.cameras.reduce((s, c) => s + clampPct(c.usage_percent), 0)
+    return Math.max(0, usedPct(used, total) - sum)
+  }
 </script>
 
 <section id="storage" class="settings-section dk-set-section">
@@ -60,14 +110,30 @@
     <div class="dk-card st-state">{ui.storageEmpty}</div>
   {:else}
     <div class="dk-card">
-      {#each storageStore.mounts as m (m.path)}
+      {#each orderedMounts as m (m.path)}
         <div class="st-mount">
           <div class="st-row1">
             <span class="st-path mono">{m.path}</span>
             {#if m.type}<span class="st-type">{m.type}</span>{/if}
           </div>
           <div class="st-bar" aria-hidden="true">
-            <span class="st-fill" style:width={`${usedPct(m.used_mib, m.total_mib)}%`}></span>
+            {#if m.path === recPath}
+              {#each storageStore.cameras as c (c.id)}
+                <span
+                  class="st-seg"
+                  style:width={`${clampPct(c.usage_percent)}%`}
+                  style:background={camColor(c.id)}
+                  title={`${camName(c.id)} · ${formatSize(c.usage_mib)}`}
+                ></span>
+              {/each}
+              <span
+                class="st-seg"
+                style:width={`${otherPct(m.used_mib, m.total_mib)}%`}
+                style:background="var(--cam-other)"
+              ></span>
+            {:else}
+              <span class="st-fill" style:width={`${usedPct(m.used_mib, m.total_mib)}%`}></span>
+            {/if}
           </div>
           <div class="st-row2">
             <span class="st-usage mono">{formatSize(m.used_mib)} / {formatSize(m.total_mib)}</span>
@@ -85,10 +151,15 @@
         {#each storageStore.cameras as c (c.id)}
           <div class="st-mount">
             <div class="st-row1">
+              <span class="st-swatch" style:background={camColor(c.id)} aria-hidden="true"></span>
               <span class="st-cam">{camName(c.id)}</span>
             </div>
             <div class="st-bar" aria-hidden="true">
-              <span class="st-fill" style:width={`${clampPct(c.usage_percent)}%`}></span>
+              <span
+                class="st-fill"
+                style:width={`${clampPct(c.usage_percent)}%`}
+                style:background={camColor(c.id)}
+              ></span>
             </div>
             <div class="st-row2">
               <span class="st-usage mono"
@@ -236,6 +307,7 @@
     border-radius: 999px;
   }
   .st-bar {
+    display: flex;
     height: 7px;
     margin: 10px 0 8px;
     border-radius: 999px;
@@ -243,11 +315,23 @@
     overflow: hidden;
   }
   .st-fill {
-    display: block;
     height: 100%;
     border-radius: 999px;
     background: var(--accent);
     transition: width 0.2s ease;
+  }
+  /* Stacked per-camera segments in the recordings mount bar. The track clips
+     the ends via overflow:hidden, so segments carry no individual radius. */
+  .st-seg {
+    flex: 0 0 auto;
+    height: 100%;
+  }
+  /* Per-camera color swatch before the camera name. */
+  .st-swatch {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 3px;
   }
   .st-row2 {
     display: flex;
