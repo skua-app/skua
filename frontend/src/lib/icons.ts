@@ -82,17 +82,13 @@ export type IconName =
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'm15 18-6-6 6-6' },
   play: {
-    paths: 'M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z',
-    fill: 'currentColor',
-    stroke: 'none'
+    paths: 'M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z'
   },
   pause: {
     rects: [
       { x: 14, y: 3, width: 5, height: 18, rx: 1 },
       { x: 5, y: 3, width: 5, height: 18, rx: 1 }
-    ],
-    fill: 'currentColor',
-    stroke: 'none'
+    ]
   },
   mute: {
     paths:
@@ -304,17 +300,13 @@ export const ICONS: Record<IconName, IconDef> = {
     paths: [
       'M12 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 12 18z',
       'M22 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 22 18z'
-    ],
-    fill: 'currentColor',
-    stroke: 'none'
+    ]
   },
   fastForward: {
     paths: [
       'M12 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 12 18z',
       'M2 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 2 18z'
-    ],
-    fill: 'currentColor',
-    stroke: 'none'
+    ]
   },
   // Event-kind glyphs (see kindIcon below). Drawn to read at ~14px in the
   // filter chips and event rows/cards.
