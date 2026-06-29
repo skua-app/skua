@@ -278,8 +278,11 @@ export const ICONS: Record<IconName, IconDef> = {
     stroke: 'none'
   },
   themeAuto: {
-    paths: 'M12 18a6 6 0 0 0 0-12v12z',
-    circles: [{ cx: 12, cy: 12, r: 10 }]
+    rects: [{ x: 2, y: 3, width: 20, height: 14, rx: 2 }],
+    lines: [
+      { x1: 8, y1: 21, x2: 16, y2: 21 },
+      { x1: 12, y1: 17, x2: 12, y2: 21 }
+    ]
   },
   grip: {
     circles: [

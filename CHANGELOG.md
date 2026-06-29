@@ -21,6 +21,7 @@ Added
 Fixed
 
 - Settings (desktop): each section's heading now sits snug under the "Settings" page title instead of floating below a large empty gap.
+- The "auto" theme toggle in the header now uses a clearer monitor glyph that reads as "follow system", distinct from the sun (light) and moon (dark) icons.
 
 ## [0.15.0] — 2026-06-29
 
