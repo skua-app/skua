@@ -69,6 +69,9 @@ export const ui = {
   storageLoadError: 'Could not load storage usage.',
   storageEmpty: 'Frigate reported no storage mounts.',
   storageFree: 'free',
+  storageCameras: 'Recordings by camera',
+  storagePerHr: '/hr',
+  storagePerCameraEmpty: 'No per-camera recordings data.',
   // settings > about + master-detail nav
   sectionAbout: 'About',
   aboutTagline: 'A calmer front-end for Frigate',

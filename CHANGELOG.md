@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Added
 
-- Storage usage screen under Settings → System. It shows each disk mount Frigate reports — recordings, clips, the database, and the cache/shared-memory mounts — with a usage bar and the used / total / free figures for each, plus a manual Refresh button. The numbers come straight from Frigate and load when you open the screen (no background polling). Backed by a new `GET /api/storage` endpoint that normalizes and sorts Frigate's stats into a stable list.
+- Storage usage screen under Settings → System. It shows each disk mount Frigate reports — recordings, clips, the database, and the cache/shared-memory mounts — with a usage bar and the used / total / free figures for each, plus a manual Refresh button. Below the mounts, a per-camera breakdown lists how much of the recordings disk each camera is using (heaviest first) with a usage bar, its share of the disk, and its recording write rate per hour. The numbers come straight from Frigate and load when you open the screen (no background polling). Backed by a new `GET /api/storage` endpoint that normalizes and sorts Frigate's stats and per-camera recordings figures into a stable list; if the per-camera data is unavailable the mounts still load.
 
 ## [0.15.0] — 2026-06-29
 

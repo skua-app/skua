@@ -28,6 +28,16 @@ type MountStat struct {
 	MountType string  `json:"mount_type"`
 }
 
+// CameraRecordingsStorage mirrors one entry of GET /api/recordings/storage,
+// keyed by camera id. Usage is in MiB (same convention as service.storage);
+// Bandwidth is the recording write rate in MiB/hr; UsagePercent is the
+// camera's share of the recordings disk, already normalized 0–100.
+type CameraRecordingsStorage struct {
+	Usage        float64 `json:"usage"`
+	Bandwidth    float64 `json:"bandwidth"`
+	UsagePercent float64 `json:"usage_percent"`
+}
+
 // ConfigResponse is the subset of GET /api/config we parse. Only the cameras
 // subtree is decoded; all other Frigate config keys are ignored.
 type ConfigResponse struct {

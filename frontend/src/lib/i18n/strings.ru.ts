@@ -69,6 +69,9 @@ export const ui = {
   storageLoadError: 'Не удалось загрузить данные о хранилище.',
   storageEmpty: 'Frigate не сообщил ни об одном разделе.',
   storageFree: 'свободно',
+  storageCameras: 'Записи по камерам',
+  storagePerHr: '/ч',
+  storagePerCameraEmpty: 'Нет данных о записях по камерам.',
   // settings > about + master-detail nav
   sectionAbout: 'О приложении',
   aboutTagline: 'Спокойный фронтенд для Frigate',

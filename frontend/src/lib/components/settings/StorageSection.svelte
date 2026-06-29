@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import Icon from '$lib/components/Icon.svelte'
   import { storageStore } from '$lib/stores/storage.svelte'
+  import { camerasStore } from '$lib/stores/cameras.svelte'
   import { formatSize } from '$lib/util/size'
   import { ui } from '$lib/i18n/strings'
 
@@ -14,6 +15,19 @@
   function usedPct(used: number, total: number): number {
     if (!Number.isFinite(used) || !Number.isFinite(total) || total <= 0) return 0
     return Math.max(0, Math.min(100, (used / total) * 100))
+  }
+
+  // The per-camera usage_percent is already normalized 0–100 by the BFF;
+  // clamp defensively before driving the bar width.
+  function clampPct(pct: number): number {
+    if (!Number.isFinite(pct)) return 0
+    return Math.max(0, Math.min(100, pct))
+  }
+
+  // Resolve a camera's display name from the cameras store, falling back to
+  // the Frigate id (same pattern as the events list).
+  function camName(id: string): string {
+    return camerasStore.cameras.find((c) => c.id === id)?.name ?? id
   }
 </script>
 
@@ -62,6 +76,31 @@
         </div>
       {/each}
     </div>
+
+    <h3 class="st-subhead">{ui.storageCameras}</h3>
+    {#if storageStore.cameras.length === 0}
+      <div class="dk-card st-state">{ui.storagePerCameraEmpty}</div>
+    {:else}
+      <div class="dk-card">
+        {#each storageStore.cameras as c (c.id)}
+          <div class="st-mount">
+            <div class="st-row1">
+              <span class="st-cam">{camName(c.id)}</span>
+            </div>
+            <div class="st-bar" aria-hidden="true">
+              <span class="st-fill" style:width={`${clampPct(c.usage_percent)}%`}></span>
+            </div>
+            <div class="st-row2">
+              <span class="st-usage mono"
+                >{formatSize(c.usage_mib)} · {c.usage_percent.toFixed(1)}%</span
+              >
+              <span class="st-free mono">{formatSize(c.bandwidth_mib_per_hr)}{ui.storagePerHr}</span
+              >
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
   {/if}
 </section>
 
@@ -171,6 +210,22 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
+  }
+  .st-cam {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  .st-subhead {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: var(--text);
+    margin: 4px 0 12px;
   }
   .st-type {
     flex: 0 0 auto;

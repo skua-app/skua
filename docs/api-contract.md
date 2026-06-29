@@ -89,16 +89,27 @@ type AppConfig = {
 }
 
 // GET /api/storage → StorageInfo
-// Sourced from Frigate's GET /api/stats service.storage map. mounts is
-// always present, never null; an empty/missing service.storage yields
-// { mounts: [] }. The *_mib figures are mebibytes (1024-based), passed
-// through from Frigate unchanged; `type` carries Frigate's mount_type.
-// Ordering: paths under /media first, all other paths after; within each
-// group sorted by path ascending (puts recordings/clips/db on top,
+// mounts is sourced from Frigate's GET /api/stats service.storage map;
+// cameras is sourced from Frigate's GET /api/recordings/storage. Both arrays
+// are always present, never null; an empty/missing source yields [].
+// The *_mib figures are mebibytes (1024-based), passed through from Frigate
+// unchanged; mount `type` carries Frigate's mount_type.
+// Mount ordering: paths under /media first, all other paths after; within
+// each group sorted by path ascending (puts recordings/clips/db on top,
 // /tmp/cache + /dev/shm at the bottom).
-// Frigate unreachable → 502 { error: "upstream_error", message }.
+// Camera ordering: sorted by usage_mib descending (heaviest first).
+//   usage_mib            — camera's recordings on disk, MiB
+//   bandwidth_mib_per_hr — recording write rate, MiB/hr
+//   usage_percent        — camera's share of the recordings disk, 0–100
+//   id                   — the Frigate camera key, verbatim
+// Error policy: if the mounts source (stats) fails → 502
+// { error: "upstream_error", message }. If only the per-camera source
+// (recordings/storage) fails, the BFF logs a warning and returns the mounts
+// with cameras: [] (HTTP 200) — the per-camera block must not break the
+// mounts view.
 type StorageInfo = {
   mounts: StorageMount[]
+  cameras: StorageCamera[]
 }
 type StorageMount = {
   path: string       // mount path as Frigate reports it
@@ -106,6 +117,12 @@ type StorageMount = {
   total_mib: number  // MiB
   used_mib: number   // MiB
   free_mib: number   // MiB
+}
+type StorageCamera = {
+  id: string                   // Frigate camera key, verbatim
+  usage_mib: number            // MiB
+  bandwidth_mib_per_hr: number // MiB/hr
+  usage_percent: number        // share of recordings disk, 0–100
 }
 
 // GET /api/events?camera=&label=&before=&limit=

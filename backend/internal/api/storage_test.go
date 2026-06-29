@@ -27,19 +27,30 @@ func newStorageHandler(t *testing.T, frigateURL string) *Handler {
 // MiB numbers intact.
 func TestHandleStorage_SortAndPassthrough(t *testing.T) {
 	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/stats" {
+		switch r.URL.Path {
+		case "/api/stats":
+			w.Header().Set("Content-Type", "application/json")
+			// Intentionally unsorted; /dev/shm + /tmp/cache should land after /media.
+			if _, err := fmt.Fprint(w, `{"service":{"storage":{
+				"/tmp/cache":{"total":1024.0,"used":256.0,"free":768.0,"mount_type":"tmpfs"},
+				"/media/frigate/recordings":{"total":500000.5,"used":120000.2,"free":379999.3,"mount_type":"ext4"},
+				"/dev/shm":{"total":128.0,"used":8.0,"free":120.0,"mount_type":"tmpfs"},
+				"/media/frigate/clips":{"total":500000.5,"used":1000.0,"free":499000.5,"mount_type":"ext4"}
+			}}}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+		case "/api/recordings/storage":
+			w.Header().Set("Content-Type", "application/json")
+			// Intentionally unsorted; cam2 heaviest, then cam3, then cam1.
+			if _, err := fmt.Fprint(w, `{
+				"cam1":{"usage":258140.59,"bandwidth":970.67,"usage_percent":6.77},
+				"cam3":{"usage":1053488.36,"bandwidth":2648.65,"usage_percent":27.62},
+				"cam2":{"usage":956768.77,"bandwidth":935.27,"usage_percent":25.08}
+			}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+		default:
 			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		// Intentionally unsorted; /dev/shm + /tmp/cache should land after /media.
-		if _, err := fmt.Fprint(w, `{"service":{"storage":{
-			"/tmp/cache":{"total":1024.0,"used":256.0,"free":768.0,"mount_type":"tmpfs"},
-			"/media/frigate/recordings":{"total":500000.5,"used":120000.2,"free":379999.3,"mount_type":"ext4"},
-			"/dev/shm":{"total":128.0,"used":8.0,"free":120.0,"mount_type":"tmpfs"},
-			"/media/frigate/clips":{"total":500000.5,"used":1000.0,"free":499000.5,"mount_type":"ext4"}
-		}}}`); err != nil {
-			t.Errorf("fprint: %v", err)
 		}
 	}))
 	defer fakeFrigate.Close()
@@ -79,6 +90,22 @@ func TestHandleStorage_SortAndPassthrough(t *testing.T) {
 	if rec.TotalMiB != 500000.5 || rec.UsedMiB != 120000.2 || rec.FreeMiB != 379999.3 {
 		t.Errorf("MiB numbers not passed through: %+v", rec)
 	}
+
+	// Cameras sorted by usage_mib descending: cam3 > cam2 > cam1.
+	wantCamOrder := []string{"cam3", "cam2", "cam1"}
+	if len(resp.Cameras) != len(wantCamOrder) {
+		t.Fatalf("want %d cameras, got %d", len(wantCamOrder), len(resp.Cameras))
+	}
+	for i, want := range wantCamOrder {
+		if resp.Cameras[i].ID != want {
+			t.Errorf("camera[%d]: want id %s, got %s", i, want, resp.Cameras[i].ID)
+		}
+	}
+
+	cam3 := resp.Cameras[0]
+	if cam3.UsageMiB != 1053488.36 || cam3.BandwidthMiBPerHr != 2648.65 || cam3.UsagePercent != 27.62 {
+		t.Errorf("camera numbers not passed through: %+v", cam3)
+	}
 }
 
 // TestHandleStorage_EmptyMap verifies a missing/empty service.storage yields
@@ -86,8 +113,17 @@ func TestHandleStorage_SortAndPassthrough(t *testing.T) {
 func TestHandleStorage_EmptyMap(t *testing.T) {
 	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if _, err := fmt.Fprint(w, `{"service":{}}`); err != nil {
-			t.Errorf("fprint: %v", err)
+		switch r.URL.Path {
+		case "/api/stats":
+			if _, err := fmt.Fprint(w, `{"service":{}}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+		case "/api/recordings/storage":
+			if _, err := fmt.Fprint(w, `{}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	defer fakeFrigate.Close()
@@ -100,13 +136,64 @@ func TestHandleStorage_EmptyMap(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	// Assert the raw JSON carries [] not null.
+	// Assert the raw JSON carries [] not null for both arrays.
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(w.Body.Bytes(), &raw); err != nil {
 		t.Fatalf("decode raw: %v", err)
 	}
 	if string(raw["mounts"]) != "[]" {
 		t.Errorf("want mounts:[] , got %s", string(raw["mounts"]))
+	}
+	if string(raw["cameras"]) != "[]" {
+		t.Errorf("want cameras:[] , got %s", string(raw["cameras"]))
+	}
+}
+
+// TestHandleStorage_PerCameraDegrade verifies that when the per-camera
+// /api/recordings/storage call fails, the mounts still populate and cameras
+// degrades to [] with an overall 200 — the per-camera block must not break
+// the mounts view.
+func TestHandleStorage_PerCameraDegrade(t *testing.T) {
+	fakeFrigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/stats":
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := fmt.Fprint(w, `{"service":{"storage":{
+				"/media/frigate/recordings":{"total":500000.5,"used":120000.2,"free":379999.3,"mount_type":"ext4"}
+			}}}`); err != nil {
+				t.Errorf("fprint: %v", err)
+			}
+		case "/api/recordings/storage":
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer fakeFrigate.Close()
+
+	h := newStorageHandler(t, fakeFrigate.URL)
+	req := httptest.NewRequest(http.MethodGet, "/api/storage", nil)
+	w := httptest.NewRecorder()
+	h.handleStorage(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body=%s)", w.Code, w.Body.String())
+	}
+	body := w.Body.Bytes()
+	var resp storageResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp.Mounts) != 1 {
+		t.Fatalf("want 1 mount despite per-camera failure, got %d", len(resp.Mounts))
+	}
+	// cameras must be present and empty, not null.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode raw: %v", err)
+	}
+	if string(raw["cameras"]) != "[]" {
+		t.Errorf("want cameras:[] on degrade, got %s", string(raw["cameras"]))
 	}
 }
 
