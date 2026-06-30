@@ -109,10 +109,17 @@
     <div class="dk-pagehead">
       <div class="dk-titlewrap">
         <div class="dk-sub">
-          <span class="gd" aria-hidden="true"></span>
-          {onlineCount}
-          {ui.online} · {offlineCount}
-          {ui.offline}
+          <span class="grp">
+            <span class="gd" aria-hidden="true"></span>
+            {onlineCount}
+            {ui.online}
+          </span>
+          <span class="sep" aria-hidden="true">·</span>
+          <span class="grp">
+            <span class="gd off" aria-hidden="true"></span>
+            {offlineCount}
+            {ui.offline}
+          </span>
         </div>
       </div>
       <div class="dk-controls">
@@ -247,12 +254,25 @@
     font-size: 14px;
     color: var(--text-2);
   }
+  /* online / offline counts each lead with their own color-coded dot. */
+  .dk-sub .grp {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .dk-sub .sep {
+    color: var(--text-3);
+  }
   .dk-sub .gd {
     width: 8px;
     height: 8px;
     border-radius: 50%;
     background: var(--online);
     display: inline-block;
+    flex: 0 0 auto;
+  }
+  .dk-sub .gd.off {
+    background: var(--warn);
   }
   .dk-controls {
     display: flex;
