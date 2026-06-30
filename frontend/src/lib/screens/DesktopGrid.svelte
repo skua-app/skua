@@ -114,12 +114,14 @@
             {onlineCount}
             {ui.online}
           </span>
-          <span class="sep" aria-hidden="true">·</span>
-          <span class="grp">
-            <span class="gd off" aria-hidden="true"></span>
-            {offlineCount}
-            {ui.offline}
-          </span>
+          {#if offlineCount > 0}
+            <span class="sep" aria-hidden="true">·</span>
+            <span class="grp">
+              <span class="gd off" aria-hidden="true"></span>
+              {offlineCount}
+              {ui.offline}
+            </span>
+          {/if}
         </div>
       </div>
       <div class="dk-controls">

@@ -23,7 +23,7 @@ Fixed
 - Settings (desktop): dropped the redundant in-page "Settings" title so each section's own heading leads directly under the top bar — the active nav tab already marks the route, and the empty band above the heading is gone.
 - Events (desktop): dropped the redundant in-page "Events" title so the filter bar leads directly under the top bar — the active nav tab already marks the route.
 - Cameras (desktop): replaced the redundant in-page "Cameras" title with a compact toolbar — the online/offline status leads on the left and the group / HD-ECO / density controls stay on the right.
-- Cameras (desktop): the status now color-codes the offline count with its own amber dot, alongside the green online dot, so each count reads unambiguously.
+- Cameras (desktop): the status now color-codes the offline count with its own amber dot, alongside the green online dot, so each count reads unambiguously; when every camera is online the offline count is hidden entirely, leaving just the online count.
 - The "auto" theme toggle in the header now uses a corrected contrast glyph (a half-filled circle) that renders cleanly, distinct from the sun (light) and moon (dark) icons.
 
 ## [0.15.0] — 2026-06-29
