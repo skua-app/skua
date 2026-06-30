@@ -14,9 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-06-30
+
 Added
 
-- Storage usage screen under Settings → System. It shows each disk mount Frigate reports — recordings, clips, the database, and the cache/shared-memory mounts — with a usage bar and the used / total / free figures for each, plus a manual Refresh button. Below the mounts, a per-camera breakdown lists how much of the recordings disk each camera is using (heaviest first) with a usage bar, its share of the disk, and its recording write rate per hour. Each camera gets a distinct, stable color shown as a swatch and its bar fill, and the recordings mount is shown first with its used bar broken into the matching per-camera color segments plus a neutral remainder for clips/database/other space — so you can see at a glance which cameras fill the disk. The numbers come straight from Frigate and load when you open the screen (no background polling). Backed by a new `GET /api/storage` endpoint that normalizes and sorts Frigate's stats and per-camera recordings figures into a stable list; if the per-camera data is unavailable the mounts still load.
+- Storage usage screen under Settings → System. It shows each disk mount Frigate reports — recordings, clips, the database, and the cache/shared-memory mounts — with a usage bar and the used / total / free figures for each, plus a manual Refresh button. The numbers come straight from Frigate and load when you open the screen (no background polling).
+- Below the mounts, a per-camera breakdown lists how much of the recordings disk each camera is using (heaviest first) with a usage bar, its share of the disk, and its recording write rate per hour.
+- Each camera gets a distinct, stable color shown as a swatch and its bar fill, and the recordings mount is shown first with its used bar broken into the matching per-camera color segments plus a neutral remainder for clips/database/other space — so you can see at a glance which cameras fill the disk.
+- Backed by a new `GET /api/storage` endpoint that normalizes and sorts Frigate's stats and per-camera recordings figures into a stable list; if the per-camera data is unavailable the mounts still load.
 
 Fixed
 
@@ -683,7 +688,8 @@ replaceState: true })` so a single back-tap from focus always lands
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/skua-app/skua/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/skua-app/skua/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/skua-app/skua/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/skua-app/skua/compare/v0.12.1...v0.13.0
