@@ -59,6 +59,19 @@ export const ui = {
   groupsDescription: 'Объедините камеры в группы для фильтра стены и выбора камер в событиях.',
   // settings > connection section (E7.1)
   sectionConnection: 'Подключение',
+  // settings > storage section
+  sectionStorage: 'Хранилище',
+  storageDescription:
+    'Использование диска для каждого раздела, о котором сообщает Frigate. Данные приходят напрямую из Frigate и обновляются только по запросу.',
+  storageRefresh: 'Обновить',
+  storageRefreshing: 'Обновление…',
+  storageLoading: 'Загрузка…',
+  storageLoadError: 'Не удалось загрузить данные о хранилище.',
+  storageEmpty: 'Frigate не сообщил ни об одном разделе.',
+  storageFree: 'свободно',
+  storageCameras: 'Записи по камерам',
+  storagePerHr: '/ч',
+  storagePerCameraEmpty: 'Нет данных о записях по камерам.',
   // settings > about + master-detail nav
   sectionAbout: 'О приложении',
   aboutTagline: 'Спокойный фронтенд для Frigate',

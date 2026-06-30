@@ -7,6 +7,7 @@
   import CamerasSection from '$lib/components/settings/CamerasSection.svelte'
   import ConnectionSection from '$lib/components/settings/ConnectionSection.svelte'
   import GroupsSection from '$lib/components/settings/GroupsSection.svelte'
+  import StorageSection from '$lib/components/settings/StorageSection.svelte'
   import MobileAppearance from '$lib/components/settings/MobileAppearance.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import { camerasStore } from '$lib/stores/cameras.svelte'
@@ -18,13 +19,12 @@
   import { ui } from '$lib/i18n/strings'
   import type { IconName } from '$lib/icons'
 
-  type SectionId = 'appearance' | 'cameras' | 'groups' | 'connection' | 'about'
+  type SectionId = 'appearance' | 'cameras' | 'groups' | 'connection' | 'storage' | 'about'
   type SectionItem = { id: SectionId; label: string; icon: IconName }
   type NavGroup = { label: string; items: SectionItem[] }
 
-  // Mirrors the prototype's SET_NAV grouping. Storage slots into the
-  // System group once GET /api/storage exists; that row is intentionally
-  // deferred until the endpoint lands.
+  // Mirrors the prototype's SET_NAV grouping. Storage sits in the System
+  // group, before About.
   const navGroups: NavGroup[] = [
     {
       label: ui.settingsGroupPersonalize,
@@ -40,7 +40,10 @@
     },
     {
       label: ui.settingsGroupSystem,
-      items: [{ id: 'about', label: ui.sectionAbout, icon: 'info' }]
+      items: [
+        { id: 'storage', label: ui.sectionStorage, icon: 'hardDrive' },
+        { id: 'about', label: ui.sectionAbout, icon: 'info' }
+      ]
     }
   ]
 
@@ -104,6 +107,8 @@
     <GroupsSection />
   {:else if id === 'connection'}
     <ConnectionSection />
+  {:else if id === 'storage'}
+    <StorageSection />
   {:else if id === 'about'}
     <AboutSection />
   {/if}
@@ -111,9 +116,6 @@
 
 {#if isDesktop}
   <div class="dk-page wide">
-    <div class="dk-pagehead">
-      <div class="dk-h1">{ui.settings}</div>
-    </div>
     <div class="dk-settings">
       <nav class="dk-setnav" aria-label={ui.settings}>
         {#each navGroups as g (g.label)}
@@ -191,21 +193,10 @@
      DESKTOP — master / detail (dk-settings)
      ============================================================ */
   .dk-page {
-    padding: 24px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
-  }
-  .dk-pagehead {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 18px;
-    margin-bottom: 20px;
-  }
-  .dk-h1 {
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.6px;
-    line-height: 1.05;
-    color: var(--text);
+    /* No in-page "Settings" H1 — the top-nav tab marks the route and each
+       pane renders its own section heading. The grid leads directly, with
+       enough top room to clear the sticky 64px app header without cramping. */
+    padding: 28px 28px calc(env(safe-area-inset-bottom, 0px) + 48px);
   }
   .dk-settings {
     display: grid;

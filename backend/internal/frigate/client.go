@@ -97,6 +97,35 @@ func (c *Client) GetStats(ctx context.Context) (*StatsResponse, error) {
 	return &stats, nil
 }
 
+// GetRecordingsStorage fetches /api/recordings/storage from Frigate and
+// returns the parsed per-camera map. Keys are camera ids; values carry
+// usage (MiB), bandwidth (MiB/hr), and usage_percent (share of recordings
+// disk). This is the only Frigate source for per-camera recordings usage.
+func (c *Client) GetRecordingsStorage(ctx context.Context) (map[string]CameraRecordingsStorage, error) {
+	url := fmt.Sprintf("%s/api/recordings/storage", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("frigate recordings storage: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			slog.Debug("failed to close response body", "error", err)
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("frigate recordings storage returned %d", resp.StatusCode)
+	}
+	var storage map[string]CameraRecordingsStorage
+	if err := json.NewDecoder(resp.Body).Decode(&storage); err != nil {
+		return nil, fmt.Errorf("decode recordings storage: %w", err)
+	}
+	return storage, nil
+}
+
 // GetConfig fetches /api/config from Frigate and returns the parsed response.
 // Only the cameras subtree is decoded; the rest of the Frigate config is
 // dropped silently.

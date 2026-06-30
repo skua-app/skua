@@ -158,6 +158,42 @@ export async function fetchConfig(): Promise<AppConfig> {
   return apiFetch<AppConfig>('/api/config')
 }
 
+// StorageMount is one disk mount Frigate reports in stats.service.storage,
+// normalized by the BFF. The *_mib figures are mebibytes (1024-based),
+// passed through from Frigate unchanged. `type` is Frigate's mount_type.
+export type StorageMount = {
+  path: string
+  type: string
+  total_mib: number
+  used_mib: number
+  free_mib: number
+}
+
+// StorageCamera is one camera's recordings usage, sourced from Frigate's
+// /api/recordings/storage. usage_mib and bandwidth_mib_per_hr pass through
+// unchanged (MiB and MiB/hr); usage_percent is the camera's share of the
+// recordings disk, already normalized 0–100. id is the Frigate camera key.
+export type StorageCamera = {
+  id: string
+  usage_mib: number
+  bandwidth_mib_per_hr: number
+  usage_percent: number
+}
+
+// StorageInfo is the GET /api/storage envelope. Both mounts and cameras are
+// always present and never null; an empty/missing source yields an empty
+// array. The BFF sorts mounts (/media paths first, then ascending) and sorts
+// cameras by usage_mib descending. A failed per-camera fetch still returns the
+// mounts with cameras: [].
+export type StorageInfo = {
+  mounts: StorageMount[]
+  cameras: StorageCamera[]
+}
+
+export async function fetchStorage(): Promise<StorageInfo> {
+  return apiFetch<StorageInfo>('/api/storage')
+}
+
 export async function fetchEvents(q: EventsQuery = {}): Promise<EventsResponse> {
   const params = new URLSearchParams()
   if (q.cameras) for (const c of q.cameras) params.append('camera', c)

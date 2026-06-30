@@ -24,6 +24,10 @@ export type IconCircle = {
 
 export type IconDef = {
   paths?: string | string[]
+  // Solid-filled sub-paths (fill currentColor, no stroke) rendered alongside
+  // the stroked primitives — lets one glyph mix a stroked outline with a
+  // filled region (e.g. the half-disc in the contrast/auto-theme icon).
+  fillPaths?: string | string[]
   rects?: IconRect[]
   lines?: IconLine[]
   circles?: IconCircle[]
@@ -78,6 +82,7 @@ export type IconName =
   | 'car'
   | 'paw'
   | 'tag'
+  | 'hardDrive'
 
 export const ICONS: Record<IconName, IconDef> = {
   back: { paths: 'm15 18-6-6 6-6' },
@@ -276,9 +281,12 @@ export const ICONS: Record<IconName, IconDef> = {
     fill: 'currentColor',
     stroke: 'none'
   },
+  // "Auto" theme = Lucide "contrast": a stroked outer ring with the right
+  // half filled solid, so it reads as a clean contrast glyph (not a hollow
+  // outline). The half-disc is a fillPath; the ring is a stroked circle.
   themeAuto: {
-    paths: 'M12 18a6 6 0 0 0 0-12v12z',
-    circles: [{ cx: 12, cy: 12, r: 10 }]
+    circles: [{ cx: 12, cy: 12, r: 10 }],
+    fillPaths: 'M12 18a6 6 0 0 0 0-12v12z'
   },
   grip: {
     circles: [
@@ -337,6 +345,15 @@ export const ICONS: Record<IconName, IconDef> = {
     paths:
       'M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z',
     circles: [{ cx: 7.5, cy: 7.5, r: 0.5, fill: 'currentColor', stroke: 'none' }]
+  },
+  hardDrive: {
+    paths:
+      'M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
+    lines: [
+      { x1: 22, y1: 12, x2: 2, y2: 12 },
+      { x1: 6, y1: 16, x2: 6.01, y2: 16 },
+      { x1: 10, y1: 16, x2: 10.01, y2: 16 }
+    ]
   }
 }
 
