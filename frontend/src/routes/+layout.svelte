@@ -38,10 +38,11 @@
   // unfortunate throw can't blank the entire shell — +error.svelte handles
   // SvelteKit-level errors, this handles bootstrap-time fallout.
   onMount(() => {
-    // SW registration is deliberately silent: registerType: 'prompt' in
-    // vite.config.ts means a newer SW waits in the background and only
-    // takes over on the next cold start. No prompt UI; the household app
-    // gets the next version when iOS relaunches the PWA.
+    // registerType: 'autoUpdate' in vite.config.ts (with skipWaiting +
+    // clientsClaim) means a newer SW activates as soon as it is found.
+    // registerSW({ immediate: true }) registers on load and reloads the
+    // page once when the new SW takes over, so updates land on the next
+    // launch (next cold start on iOS PWA when the household relaunches).
     try {
       registerSW({ immediate: true })
     } catch (err) {
