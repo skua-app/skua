@@ -1,103 +1,61 @@
 # Skua
 
-Self-hosted Progressive Web App for Frigate NVR. WebRTC-first,
-iOS-optimised, LAN-only by design.
+A self-hosted companion app for Frigate NVR. Fast live viewing and an events feed that groups detections into moments, on your phone or your desktop.
 
-Skua is a focused live + events client for [Frigate](https://frigate.video).
-It is built for households running Frigate at home that want a faster,
-more stable day-to-day viewing experience — especially from an iPhone
-home-screen PWA — without replacing Frigate's own UI for admin,
-recording browser, or Explore. It is not a multi-tenant product, not a
-Frigate UI replacement, and not designed to be exposed to the public
-internet on its own.
+Skua is a focused live-and-events client for [Frigate](https://frigate.video). It's for people who run Frigate at home and want a quick, low-latency way to check their cameras day to day, without giving up Frigate's own UI for admin, Explore, the recording browser, and settings. It has no accounts and no built-in login, so you decide how it's reached: plenty of people run it on the LAN only, others put it behind their own reverse proxy with auth, a VPN, or a tunnel for remote access. It isn't a multi-tenant product and it isn't a full Frigate UI replacement.
 
-## ⚠️ Security and access model
+## What Skua is
+
+Skua does a few things and tries to do them well:
+
+- **Live focus view.** One camera over WebRTC (WHEP), typically under 500 ms of latency. Pinch and wheel to zoom.
+- **Camera grid.** JPEG snapshot tiles at 1 Hz, in full-resolution HD or a bandwidth-saving ECO mode that's resized on the server. No heavy live grid to stall the first paint.
+- **Events as moments.** Nearby detections collapse into a single moment with a representative frame, so you read "the courier came by" instead of scrolling twelve near-identical rows. More on this below.
+- **Recording timeline.** Scrub back through a camera's recordings and play past footage inline, reached straight from the focus view.
+
+It installs to an iPhone, Android, or desktop home screen as a PWA. The installed app opens instantly (the shell is precached) and tells you clearly when the server is unreachable instead of hanging.
+
+On why it feels quick: the live view uses WebRTC for sub-500 ms latency, the grid uses light snapshot tiles instead of a live MSE grid, and the installed app cold-opens from cache. On iOS in particular this sidesteps the MSE timeouts and slow first paint that make Frigate's own grid painful to check from a home-screen icon. Frigate's UI stays the right tool for everything else.
+
+## Security and access model
 
 > **Skua has no application-level login. By design.**
 >
-> It expects to run on a trusted local network. The default deployment
-> is reachable at the Docker host's address — nothing more.
+> It doesn't ship accounts or its own auth, so you control how it's reached. Out of the box it's meant for a trusted network, at the Docker host's address. For remote access, put it behind your own layer: a reverse proxy with auth, a VPN, or a zero-trust tunnel. Plenty of people run it that way. What you shouldn't do is expose it raw to the internet with nothing in front.
 >
-> Putting Skua on the public internet without your own auth layer
-> (reverse proxy with auth, VPN, or zero-trust tunnel) is unsafe and
-> unsupported. Threat model and hardening recommendations live in
-> [SECURITY.md](SECURITY.md).
+> This is a scope decision, not a missing feature. Threat model and hardening notes live in [SECURITY.md](SECURITY.md).
 
-## Why Skua and not Frigate's PWA
+Mutating API routes also carry a `Sec-Fetch-Site` cross-site guard. That's origin hygiene against in-browser drive-by requests, not authentication.
 
-Frigate's own PWA is excellent for everything-Frigate — admin tasks,
-the Explore view, history scrubbing, the recording browser, settings.
-It is the right tool for that and Skua does not try to replace it.
+## Moments
 
-Skua is built for the day-to-day "check the cameras quickly"
-pattern, especially on iOS, where Frigate's MSE-based grid has
-documented stability issues (MSE timeouts, slow first paint on install).
-Skua replaces only that workflow — WebRTC for the focus view,
-JPEG snapshots for the grid, inline HEVC clip playback for events — and
-ships as a single static binary under 9 MB.
+Frigate gives you a stream of detections. Left raw, that's a long flat list where the same event shows up as a dozen near-identical rows: one person walking past the drive can be ten entries a minute apart.
 
-It also rolls recent Frigate detections into **moments**: nearby
-detections on the same camera (within a 5-minute gap) collapse into a
-single entry with a representative frame, so a long flat list of
-near-duplicate detections becomes a short list of "the cat came back
-twice this afternoon". On opening the app you get a "while you were
-away" sheet of unseen moments grouped per camera, with the unseen count
-on a header bell you can reopen anytime. Opening a moment marks just
-that one seen; a mark-all-seen action clears the rest; dismissing the
-sheet never marks anything seen. Seen-state is household-shared (no
-accounts). Lookback (6 to 72 hours) and the maximum moments shown live
-in **Settings → Appearance**.
+A moment is Skua's answer to that. Detections close together on the same camera (within a 5-minute gap) collapse into one moment with a representative frame. The flat list becomes a short, readable one: "someone at the front door, 4:12pm", not forty rows around 4:12pm.
+
+When you open the app after time away, Skua shows a "while you were away" sheet: recent moments listed newest first, each tagged with its camera, the unseen ones marked, and a filter to switch between all moments and unseen only. The header carries a bell with the unseen count you can reopen anytime. Opening a moment marks only that one seen. A mark-all action clears the rest. Dismissing the sheet marks nothing. Seen-state is shared across the household, so if someone else already looked, you're not both chasing the same alert. There are no accounts.
+
+How far back the digest looks (6 to 72 hours) and how many moments it shows live in **Settings → Appearance**.
 
 ## Features
 
-- Live single-camera focus view via WHEP (sub-500 ms latency).
-- Multi-camera grid with HD/ECO snapshot modes (1 Hz JPEG tiles,
-  server-side resize for ECO).
-- Real-time events list with cam, kind, and group filters plus
-  infinite scroll.
-- Detections rolled up into **moments** with a "while you were away"
-  digest on open and a header bell with the unseen count (household-shared
-  seen-state, lookback configurable from Settings).
-- Inline event clip playback that works on iOS Safari (HEVC
-  `hev1`→`hvc1` retag plus a Range-aware LRU cache).
-- Pinch and scroll-wheel zoom on the live focus view and event clips.
+- Live single-camera focus over WHEP, typically under 500 ms latency, with pinch and wheel zoom.
+- Multi-camera grid with HD and ECO snapshot modes (1 Hz JPEG tiles, server-side resize for ECO).
+- Events grouped into moments, with a "while you were away" digest on open (all/unseen filter) and a header bell showing the unseen count. Seen-state is household-shared; lookback is configurable.
+- Recording timeline per camera: scrub and play back past footage inline, from the focus view.
+- Real-time events list with camera, type, and group filters, plus infinite scroll.
+- Inline event clip playback that works on iOS Safari (HEVC `hev1`->`hvc1` retag plus a Range-aware LRU cache).
+- Storage usage screen (**Settings -> System**): disk usage per mount Frigate reports, plus a per-camera breakdown of how much of the recordings disk each camera uses, color-coded, heaviest first.
 - Picture-in-Picture on desktop browsers and Android Chrome.
-- Pausing the live view or a clip freezes the last frame instead of
-  showing a black box.
-- Light / dark / auto theme, remembered per device.
+- Pausing the live view or a clip freezes the last frame instead of showing a black box.
+- Light, dark, and auto themes, remembered per device.
 - Camera groups with an in-app editor (single-membership, YAML-backed).
-- Per-camera friendly names persisted server-side.
-- Per-camera go2rtc stream-source overrides editable from `/settings`.
-- Dynamic camera discovery from Frigate (refresh-on-demand with SSE
-  `camera.added` / `camera.removed` events).
-- Audio: runtime-detected per camera, not from static config.
-- PWA install on iOS and Android home screens. The installed app opens
-  instantly offline (precached shell, runtime-cached grid tiles) and
-  shows a clear, retryable message when the server is unreachable.
-- Server-side persisted preferences (no `localStorage`, prefs sync
-  across devices in the household).
-- Talk-back capability flag honoured per camera (UI gated on
-  per-camera capability).
-- Single static binary, ~9 MB Docker image, distroless runtime.
-
-## Screenshots
-
-Mobile PWA, installed to the iOS home screen.
-
-<p align="center">
-<img height="440" alt="Skua camera grid — Cameras list with HD/ECO toggle and online status" src="https://github.com/user-attachments/assets/bdcc333c-4a78-4e24-928c-129ffd34baf6" />
-<img height="440" alt="Skua single-camera focus view — WebRTC live stream with camera switcher" src="https://github.com/user-attachments/assets/6d34c635-49fd-4d5c-b38a-04935f7b0a51" />
-<img height="440" alt="Screenshot 2026-06-14 at 18 25 05" src="https://github.com/user-attachments/assets/8ad9ba9a-b132-47e4-810f-8dd611595bda" />
-
-</p>
-<p align="center">
-<img height="480" alt="Skua event detail — inline clip playback with download and Open in Frigate" src="https://github.com/user-attachments/assets/8aa9cda1-e677-4eef-bc97-3236e516750a" />
-<img height="480" alt="Skua settings — appearance and camera configuration" src="https://github.com/user-attachments/assets/abf9c1b0-7a3b-4d63-acce-9efa6fc866eb" />
-</p>
-<p>
-<img width="800" alt="skua_desktop_focus" src="https://github.com/user-attachments/assets/65d14f20-7be1-4a34-88a0-d5ec24c2ac10" />
-<img width="800" alt="skua_desktop_grid" src="https://github.com/user-attachments/assets/d394f798-2809-41cb-8c19-30fd1bc6a317" />
-</p>
+- Per-camera friendly names, persisted server-side.
+- Per-camera go2rtc stream-source overrides, editable from Settings.
+- Dynamic camera discovery from Frigate (refresh on demand, with SSE `camera.added` / `camera.removed`).
+- Audio detected at runtime per camera, not from static config.
+- Server-side preferences (no `localStorage`), synced across every device in the household.
+- Single static Go binary, ~9 MB distroless image, multi-arch (amd64 + arm64).
 
 ## Requirements
 
@@ -281,31 +239,13 @@ expected for a throwaway smoke test.)
 
 ## Limitations
 
-- No application-level authentication. You own the auth layer (see
-  Security above).
-- LAN-only by default. Remote access is your responsibility.
-- The talk-back feature requires per-camera support — Hikvision SKUs
-  without the web management surface cannot talk back from the browser
-  (see [docs/hikvision-no-web-sku.md](docs/hikvision-no-web-sku.md)).
-- Grid view is JPEG snapshots, not live video, by design — focus view
-  is one tap away. Live grid was prototyped and removed (preserved in
-  git history).
-- WebRTC live view requires H.264-baseline aliases in go2rtc — iOS
-  Safari rejects High profile streams advertised as Baseline (see
-  [docs/setup/frigate-config.md](docs/setup/frigate-config.md)).
-- Event clips are served in the camera's native codec and resolution
-  (HEVC, frequently 1440p or higher); whether they play inline in the
-  browser depends on the client device's decoder. Apple devices decode
-  HEVC in hardware, including 1440p. Many Android devices, especially
-  budget SoCs, cap HEVC hardware decode at 1080p, so high-resolution
-  event clips may not play inline in the event modal there. The
-  snapshot, Download, and Open in Frigate still work. There is no
-  server-side transcoding by design — it keeps the distroless
-  single-binary image small.
-- Single static camera registry per Frigate instance — multi-Frigate
-  aggregation is not supported.
-- Designed for small households (2-4 users typically). Not a
-  multi-tenant product.
+- No built-in authentication or remote access. You bring your own layer for remote use: a reverse proxy with auth, a VPN, or a tunnel. See Security and access model above.
+- Two-way audio (talk-back) isn't supported yet.
+- The grid is JPEG snapshots, not live video, by design. The focus view is one tap away. A live grid was prototyped and removed (kept in git history).
+- The live focus view needs an H.264 go2rtc stream per camera. iOS Safari rejects High-profile streams advertised as Baseline, so the alias must be a real Baseline or Main H.264 (see [docs/setup/frigate-config.md](docs/setup/frigate-config.md)).
+- Event clips are served in the camera's native codec and resolution, often HEVC at 1440p or higher. Apple devices decode that in hardware. Many Android devices, especially budget SoCs, cap HEVC hardware decode at 1080p, so a high-resolution clip may not play inline there. The snapshot, Download, and Open in Frigate still work. There's no server-side transcoding, which keeps the image small.
+- One Frigate instance per Skua. Multi-Frigate aggregation isn't supported.
+- Built for small households, a handful of users. Not a multi-tenant product.
 
 ## Troubleshooting
 
@@ -423,13 +363,16 @@ image).
 
 ## Tech stack
 
-Go 1.25 BFF (chi router, `log/slog`, single static binary) plus a
+Go 1.25 BFF (chi router, `log/slog`, single static binary), with a
 SvelteKit 2 + Svelte 5 (runes) + Tailwind 4 frontend embedded into the
-binary. WebRTC via WHEP through go2rtc, no media transcoding inside
-Skua. JPEG snapshot tiles resized server-side with
-`golang.org/x/image/draw`. PWA via `vite-plugin-pwa` (`generateSW`,
-`autoUpdate`) — the service worker activates the newest version on the
-next launch. Distroless runtime image around 9 MB.
+binary. Live video is WebRTC over WHEP through go2rtc, with no media
+transcoding inside Skua. Grid tiles are JPEG snapshots resized
+server-side with `golang.org/x/image/draw`. The PWA is built with
+`vite-plugin-pwa` (`generateSW`, `autoUpdate` with `skipWaiting` and
+`clientsClaim`), so the newest service worker activates on the next
+launch and the page refreshes once to pick up the new assets. The
+runtime image is distroless, around 9 MB, and multi-arch (amd64 +
+arm64).
 
 ## Contributing
 
@@ -451,3 +394,5 @@ this one would not exist. The frontend is built with
 [JetBrains Mono](https://www.jetbrains.com/lp/mono/). The interface
 icons are drawn from [Lucide](https://lucide.dev), used under the ISC
 license.
+</content>
+</invoke>
