@@ -20,6 +20,8 @@ Fixed
 - "Could not establish media channel" is no longer reported for streams that never started. It now means only what it says: a stream that was playing and then dropped.
 - The stream error card no longer claims a 3-second timeout for a failure the code doesn't time at 3 seconds. The timeout wording now covers the real case, which is Frigate not answering the connection request in time.
 
+## [0.16.0] — 2026-06-30
+
 Added
 
 - Storage usage screen under Settings → System. It shows each disk mount Frigate reports — recordings, clips, the database, and the cache/shared-memory mounts — with a usage bar and the used / total / free figures for each, plus a manual Refresh button. The numbers come straight from Frigate and load when you open the screen (no background polling).
