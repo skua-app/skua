@@ -1,3 +1,17 @@
+// Timestamps in this file must be derived from time.Now(), never from a
+// hardcoded calendar date. New prunes entries older than the retention
+// window against the real wall clock (glance.go: pruneLocked(time.Now())),
+// and drops a scope entirely once its seen set empties and its
+// seen_through watermark is zero. A fixed past date therefore ages out on
+// its own: the in-memory assertions still pass, the file is still written
+// correctly, and then the reload comes back empty — so any test that
+// stamps a fixed date and later reloads through New starts failing on a
+// calendar boundary rather than on a code change. Moving such a date
+// forward only rearms the same trap with a longer fuse.
+//
+// Offsets that need to straddle the cutoff come from glance.Retention
+// (see export_test.go) so they keep exercising the real window if that
+// constant is ever changed.
 package glance_test
 
 import (
@@ -40,6 +54,9 @@ func TestNew_CorruptFile_StartsEmpty(t *testing.T) {
 func TestNew_OldLastSeenShape_StartsEmpty(t *testing.T) {
 	// The pre-Model-B file shape: { "last_seen": "<RFC3339>" }. New
 	// must accept it without error and start with an empty seen-set.
+	// The date in the payload is inert: the string value fails to
+	// unmarshal into scopeState, so it never becomes a seen-at stamp
+	// and retention never looks at it.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "glance.json")
 	if err := os.WriteFile(path, []byte(`{"last_seen":"2026-05-20T22:00:00Z"}`), 0o600); err != nil {
@@ -61,7 +78,8 @@ func TestMarkSeen_PersistsAndReloadsRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 6, 4, 12, 30, 0, 0, time.UTC)
+	// Well inside the retention window so the reload below keeps both ids.
+	now := time.Now().Add(-time.Hour)
 	if err := store.MarkSeen(glance.ScopeHousehold, []string{"a", "b"}, now); err != nil {
 		t.Fatalf("MarkSeen: %v", err)
 	}
@@ -94,6 +112,11 @@ func TestMarkSeen_Idempotent_RefreshesTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Fixed instants are safe here, and wanted: the assertion below is on
+	// the exact serialized unix value, and this test reads the file
+	// directly rather than reloading through New, so the wall-clock prune
+	// on load never sees these stamps. Pruning inside MarkSeen uses the
+	// caller's `at`, against which both stamps are current.
 	first := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
 	if err := store.MarkSeen(glance.ScopeHousehold, []string{"a"}, first); err != nil {
 		t.Fatalf("first MarkSeen: %v", err)
@@ -129,7 +152,7 @@ func TestMarkSeen_ScopeIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	now := time.Now().Add(-time.Hour)
 	if err := store.MarkSeen(glance.ScopeHousehold, []string{"x"}, now); err != nil {
 		t.Fatalf("MarkSeen: %v", err)
 	}
@@ -166,13 +189,16 @@ func TestMarkSeen_PrunesOldEntriesAfterWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Seed at t0; then re-mark a different id at t0 + 31 days. The
-	// stale "old" entry must be pruned in the same write.
-	t0 := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	// Seed "old" far enough back that it sits clearly outside the
+	// retention window as of the later write, then re-mark a different
+	// id at that later point. The stale entry must be pruned in the
+	// same write. Both offsets derive from the retention constant, so
+	// this keeps straddling the real cutoff if the window changes.
+	tLate := time.Now()
+	t0 := tLate.Add(-glance.Retention - time.Hour)
 	if err := store.MarkSeen(glance.ScopeHousehold, []string{"old"}, t0); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	tLate := t0.Add(31 * 24 * time.Hour)
 	if err := store.MarkSeen(glance.ScopeHousehold, []string{"fresh"}, tLate); err != nil {
 		t.Fatalf("late MarkSeen: %v", err)
 	}
@@ -193,7 +219,7 @@ func TestNew_PrunesOldEntriesOnLoad(t *testing.T) {
 	// retention window. New must drop it on load and leave the
 	// scope empty (then also drop the now-empty scope when its
 	// seen_through watermark is zero).
-	veryOld := time.Now().Add(-365 * 24 * time.Hour).Unix()
+	veryOld := time.Now().Add(-glance.Retention - 24*time.Hour).Unix()
 	payload, err := json.Marshal(map[string]map[string]any{
 		glance.ScopeHousehold: {
 			"seen": map[string]int64{"stale": veryOld},
@@ -221,7 +247,10 @@ func TestMarkAllSeen_SetsWatermarkAndPersists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	// Relative to now so the reload below never sees an aged-out stamp.
+	// Truncated to the second because the watermark round-trips through
+	// unix seconds, so a sub-second component would not survive.
+	at := time.Now().Add(-time.Hour).Truncate(time.Second)
 	if err := store.MarkAllSeen(glance.ScopeHousehold, at); err != nil {
 		t.Fatalf("MarkAllSeen: %v", err)
 	}
@@ -245,7 +274,10 @@ func TestMarkAllSeen_PreservesScopeAcrossPrune_WithEmptySeen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	// Relative to now (and second-truncated) so both the watermark and
+	// the other-scope id below stay inside the retention window across
+	// the reload.
+	at := time.Now().Add(-time.Hour).Truncate(time.Second)
 	if err := store.MarkAllSeen(glance.ScopeHousehold, at); err != nil {
 		t.Fatalf("MarkAllSeen: %v", err)
 	}
@@ -304,7 +336,8 @@ func TestMarkSeen_ConcurrentCalls_DoNotCorruptFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 6, 4, 12, 0, 0, 0, time.UTC)
+	// Well inside the retention window so the reload below keeps all n ids.
+	now := time.Now().Add(-time.Hour)
 
 	const n = 50
 	var wg sync.WaitGroup
