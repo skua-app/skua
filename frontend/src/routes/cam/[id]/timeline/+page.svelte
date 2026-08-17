@@ -39,6 +39,13 @@
     CoverageSegment
   } from '$lib/api'
   import { footageToWallclock } from '$lib/timeline'
+  import {
+    DEFAULT_VIEW_SPAN,
+    clampViewSpan,
+    centredViewStart,
+    clampViewStart,
+    clampPlayhead
+  } from '$lib/timeline-viewport'
   import { canDecodeRecording } from '$lib/hls'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
@@ -47,8 +54,8 @@
   import Mono from '$lib/components/Mono.svelte'
   import { ui } from '$lib/i18n/strings'
 
-  // Scrubber window: a fixed 1-hour span per camera. Full-res chunk: 10 min.
-  const WINDOW_SECONDS = 3600
+  // Full-res chunk: 10 min. The viewport's default span and its zoom bounds
+  // live in $lib/timeline-viewport with the rest of the viewport arithmetic.
   const CHUNK_SECONDS = 10 * 60
   // Max distance (seconds) between the landed time and the full-res element's
   // current playback point for which an in-buffer currentTime seek is reliable.
@@ -56,10 +63,6 @@
   // resumes from the old currentTime, so we re-attach a fresh chunk at the
   // landed time instead (the else-branch) rather than snap back.
   const CHUNK_REJOIN_SLACK = 30
-  // Zoom bounds for the scrubber viewport span (pinch / wheel). 10 min keeps a
-  // useful minimum context; 12 h is the widest pan the scrubber still resolves.
-  const MIN_SPAN = 10 * 60
-  const MAX_SPAN = 12 * 3600
   // Prefetch the next chunk into the idle buffer once the active playhead is
   // within this many seconds of the active chunk's end.
   const PREFETCH_LEAD_SECONDS = 10
@@ -84,7 +87,7 @@
   // Visible span of the scrubber viewport, in wall-clock seconds. Defaults to
   // the 1h window; the pinch / wheel gestures adjust it through setViewSpan.
   // One half of the viewport pair — viewStart below is the other.
-  let viewSpan = $state(WINDOW_SECONDS)
+  let viewSpan = $state(DEFAULT_VIEW_SPAN)
 
   // PLAYBACK-domain bounds — the recording extent full-res playback may span,
   // DISTINCT from the derived windowStart/windowEnd viewport. The viewport pans
@@ -147,29 +150,20 @@
   // happen inside one synchronous function instead, landing in the same batch,
   // so no frame ever sees the pair half-updated.
 
-  // The ONLY writer of `viewStart`. Clamps the viewport CENTRE to the live
-  // edge. That bound used to be emergent — the window was a function of the
-  // playhead and handleSeek clamped the playhead to liveEdge — and a viewport
-  // that is real state has no such glue, so it is stated explicitly here.
-  //
-  // Deliberately one-sided, and on the centre rather than on windowEnd: the
-  // window already extends up to viewSpan/2 PAST liveEdge today, and that
-  // overhang is what draws the right-hand hatch band and parks the LIVE capsule
-  // inside the track, so clamping windowEnd would be a visible change. There is
-  // no floor-side clamp because playbackFloor is a permissive liveEdge-7d
-  // fallback until the summary lands and a ?t= deep-link is deliberately not
-  // clamped by it (see the capture effect) — clamping the viewport by it would
-  // knock an older event's entry window off-centre.
+  // The ONLY writer of `viewStart`. clampViewStart holds the viewport CENTRE at
+  // the live edge — a bound that used to be emergent (the window was a function
+  // of the playhead, and the playhead was clamped to liveEdge) and that a
+  // viewport made of real state no longer gets for free. See
+  // $lib/timeline-viewport for why the clamp is one-sided and on the centre.
   function setViewStart(start: number) {
-    const maxStart = liveEdge - viewSpan / 2
-    viewStart = start > maxStart ? maxStart : start
+    viewStart = clampViewStart(start, viewSpan, liveEdge)
   }
 
   // Re-centre the viewport on the playhead. A pure recompute from
   // (position, viewSpan), never an accumulation, so repeated calls at any rate
   // land on exactly the value the old derived window produced.
   function centreOnPlayhead() {
-    setViewStart(position - viewSpan / 2)
+    setViewStart(centredViewStart(position, viewSpan))
   }
 
   // The ONLY writer of `position`. Drag, VHS rush, the coverage snap and the
@@ -1248,8 +1242,7 @@
     // viewport is re-centred on it inside setPosition, which is what makes the
     // filmstrip pan under a fixed handle. So the playhead is bounded by what's
     // PLAYABLE, never by the viewport (which follows it).
-    const clamped = t < playbackFloor ? playbackFloor : t > liveEdge ? liveEdge : t
-    setPosition(clamped)
+    setPosition(clampPlayhead(t, playbackFloor, liveEdge))
     chunkEnded = false
     pickClip(position)
     if (isOpenTail) {
@@ -1272,12 +1265,12 @@
   }
 
   // Zoom: the scrubber requests an absolute target span (pinch distance ratio
-  // or wheel step). We clamp to [MIN_SPAN, MAX_SPAN] and round to a whole
-  // second, then hand it to setViewSpan, which re-centres the viewport on the
-  // (unmoved) playhead while follow is on — so the gesture still zooms around
-  // the playhead and still triggers no chunk refetch.
+  // or wheel step). clampViewSpan bounds and rounds it, then setViewSpan
+  // re-centres the viewport on the (unmoved) playhead while follow is on — so
+  // the gesture still zooms around the playhead and still triggers no chunk
+  // refetch.
   function onZoom(targetSpan: number) {
-    setViewSpan(Math.round(Math.max(MIN_SPAN, Math.min(MAX_SPAN, targetSpan))))
+    setViewSpan(clampViewSpan(targetSpan))
   }
 
   // Play button. From scrubbing, or when the playhead is outside the loaded
