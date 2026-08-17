@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
-  import type { Camera } from '$lib/api'
+  import type { Camera, NameStyle } from '$lib/api'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { ui } from '$lib/i18n/strings'
   import { untrack } from 'svelte'
@@ -8,7 +8,7 @@
   type Props = {
     camera: Camera
     index?: number
-    nameStyle?: 'below' | 'overlay'
+    nameStyle?: NameStyle
     showTimestamp?: boolean
     onclick?: () => void
   }
@@ -87,6 +87,7 @@
   {onclick}
   class="cam-tile"
   class:name-below={nameStyle === 'below'}
+  class:name-off={nameStyle === 'off'}
   class:offline-tile={!camera.online}
   aria-label={camera.name}
 >
@@ -119,12 +120,17 @@
     </div>
   {/if}
 
-  <div class="cam-name">
-    <span class="cn-name">{camera.name}</span>
-    {#if nameStyle === 'below'}
-      <span class="cn-sub">{camera.id}</span>
-    {/if}
-  </div>
+  <!-- 'off' hides the name entirely. The online dot and the timestamp chip
+       live inside .cam above and are unaffected: they report status, not
+       identity. -->
+  {#if nameStyle !== 'off'}
+    <div class="cam-name">
+      <span class="cn-name">{camera.name}</span>
+      {#if nameStyle === 'below'}
+        <span class="cn-sub">{camera.id}</span>
+      {/if}
+    </div>
+  {/if}
 </button>
 
 <style>
@@ -213,7 +219,10 @@
     color: var(--warn);
     border: 1px dashed var(--border-strong);
   }
-  .cam-tile:not(.name-below) .cam.offline {
+  /* Overlay mode only: reserve room under the offline glyph for the gradient
+     name that sits on top of it. In 'off' there is no name, so the padding
+     would leave a gap with nothing in it. */
+  .cam-tile:not(.name-below):not(.name-off) .cam.offline {
     padding-bottom: 24px;
   }
   .off-ico {

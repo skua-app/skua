@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 )
 
@@ -46,12 +48,25 @@ var defaults = Prefs{
 
 var validGridModes = map[string]bool{"hd": true, "eco": true}
 var validAccents = map[string]bool{"cyan": true, "sage": true, "amber": true, "violet": true}
-var validNameStyles = map[string]bool{"below": true, "overlay": true}
+var validNameStyles = map[string]bool{"below": true, "overlay": true, "off": true}
 var validDesktopColumns = map[int]bool{2: true, 3: true, 4: true, 5: true}
 var validMobileColumns = map[int]bool{1: true, 2: true}
 var validGlanceWindowHours = map[int]bool{6: true, 12: true, 24: true, 48: true, 72: true}
 var validGlanceMaxMoments = map[int]bool{10: true, 20: true, 30: true, 50: true}
 var validGridFPS = map[int]bool{1: true, 2: true}
+
+// nameStyleList renders the accepted name_style values for the validation
+// error message. Derived from validNameStyles rather than restated, so
+// adding a style cannot leave the message naming a stale set. Sorted for a
+// stable message.
+func nameStyleList() string {
+	out := make([]string, 0, len(validNameStyles))
+	for k := range validNameStyles {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return strings.Join(out, "/")
+}
 
 var knownFields = map[string]bool{
 	"grid_mode":           true,
@@ -220,7 +235,7 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("name_style must be a string")
 		}
 		if !validNameStyles[ns] {
-			return Prefs{}, fmt.Errorf("name_style must be %q or %q, got %q", "below", "overlay", ns)
+			return Prefs{}, fmt.Errorf("name_style must be one of %s, got %q", nameStyleList(), ns)
 		}
 		next.NameStyle = ns
 	}

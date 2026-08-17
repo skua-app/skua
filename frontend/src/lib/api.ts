@@ -15,7 +15,7 @@ export type Camera = {
 }
 
 export type Accent = 'cyan' | 'sage' | 'amber' | 'violet'
-export type NameStyle = 'below' | 'overlay'
+export type NameStyle = 'below' | 'overlay' | 'off'
 export type DesktopColumns = 2 | 3 | 4 | 5
 export type MobileColumns = 1 | 2
 export type GlanceWindowHours = 6 | 12 | 24 | 48 | 72

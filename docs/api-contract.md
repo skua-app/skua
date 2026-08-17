@@ -67,7 +67,7 @@ type Prefs = {
   stream_quality: 'main' | 'sub'
   show_telemetry: boolean
   accent: 'cyan' | 'sage' | 'amber' | 'violet'
-  name_style: 'below' | 'overlay'
+  name_style: 'below' | 'overlay' | 'off'
   show_timestamp: boolean   // grid tiles AND focus video overlay (E3)
   desktop_columns: 2 | 3 | 4 | 5
   mobile_columns: 1 | 2

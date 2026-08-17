@@ -201,6 +201,32 @@ func TestUpdate_InvalidNameStyle_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestUpdate_NameStyleOff_PersistsAcrossReload(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefs.json")
+	store, err := prefs.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := store.Update(map[string]any{"name_style": "off"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.NameStyle != "off" {
+		t.Errorf("NameStyle: got %q, want %q", updated.NameStyle, "off")
+	}
+
+	// "off" must survive sanitize on load, not be reset to the default.
+	reloaded, err := prefs.New(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if got := reloaded.Get().NameStyle; got != "off" {
+		t.Errorf("NameStyle after reload: got %q, want %q", got, "off")
+	}
+}
+
 func TestUpdate_InvalidDesktopColumns_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
