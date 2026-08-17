@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-08-17
+
 Added
 
 - The camera name on grid tiles can now be turned off. Settings → Appearance → Camera name gains an Off option next to Below and Overlay, which hides the name (and the camera id that Below shows under it) on every tile, on phone and desktop. The online dot and the timestamp chip stay where they are, since those report status rather than labelling a tile. The setting is stored server-side like the other preferences, so it applies on every device in the household.
@@ -698,7 +700,8 @@ replaceState: true })` so a single back-tap from focus always lands
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/skua-app/skua/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/skua-app/skua/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/skua-app/skua/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/skua-app/skua/compare/v0.13.0...v0.14.0
