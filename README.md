@@ -315,6 +315,50 @@ above.
     The same fail-fast log line is still emitted; the camera registry
     is loaded once at startup.
 
+### Grid and events work but the live view never starts
+
+Tiles, events, and clips all load, but opening a camera leaves the focus
+view on the snapshot poster and then shows "Could not connect to camera".
+This is the most common first-install problem, and it is nearly always the
+go2rtc WebRTC candidate configuration rather than Skua.
+
+Read the error card first. It names which of two cases you have:
+
+- **"go2rtc offered no usable address to stream from"** means the answer
+  carried nothing your browser could use, either no address at all or only
+  loopback addresses like `127.0.0.1:8555`, which point the browser back at
+  the device it is running on.
+- **"None of the addresses go2rtc offered could be reached"** means real
+  addresses were advertised but your device couldn't open a connection to
+  any of them.
+
+Under "Addresses go2rtc advertised" the card lists what go2rtc offered.
+Those addresses are the diagnosis. An address on a different subnet than
+the device you're viewing from, such as `172.18.0.5:8555` from a Docker
+bridge network when your LAN is `192.168.x.x`, is the answer on its own.
+
+WebRTC needs go2rtc to advertise an address the client can open a
+connection to. With nothing configured it advertises whatever it guesses
+from the interfaces it can see, and under Docker bridge networking that
+guess is usually the container's internal address, which no client on your
+LAN can reach.
+
+The fix is on the Frigate side:
+
+- Add a `go2rtc.webrtc.candidates` block to Frigate's `config.yml` naming
+  the Frigate host's LAN address with port 8555, then restart Frigate.
+- Publish port 8555 on both TCP and UDP for the Frigate container, and open
+  it on any firewall between the client and the Frigate host.
+
+See [docs/setup/frigate-config.md](docs/setup/frigate-config.md) for the
+full walkthrough, including candidates for VPN and tunnel clients and a
+command to check what go2rtc ended up advertising.
+
+Snapshots, tiles, events, and clips keep working while this is broken,
+because they're HTTP requests proxied through the Skua backend and never
+touch WebRTC. Only the live focus view uses WebRTC, which is why the entry
+above does not match what you're seeing.
+
 ### PWA not installable on iPhone
 
 - The site must be served over HTTPS. iOS Safari does not offer
