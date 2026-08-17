@@ -57,6 +57,9 @@
   let resolution = $state<string | null>(null)
   let fps = $state<number | null>(null)
   let errorReason = $state<string | null>(null)
+  // Addresses go2rtc advertised in the SDP answer, surfaced on ICE failures
+  // so the error card can name what the browser was actually asked to reach.
+  let errorCandidates = $state<string[]>([])
   let showTelemetry = $state(false)
   let isPaused = $state(false)
   let isFullscreen = $state(false)
@@ -87,6 +90,7 @@
   async function connect(cam: NonNullable<typeof camera>) {
     if (!videoEl) return
     errorReason = null
+    errorCandidates = []
     streamState = 'connecting'
     isPaused = false
     videoPlaying = false
@@ -105,10 +109,11 @@
         quality: effectiveQuality,
         signal: controller.signal,
         getMuted: () => isMuted,
-        onStateChange(s, reason) {
+        onStateChange(s, reason, detail) {
           streamState = s
           if (s === 'failed') {
             errorReason = reason ?? 'unknown'
+            errorCandidates = detail?.candidates ?? []
           }
         },
         onStats(stats) {
@@ -436,7 +441,7 @@
   {#if streamState === 'failed' && errorReason !== null}
     <div class="overlay-error-dim"></div>
     <div class="overlay-error">
-      <StreamError reason={errorReason} onRetry={retry} />
+      <StreamError reason={errorReason} candidates={errorCandidates} onRetry={retry} />
     </div>
   {/if}
 {/snippet}

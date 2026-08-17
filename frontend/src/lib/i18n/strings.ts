@@ -1,9 +1,20 @@
 export const streamErrorReasons: Record<string, string> = {
-  timeout: 'Timed out (3 s)',
+  timeout: 'Frigate did not answer in time',
   negotiation_failed: 'Connection negotiation failed',
-  ice_failed: 'Could not establish media channel',
+  ice_failed: 'The live stream dropped',
+  ice_no_candidates: 'go2rtc offered no usable address to stream from',
+  ice_unreachable: 'None of the addresses go2rtc offered could be reached',
   network: 'Network error',
   unknown: 'Unknown error'
+}
+
+// Second line under the reason: what to actually go and change. Only the ICE
+// reasons have one, because only they have a concrete fix on the Frigate side.
+export const streamErrorHints: Record<string, string> = {
+  ice_no_candidates:
+    'go2rtc answered without telling your browser where to send video, so there was nothing to connect to. In Frigate’s config.yml, add a go2rtc.webrtc.candidates list with the Frigate host’s address and port 8555, then restart Frigate.',
+  ice_unreachable:
+    'go2rtc offered the addresses below, but this device could not open a connection to any of them. Check that port 8555 is open over both TCP and UDP between this device and the Frigate host, and that the go2rtc.webrtc.candidates list in Frigate’s config.yml names an address this device can actually reach.'
 }
 
 export const ui = {
@@ -12,6 +23,8 @@ export const ui = {
   // stream errors
   retry: 'Retry',
   streamErrorHeading: 'Could not connect to camera',
+  streamErrorCandidatesLabel: 'Addresses go2rtc advertised',
+  streamErrorSetupDocs: 'How to configure ICE candidates',
   connecting: 'Connecting…',
   buffering: 'Buffering…',
   // navigation

@@ -12,15 +12,44 @@ export type WhepHandle = {
   close(): void
 }
 
+export type WhepFailureDetail = {
+  candidates?: string[]
+}
+
 export type WhepOpts = {
   camId: string
   videoEl: HTMLVideoElement
   quality?: 'main' | 'sub'
   signal: AbortSignal
   getMuted: () => boolean
-  onStateChange: (state: WhepHandle['state'], reason?: string) => void
+  onStateChange: (state: WhepHandle['state'], reason?: string, detail?: WhepFailureDetail) => void
   onStats: (stats: WhepHandle['stats']) => void
   onAudioDetected: (hasAudio: boolean) => void
+}
+
+// go2rtc answers non-trickle: the SDP answer already carries every candidate
+// it intends to offer, so the answer alone tells us whether the browser was
+// given anywhere reachable to send media.
+function parseAnswerCandidates(sdp: string): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const line of sdp.split(/\r\n|\r|\n/)) {
+    if (!line.startsWith('a=candidate:')) continue
+    const parts = line.slice('a=candidate:'.length).trim().split(/\s+/)
+    const address = parts[4]
+    const port = parts[5]
+    if (!address || !port) continue
+    const entry = `${address}:${port}`
+    if (seen.has(entry)) continue
+    seen.add(entry)
+    out.push(entry)
+  }
+  return out
+}
+
+function isLoopback(entry: string): boolean {
+  const address = entry.slice(0, entry.lastIndexOf(':'))
+  return address === '::1' || address === '[::1]' || /^127\./.test(address)
 }
 
 export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
@@ -60,6 +89,8 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
   let videoCodec: string | null = null
   let audioCodec: string | null = null
   let closed = false
+  let answerCandidates: string[] = []
+  let hasUsableCandidates = false
 
   function cleanup() {
     closed = true
@@ -183,9 +214,17 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
           })
       }, 1000)
     } else if (state === 'failed') {
-      const reason = handle.state === 'connected' ? 'ice_failed' : 'unknown'
+      // 'ice_failed' means only one thing: a stream that was playing and then
+      // dropped. A stream that never reached 'connected' is an establishment
+      // failure, classified from what go2rtc advertised in the answer.
+      const established = handle.state === 'connected'
+      const reason = established
+        ? 'ice_failed'
+        : hasUsableCandidates
+          ? 'ice_unreachable'
+          : 'ice_no_candidates'
       handle.state = 'failed'
-      onStateChange('failed', reason)
+      onStateChange('failed', reason, established ? undefined : { candidates: answerCandidates })
       cleanup()
     } else if (state === 'closed') {
       if (!closed) {
@@ -214,10 +253,14 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
       body: sdpOffer,
       signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)])
     })
-  } catch {
+  } catch (err) {
     if (!closed) {
+      // Only the 10 s AbortSignal.timeout rejects as TimeoutError; an abort
+      // from the caller-supplied signal is teardown and is handled by the
+      // signal's own listener, which sets `closed` before we get here.
+      const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
       handle.state = 'failed'
-      onStateChange('failed', 'network')
+      onStateChange('failed', timedOut ? 'timeout' : 'network')
       cleanup()
     }
     return handle
@@ -231,13 +274,17 @@ export async function startWhep(opts: WhepOpts): Promise<WhepHandle> {
   }
 
   const sdpAnswer = await res.text()
+  answerCandidates = parseAnswerCandidates(sdpAnswer)
+  hasUsableCandidates = answerCandidates.some((c) => !isLoopback(c))
   await pc.setRemoteDescription({ type: 'answer', sdp: sdpAnswer })
 
   watchdogTimer = setTimeout(() => {
     if (closed) return
     if (pc.connectionState !== 'connected') {
       handle.state = 'failed'
-      onStateChange('failed', 'timeout')
+      onStateChange('failed', hasUsableCandidates ? 'ice_unreachable' : 'ice_no_candidates', {
+        candidates: answerCandidates
+      })
       cleanup()
     }
   }, 3000)

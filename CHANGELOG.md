@@ -14,7 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.16.0] — 2026-06-30
+Fixed
+
+- The focus view now says what actually went wrong when live video can't connect. Misconfigured go2rtc ICE candidates — the most common first-install failure — used to surface as a flat "Timed out (3 s)". The error card now distinguishes go2rtc offering no usable address at all from go2rtc offering addresses this device can't reach, explains that the fix is the `go2rtc.webrtc.candidates` list in Frigate's config, lists the addresses go2rtc actually advertised, and links to the setup guide.
+- "Could not establish media channel" is no longer reported for streams that never started. It now means only what it says: a stream that was playing and then dropped.
+- The stream error card no longer claims a 3-second timeout for a failure the code doesn't time at 3 seconds. The timeout wording now covers the real case, which is Frigate not answering the connection request in time.
 
 Added
 

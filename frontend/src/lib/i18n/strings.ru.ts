@@ -1,10 +1,21 @@
 // Russian translation kept as backup for a future runtime locale-switching PR. Not imported anywhere today.
 export const streamErrorReasons: Record<string, string> = {
-  timeout: 'Превышено время ожидания (3 сек)',
+  timeout: 'Frigate не ответил вовремя',
   negotiation_failed: 'Ошибка согласования соединения',
-  ice_failed: 'Не удалось установить медиа-канал',
+  ice_failed: 'Прямой эфир прервался',
+  ice_no_candidates: 'go2rtc не предложил ни одного пригодного адреса для эфира',
+  ice_unreachable: 'Ни один из адресов, предложенных go2rtc, недоступен',
   network: 'Сетевая ошибка',
   unknown: 'Неизвестная ошибка'
+}
+
+// Second line under the reason: what to actually go and change. Only the ICE
+// reasons have one, because only they have a concrete fix on the Frigate side.
+export const streamErrorHints: Record<string, string> = {
+  ice_no_candidates:
+    'go2rtc ответил, не указав браузеру, куда отправлять видео, поэтому подключаться было не к чему. В config.yml Frigate добавьте список go2rtc.webrtc.candidates с адресом хоста Frigate и портом 8555, затем перезапустите Frigate.',
+  ice_unreachable:
+    'go2rtc предложил адреса ниже, но это устройство не смогло подключиться ни к одному из них. Проверьте, что порт 8555 открыт по TCP и по UDP между этим устройством и хостом Frigate, и что список go2rtc.webrtc.candidates в config.yml Frigate содержит адрес, до которого это устройство действительно достаёт.'
 }
 
 export const ui = {
@@ -13,6 +24,8 @@ export const ui = {
   // stream errors
   retry: 'Повторить',
   streamErrorHeading: 'Не удалось подключиться к камере',
+  streamErrorCandidatesLabel: 'Адреса, объявленные go2rtc',
+  streamErrorSetupDocs: 'Как настроить ICE-кандидатов',
   connecting: 'Подключение...',
   buffering: 'Буферизация...',
   // navigation
