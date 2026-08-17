@@ -13,7 +13,8 @@
   ]
   const nameStyleOptions: { value: NameStyle; label: string }[] = [
     { value: 'below', label: ui.nameStyleBelow },
-    { value: 'overlay', label: ui.nameStyleOverlay }
+    { value: 'overlay', label: ui.nameStyleOverlay },
+    { value: 'off', label: ui.nameStyleOff }
   ]
   const showTimestampOptions = [
     { value: 'on' as const, label: ui.yes },

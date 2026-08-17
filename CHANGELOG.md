@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Added
+
+- The camera name on grid tiles can now be turned off. Settings → Appearance → Camera name gains an Off option next to Below and Overlay, which hides the name (and the camera id that Below shows under it) on every tile, on phone and desktop. The online dot and the timestamp chip stay where they are, since those report status rather than labelling a tile. The setting is stored server-side like the other preferences, so it applies on every device in the household.
+
 Fixed
 
 - The focus view now says what actually went wrong when live video can't connect. Misconfigured go2rtc ICE candidates — the most common first-install failure — used to surface as a flat "Timed out (3 s)". The error card now distinguishes go2rtc offering no usable address at all from go2rtc offering addresses this device can't reach, explains that the fix is the `go2rtc.webrtc.candidates` list in Frigate's config, lists the addresses go2rtc actually advertised, and links to the setup guide.
