@@ -1934,6 +1934,7 @@
       {windowStart}
       {windowEnd}
       {position}
+      mode={prefsStore.timelineMode}
       {playbackFloor}
       {liveEdge}
       {coverage}

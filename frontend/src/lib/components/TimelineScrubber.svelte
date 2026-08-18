@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { timeToFraction } from '$lib/timeline'
-  import type { ReviewSegment, AudioMarker, CoverageSegment } from '$lib/api'
+  import { timeToFraction, fractionToTime } from '$lib/timeline'
+  import { resolveGesture, exceedsClickSlop, type Gesture } from '$lib/timeline-gestures'
+  import type { ReviewSegment, AudioMarker, CoverageSegment, TimelineMode } from '$lib/api'
   import Icon from '$lib/components/Icon.svelte'
   import { ui } from '$lib/i18n/strings'
 
@@ -8,6 +9,12 @@
     windowStart: number
     windowEnd: number
     position: number
+    // Which interaction model is active. It is not a style flag: it decides
+    // what a press on the track MEANS, so the scrubber has to know it rather
+    // than be handed one callback per possible meaning. Nothing here ever
+    // writes it — it is the user's preference, echoed down. Defaults to the
+    // behaviour the track has always had.
+    mode?: TimelineMode
     // Playable-domain bounds, used only to dim the out-of-footage track regions.
     // Default to the viewport edges so no band shows when not provided.
     playbackFloor?: number
@@ -62,6 +69,7 @@
     windowStart,
     windowEnd,
     position,
+    mode = 'follow',
     playbackFloor = windowStart,
     liveEdge = windowEnd,
     coverage = [],
@@ -114,6 +122,19 @@
   let pinching = false
   let pinchStartDist = 0
   let pinchStartSpan = 0
+
+  // What the CURRENT press means, settled at pointerdown by resolveGesture and
+  // then read — never recomputed — for the rest of the gesture. Non-reactive:
+  // no template branches on it. Reset to 'idle' when the last pointer lifts.
+  let gesture: Gesture = 'idle'
+  // Press bookkeeping for the click / drag distinction. pressClientX is where
+  // the press landed (the click's target time is read from it, not from the
+  // release point — see clickSeek); movedBeyondSlop is LATCHED, so a press that
+  // wanders past the slop and comes back is a drag for good; pressIsMouse gates
+  // the click, because a touch tap deliberately does not seek.
+  let pressClientX = 0
+  let movedBeyondSlop = false
+  let pressIsMouse = false
 
   // Coverage bands: each recorded range mapped onto the viewport, same idiom as
   // reviewBands but with NO severity and — crucially — NO min-width clamp, so a
@@ -304,20 +325,63 @@
     startPosition = position
   }
 
+  // Where a client x sits across the track, in CSS pixels from its left edge.
+  // Unclamped — a press that begins inside the track can travel outside it
+  // under pointer capture, and the gesture arithmetic wants the true offset.
+  function trackX(clientX: number): number {
+    const el = trackEl
+    if (!el) return 0
+    return clientX - el.getBoundingClientRect().left
+  }
+
+  // Seek to where a click landed — fixed mode only, and only once the press has
+  // been confirmed not to be a drag.
+  //
+  // The target is read from the PRESS point rather than the release point. They
+  // are within the slop of each other by definition, but the press point is the
+  // one the user aimed at, and using it makes the landed time independent of
+  // any sub-threshold drift while the button was held.
+  //
+  // The whole scrub lifecycle runs here, in order, so the route sees exactly
+  // what a drag of zero duration would produce: engage the preview layer, seek,
+  // then settle to full-res at the landed time.
+  function clickSeek() {
+    const f = pointerFraction(pressClientX)
+    if (f === null) return
+    onScrubStart?.()
+    onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
+    onScrubEnd?.()
+  }
+
   // Pointer-Events filmstrip drag + pinch zoom. setPointerCapture means we keep
   // receiving pointermove even after the finger/cursor leaves the track bounds;
   // touch-action: none on the track (CSS) cancels the page's pan/zoom gestures
-  // without resorting to non-passive listeners. A 1-finger drag is a RELATIVE
-  // pan from the press point — a tap does not seek (no jump). A 2-finger gesture
-  // pinches the viewport span via onZoom while pan is suspended.
+  // without resorting to non-passive listeners. In follow mode a 1-finger drag
+  // is a RELATIVE pan from the press point — a tap does not seek (no jump). A
+  // 2-finger gesture pinches the viewport span via onZoom while pan is
+  // suspended.
+  //
+  // In fixed mode the press is routed by resolveGesture instead, and the scrub
+  // lifecycle is fired only for the gestures that actually MOVE THE PLAYHEAD.
+  // A pan must not pause full-res and re-settle it, and an inert press on empty
+  // track must not either.
   function onPointerDown(e: PointerEvent) {
     if (!trackEl) return
     trackEl.setPointerCapture(e.pointerId)
     activePointers.set(e.pointerId, e.clientX)
-    // First pointer of the gesture starts the scrub lifecycle.
+    // First pointer of the gesture: settle what it means, once.
     if (activePointers.size === 1) {
       dragging = true
-      onScrubStart?.()
+      gesture = resolveGesture({
+        mode,
+        shiftKey: e.shiftKey,
+        pressX: trackX(e.clientX),
+        playheadX: playheadFraction * trackWidth
+      })
+      pressClientX = e.clientX
+      movedBeyondSlop = false
+      pressIsMouse = e.pointerType === 'mouse'
+      if (gesture === 'tape') onScrubStart?.()
     }
     if (activePointers.size === 2) {
       // Second finger down: begin a pinch and snapshot its baseline.
@@ -340,13 +404,21 @@
       return
     }
     if (!pinching && activePointers.size === 1) {
+      // Latch the click / drag distinction before anything acts on the move.
+      if (!movedBeyondSlop && exceedsClickSlop(pressClientX, e.clientX)) movedBeyondSlop = true
       const w = trackWidth || trackEl.clientWidth
       if (w <= 0) return
       const span = windowEnd - windowStart
-      // Drag right -> content moves right -> earlier time -> position decreases.
-      // (If device-test shows the direction inverted, flip this one sign.)
-      const target = startPosition - ((e.clientX - startClientX) / w) * span
-      onSeek(Math.round(target))
+      if (gesture === 'tape') {
+        // Drag right -> content moves right -> earlier time -> position
+        // decreases. (If device-test shows the direction inverted, flip this
+        // one sign.)
+        const target = startPosition - ((e.clientX - startClientX) / w) * span
+        onSeek(Math.round(target))
+      }
+      // Every other gesture moves nothing on pointermove in this state: a
+      // fixed-mode press on empty track is inert by design, because panning is
+      // an explicit gesture rather than something a bare drag falls into.
     }
   }
   function onPointerUp(e: PointerEvent) {
@@ -362,7 +434,17 @@
     } else if (activePointers.size === 0) {
       pinching = false
       dragging = false
-      onScrubEnd?.()
+      if (gesture === 'tape') {
+        onScrubEnd?.()
+      } else if (gesture === 'idle' && !movedBeyondSlop && pressIsMouse) {
+        // A fixed-mode press that never travelled, made with a mouse: a click,
+        // which seeks. The pointerType gate is what keeps a touch TAP inert —
+        // an accidental tap must not seek, and that decision predates the mode
+        // work. It also means a pinch can never end as a click, since a mouse
+        // cannot raise a second pointer.
+        clickSeek()
+      }
+      gesture = 'idle'
     }
   }
 
