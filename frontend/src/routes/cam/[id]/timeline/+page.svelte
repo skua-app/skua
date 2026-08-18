@@ -20,6 +20,7 @@
   import { untrack } from 'svelte'
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
+  import { prefsStore } from '$lib/stores/prefs.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
   import {
     timelineMasterURL,
@@ -43,6 +44,7 @@
     DEFAULT_VIEW_SPAN,
     clampViewSpan,
     centredViewStart,
+    anchoredViewStart,
     clampViewStart,
     clampPlayhead
   } from '$lib/timeline-viewport'
@@ -125,10 +127,10 @@
   // is kept centred on the playhead, so the playhead sits dead-centre
   // (timeToFraction(position, windowStart, windowEnd) === 0.5) and a drag or
   // playback moves the CONTENT under it — exactly what the old
-  // viewport-derived-from-playhead model produced by construction. Nothing
-  // clears it yet and nothing exposes it to the user; the whole point of
-  // splitting viewport from playhead is that it CAN be cleared. Re-armed on
-  // every camera entry / deep-link capture.
+  // viewport-derived-from-playhead model produced by construction. An anchored
+  // zoom that leaves the window off-centre clears it, so that playback's next
+  // position update cannot undo the anchoring. Nothing exposes it to the user
+  // yet. Re-armed on every camera entry / deep-link capture.
   let follow = $state(true)
 
   // The window the scrubber draws. Unchanged in meaning and still the exact
@@ -173,14 +175,35 @@
     if (follow) centreOnPlayhead()
   }
 
-  // The ONLY writer of `viewSpan` — the zoom entry point. With follow on the
+  // A writer of `viewSpan` — the playhead-anchored zoom. With follow on the
   // playhead IS the zoom anchor, so re-centring after the span change
-  // reproduces today's zoom-around-the-centred-playhead exactly (position does
-  // not move, so no chunk refetch is triggered). A follow-off zoom needs a real
-  // anchor; that arrives with the change that turns follow off.
+  // reproduces the original zoom-around-the-centred-playhead exactly (position
+  // does not move, so no chunk refetch is triggered). Deliberately kept as the
+  // arithmetic for this case rather than routing it through the anchored writer
+  // below at fraction 0.5: centredViewStart is the expression the centring
+  // invariant is stated in, and re-deriving it through the anchor formula would
+  // re-associate the floating point.
   function setViewSpan(span: number) {
     viewSpan = span
     if (follow) centreOnPlayhead()
+  }
+
+  // The other writer of `viewSpan` — the anchored zoom. Holds the wall-clock
+  // time under `fraction` (a position across the drawn window) fixed while the
+  // span changes, which is the whole point of the pointer-anchored mode: the
+  // moment under the cursor is the moment you are zooming into.
+  //
+  // Follow has to go off whenever the result is no longer centred on the
+  // playhead, for the same reason panning does: playback's next position update
+  // would re-centre the viewport and undo the anchoring. An anchor that lands
+  // exactly on the playhead leaves the window centred, so follow stays on — and
+  // the check is made AFTER setViewStart so the live-edge clamp is accounted
+  // for, keeping "follow on implies the window is centred" exactly true.
+  function setViewSpanAnchored(span: number, fraction: number) {
+    const target = anchoredViewStart(viewStart, viewSpan, span, fraction)
+    viewSpan = span
+    setViewStart(target)
+    if (viewStart !== centredViewStart(position, viewSpan)) follow = false
   }
 
   // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
@@ -1324,12 +1347,29 @@
   }
 
   // Zoom: the scrubber requests an absolute target span (pinch distance ratio
-  // or wheel step). clampViewSpan bounds and rounds it, then setViewSpan
-  // re-centres the viewport on the (unmoved) playhead while follow is on — so
-  // the gesture still zooms around the playhead and still triggers no chunk
-  // refetch.
-  function onZoom(targetSpan: number) {
-    setViewSpan(clampViewSpan(targetSpan))
+  // or wheel step) plus WHERE the gesture happened, as a position across the
+  // drawn window. clampViewSpan bounds and rounds the span; this function owns
+  // the anchor policy, because the preference belongs to the app and not to the
+  // scrubber. anchorFraction is null when the gesture expresses no anchor —
+  // pinch, today.
+  function onZoom(targetSpan: number, anchorFraction: number | null) {
+    const span = clampViewSpan(targetSpan)
+    if (anchorFraction === null || prefsStore.timelineZoomAnchor === 'playhead') {
+      // Playhead-anchored. While follow is on the playhead is the window's
+      // centre, so re-centring after the span change is the anchor — the
+      // original behaviour, byte for byte.
+      if (follow) {
+        setViewSpan(span)
+        return
+      }
+      // Follow is off, so there is no playhead at the centre to zoom about (it
+      // may not even be on screen). Hold the visible window's centre, which is
+      // exactly where the playhead sits whenever follow is on — zooming about
+      // the left edge instead would look broken after a pan.
+      setViewSpanAnchored(span, 0.5)
+      return
+    }
+    setViewSpanAnchored(span, anchorFraction)
   }
 
   // Play button. From scrubbing, or when the playhead is outside the loaded

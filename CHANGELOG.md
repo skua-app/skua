@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Added
+
+- Recording timeline: the mouse wheel now zooms around the pointer, so the moment under the cursor stays under the cursor as the timeline scales — the same way the wheel already zooms the picture in the focus view. The two gestures used to disagree: the timeline always recentred on the playhead. Which one you get is a new setting under Settings → Appearance → Timeline zoom, either Pointer (the new default) or Playhead (the previous behaviour). Pinch on a touchscreen is unchanged and still zooms about the playhead.
+
 Fixed
 
 - Recording timeline: the scrub preview no longer goes black after a quick drag across an hour boundary and straight back. Returning to the first hour while the second one was still loading could leave the preview marked as ready against a video that had never actually started, so nothing painted — and it stayed black for every further scrub in that hour until you left to another hour and came back. Each clip's load is now tracked separately, so a load that finishes after you have already moved on is discarded instead of being applied to where you are now.

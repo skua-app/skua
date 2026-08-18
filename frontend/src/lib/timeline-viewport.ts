@@ -34,6 +34,38 @@ export function centredViewStart(position: number, viewSpan: number): number {
   return position - viewSpan / 2
 }
 
+// Zoom ABOUT A POINT: the viewport left edge that holds the wall-clock time
+// under `fraction` fixed while the span changes from viewSpan to nextSpan.
+// fraction is a position across the drawn window, 0 = left edge, 1 = right
+// edge — the scrubber's own coordinate, so a caller converts a pointer x into
+// it by dividing by the track width.
+//
+// This is the one-dimensional, wall-clock counterpart of what ZoomPane already
+// does in two dimensions and pixels for the picture zoom: keep the content
+// point under the cursor where it is, and let everything else scale around it.
+// The two gestures used to disagree — the picture zoomed about the cursor, the
+// timeline always recentred on the playhead — because until the viewport became
+// real state the timeline could not express any other anchor.
+//
+// The invariant, and what the tests pin: the time under `fraction` before the
+// zoom is the time under `fraction` after it. Anchoring at 0.5 is the same
+// window centredViewStart produces for a centred playhead, which is why the
+// playhead-anchored mode never needs this function while follow is on.
+//
+// Pure of the clamps by design: the caller passes a span that clampViewSpan has
+// already bounded, and passes the result through clampViewStart. The live-edge
+// clamp CAN override the anchor near live — the bound wins over the gesture, so
+// the last part of a zoom-out there slides rather than staying pinned.
+export function anchoredViewStart(
+  viewStart: number,
+  viewSpan: number,
+  nextSpan: number,
+  fraction: number
+): number {
+  const anchorTime = viewStart + fraction * viewSpan
+  return anchorTime - fraction * nextSpan
+}
+
 // Clamp the viewport CENTRE to the live edge. While the viewport was derived
 // from the playhead this bound was emergent: the window was a function of the
 // playhead and the playhead was clamped to liveEdge. A viewport that is real
