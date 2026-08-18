@@ -20,12 +20,28 @@ import type { TimelineMode } from '$lib/api'
 // threshold and is comfortably below any deliberate drag.
 export const CLICK_SLOP_PX = 5
 
-// Half-width of the playhead's grab zone, from the centre of its line. The line
-// itself is 2px, so this is "what the playhead occupies plus a modest margin" —
-// a 16px-wide target, sized for a mouse. It is NOT a touch target: the 44px
-// handle, and the visible affordance that has to come with it, are a separate
-// piece of work.
+// Half-width of the playhead's grab zone, from the centre of its line, for a
+// MOUSE. The line itself is 2px, so this is "what the playhead occupies plus a
+// modest margin" — a 16px-wide target, which is as much as a cursor needs and
+// as little as keeps the rest of the track clickable.
 export const PLAYHEAD_GRAB_PX = 8
+
+// The same thing for a finger: 44px wide in total, per Apple's touch-target
+// guidance. It is deliberately far wider than the visible grip, because the
+// grip has to stay small enough not to cover the coverage, review and audio
+// bands it sits over, while still being catchable without looking.
+//
+// One code path, two numbers. The mouse case is not a separate branch — it is
+// this rule with the other constant.
+export const PLAYHEAD_GRAB_TOUCH_PX = 22
+
+// Which grab half-width applies to a given pointer. Anything that is not a
+// mouse gets the touch target: a pen is aimed with a hand rather than with a
+// cursor, and an unknown pointerType is likelier to be coarse than fine, so the
+// generous value is the safe default in both cases.
+export function grabHalfWidth(pointerType: string): number {
+  return pointerType === 'mouse' ? PLAYHEAD_GRAB_PX : PLAYHEAD_GRAB_TOUCH_PX
+}
 
 // What a press on the track means. Settled at pointerdown and then fixed for
 // the life of the gesture — see resolveGesture.
@@ -50,6 +66,10 @@ export type GesturePress = {
   // from the track's left edge.
   pressX: number
   playheadX: number
+  // PointerEvent.pointerType. It only selects how wide the playhead's grab zone
+  // is — a finger needs 44px, a cursor does not. It is NOT what keeps a touch
+  // tap inert; that gate lives at the other end of the gesture, on release.
+  pointerType: string
 }
 
 // Decide what a press means, ONCE, at pointerdown.
@@ -64,13 +84,19 @@ export type GesturePress = {
 // Order is load-bearing where the cases overlap: shift wins over the playhead
 // hit test, so shift+drag starting on the playhead pans rather than seeks. An
 // explicit modifier beats a positional guess.
-export function resolveGesture({ mode, shiftKey, pressX, playheadX }: GesturePress): Gesture {
+export function resolveGesture({
+  mode,
+  shiftKey,
+  pressX,
+  playheadX,
+  pointerType
+}: GesturePress): Gesture {
   // Follow mode has exactly one pointer gesture and no modifier bindings: the
   // tape is already draggable, so shift means nothing and every press is the
   // relative drag it has always been.
   if (mode === 'follow') return 'tape'
   if (shiftKey) return 'pan'
-  if (Math.abs(pressX - playheadX) <= PLAYHEAD_GRAB_PX) return 'playhead'
+  if (Math.abs(pressX - playheadX) <= grabHalfWidth(pointerType)) return 'playhead'
   return 'idle'
 }
 

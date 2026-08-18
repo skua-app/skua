@@ -425,7 +425,8 @@
         mode,
         shiftKey: e.shiftKey,
         pressX: trackX(e.clientX),
-        playheadX: playheadFraction * trackWidth
+        playheadX: playheadFraction * trackWidth,
+        pointerType: e.pointerType
       })
       pressClientX = e.clientX
       movedBeyondSlop = false
@@ -749,6 +750,15 @@
       style:transform="translateX({playheadFraction * trackWidth - 1}px)"
     >
       <span class="playhead-line"></span>
+      <!-- Grip: the VISIBLE part of the handle. The hit area is far wider and is
+           computed arithmetically at pointerdown (44px on touch, 16px for a
+           cursor), so this only has to be seen, not caught — which is what lets
+           it stay narrow enough to sit over the coverage fill without hiding
+           it, and in the band below the review and audio lanes rather than
+           across them. In fixed mode it takes pointer events purely so the
+           cursor can say "grabbable"; the press still bubbles to the track and
+           is resolved there like any other. -->
+      <span class="playhead-grip" class:grabbable={mode === 'fixed'}></span>
     </span>
   </div>
 
@@ -1018,6 +1028,36 @@
     bottom: 0;
     width: 2px;
     background: var(--accent);
+  }
+  /* Visible grip on the playhead line. Sized and placed to be seen rather than
+     caught — the hit area is arithmetic and much wider — so it can stay narrow
+     enough not to hide the coverage fill it sits over, and low enough to clear
+     the review lane (top 6px) and the audio lane (top 10px, 5px tall)
+     completely. It stops above the tick labels, so the ruler stays readable
+     through it. First-pass sizes — tune on device. */
+  .playhead-grip {
+    position: absolute;
+    top: 17px;
+    /* Centre the 12px grip on the 2px line, whose centre sits at x=1. */
+    left: -5px;
+    width: 12px;
+    height: 16px;
+    border-radius: 6px;
+    background: var(--accent);
+    /* Same hairline the hourlines use, so the grip reads as sitting ON the
+       track rather than floating above it. */
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+    pointer-events: none;
+  }
+  /* Fixed mode: the playhead is what a drag moves, so the grip says so. Taking
+     pointer events here is only for the cursor — the press bubbles to .track
+     and is resolved by resolveGesture exactly as a press on the line would be.
+     Not applied in follow mode, where the grip is decorative: the tape moves,
+     not the playhead, and a resize cursor would promise a gesture that mode
+     does not have. */
+  .playhead-grip.grabbable {
+    pointer-events: auto;
+    cursor: ew-resize;
   }
   /* Time flag — the top cap of the playhead line, sitting in the wrapper's
      reserved padding above the track. Same drag-gated transition as the

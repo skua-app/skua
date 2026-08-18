@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   CLICK_SLOP_PX,
   PLAYHEAD_GRAB_PX,
+  PLAYHEAD_GRAB_TOUCH_PX,
+  grabHalfWidth,
   resolveGesture,
   exceedsClickSlop,
   type Gesture
@@ -18,6 +20,7 @@ function press(over: Partial<Parameters<typeof resolveGesture>[0]> = {}): Gestur
     shiftKey: false,
     pressX: 100,
     playheadX: PLAYHEAD_X,
+    pointerType: 'mouse',
     ...over
   })
 }
@@ -107,5 +110,77 @@ describe('exceedsClickSlop', () => {
       jitter = jitter || exceedsClickSlop(startX, x)
     }
     expect(jitter).toBe(false)
+  })
+})
+
+describe('grabHalfWidth', () => {
+  it('gives a finger a 44px target and a cursor a 16px one', () => {
+    expect(PLAYHEAD_GRAB_TOUCH_PX * 2).toBe(44)
+    expect(PLAYHEAD_GRAB_PX * 2).toBe(16)
+    expect(grabHalfWidth('mouse')).toBe(PLAYHEAD_GRAB_PX)
+    expect(grabHalfWidth('touch')).toBe(PLAYHEAD_GRAB_TOUCH_PX)
+  })
+
+  it('treats a pen, and anything unrecognised, as coarse', () => {
+    // A pen is aimed with a hand, not with a cursor, and an unknown pointerType
+    // is likelier to be coarse than fine — so the generous target is the safe
+    // default for both.
+    expect(grabHalfWidth('pen')).toBe(PLAYHEAD_GRAB_TOUCH_PX)
+    expect(grabHalfWidth('')).toBe(PLAYHEAD_GRAB_TOUCH_PX)
+    expect(grabHalfWidth('trackpad-of-the-future')).toBe(PLAYHEAD_GRAB_TOUCH_PX)
+  })
+})
+
+describe('the playhead handle', () => {
+  it('is catchable by a finger well outside the cursor target', () => {
+    // The whole point of the handle: a press that a mouse would call empty
+    // track is a playhead grab for a finger.
+    const justOutsideMouse = PLAYHEAD_X + PLAYHEAD_GRAB_PX + 1
+    expect(press({ pressX: justOutsideMouse, pointerType: 'mouse' })).toBe('idle')
+    expect(press({ pressX: justOutsideMouse, pointerType: 'touch' })).toBe('playhead')
+  })
+
+  it('is exactly 44px wide for touch, inclusive, and no wider', () => {
+    for (const dir of [-1, 1]) {
+      const edge = PLAYHEAD_X + dir * PLAYHEAD_GRAB_TOUCH_PX
+      expect(press({ pressX: edge, pointerType: 'touch' })).toBe('playhead')
+      expect(press({ pressX: edge + dir, pointerType: 'touch' })).toBe('idle')
+    }
+  })
+
+  it('is one rule with two numbers, not a separate touch path', () => {
+    // Same resolution order, same outcomes, only the width differs — including
+    // shift still winning over the hit test, which is a desktop-only modifier
+    // but must not behave differently just because a pen reported the press.
+    for (const pointerType of ['mouse', 'touch', 'pen']) {
+      expect(press({ pressX: PLAYHEAD_X, pointerType })).toBe('playhead')
+      expect(press({ pressX: PLAYHEAD_X, pointerType, shiftKey: true })).toBe('pan')
+      expect(press({ pressX: PLAYHEAD_X, pointerType, mode: 'follow' })).toBe('tape')
+      // Far from the playhead is empty track for every pointer.
+      expect(press({ pressX: PLAYHEAD_X + 200, pointerType })).toBe('idle')
+    }
+  })
+
+  it('does not give follow mode a second way to scrub', () => {
+    // In follow mode the handle exists but resolves to the one gesture that
+    // mode has, at every pointer type and at every distance from the line. It
+    // cannot become a competing scrub path because there is no branch for it.
+    for (const pointerType of ['mouse', 'touch', 'pen']) {
+      for (const pressX of [PLAYHEAD_X, PLAYHEAD_X + 4, PLAYHEAD_X + 30, 0, 1000]) {
+        expect(press({ mode: 'follow', pressX, pointerType })).toBe('tape')
+      }
+    }
+  })
+
+  it('does not create a tap-to-seek path on touch', () => {
+    // A tap on the handle resolves to 'playhead', NOT 'idle'. Only 'idle' can
+    // become a click, so the handle cannot reach the click branch at all — and
+    // 'playhead' seeks on pointermove, which a tap has none of. The mouse-only
+    // click gate is a second, independent guard on top of that.
+    expect(press({ pressX: PLAYHEAD_X, pointerType: 'touch' })).toBe('playhead')
+    expect(press({ pressX: PLAYHEAD_X, pointerType: 'pen' })).toBe('playhead')
+    // And a touch tap on empty track resolves to 'idle', where the pointerType
+    // gate on release is what stops it seeking.
+    expect(press({ pressX: PLAYHEAD_X + 200, pointerType: 'touch' })).toBe('idle')
   })
 })
