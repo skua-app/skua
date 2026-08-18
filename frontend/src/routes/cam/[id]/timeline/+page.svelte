@@ -900,7 +900,14 @@
       // Both bounds must be integer unix seconds (validUnixSeconds), same as
       // the clip / review / coverage routes — a VHS rush or a full-res
       // timeupdate leaves position fractional, which makes windowEnd fractional.
-      const list = await fetchPreviewFrameList(id, Math.floor(end), Math.floor(windowEnd))
+      // The end bound also takes the playhead into account: the tail is reached
+      // BY POSITION, and in fixed mode the viewport routinely sits entirely
+      // before it — the track does not move while the playhead runs on, so this
+      // is the ordinary case there rather than a corner one. Asking for an
+      // inverted range 400s, and framesKey would then pin the empty list for
+      // the rest of the hour: a live tail that never paints again.
+      const tailEnd = Math.floor(Math.max(windowEnd, position))
+      const list = await fetchPreviewFrameList(id, Math.floor(end), tailEnd)
       if (camId !== id || framesKey !== key) return
       frames = [...list].sort((a, b) => a.ts - b.ts)
       pickFrame()
