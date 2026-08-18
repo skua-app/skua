@@ -832,20 +832,33 @@
        pointer: coarse   only a finger needs this; a cursor does not, and on
                          desktop the page is height-capped with the video
                          flexing, so every pixel here is taken from the picture.
-       min-height: 780   the screen can afford it. Measured against the mobile
-                         stack (safe-area + 12, bar 38, gap 14, 16:9 frame,
-                         gap 14, controls 46 or 102 wrapped, gap 14, mode row
-                         38 + 8 + flag 26 + track, safe-area + 96 for the tab
-                         bar): at 88px the tightest case in range — 375px wide,
-                         wrapped controls, notched insets, summary still loading
-                         — clears by 31px, and a 375x812 phone by 63px. Below
-                         the threshold a 375x667 phone has only ~10px spare
-                         while loading, so it keeps 60px rather than being given
-                         a few pixels that would cost it a scroll.
-     In an installed PWA the viewport is stable, so this does not flip about;
+       min-height: 780   the screen is tall enough to afford it. Measured
+                         against the mobile stack (safe-area + 12, bar 38,
+                         gap 14, 16:9 frame, gap 14, controls 46 or 102 wrapped,
+                         gap 14, mode row 38 + 8 + flag 26 + track, safe-area +
+                         96 for the tab bar) against the space body actually
+                         offers, which is one screen minus the bottom inset.
+                         Below the threshold a 375x667 phone has ~10px spare
+                         while the recording summary loads, so it keeps 60px
+                         rather than being given a few pixels that would cost it
+                         a scroll. Above it, the tightest is a 375x812 phone at
+                         ~29px while loading, ~57px settled.
+       max-aspect-ratio  the screen is tall RELATIVE TO ITS WIDTH. Height alone
+                         is not enough, because the 16:9 frame above the
+                         scrubber grows with the viewport's WIDTH: a wide, short
+                         screen spends its height on the picture and has none
+                         left. An unfolded foldable at 653x841 clears 780 but is
+                         left with ~4px, which is nothing. 3/4 excludes that
+                         shape while keeping every phone (all near 0.46) and
+                         portrait tablets (~0.63-0.70).
+     A landscape tablet is excluded by the ratio too. That costs it nothing it
+     had before, and it cannot scroll anyway — over 900px wide the column is
+     height-capped with overflow hidden — so the exclusion is over-broad in the
+     safe direction rather than wrong.
+     In an installed PWA the viewport is stable, so none of this flips about;
      in a browser tab with chrome showing, a shorter viewport correctly gets
      the shorter track. */
-  @media (pointer: coarse) and (min-height: 780px) {
+  @media (pointer: coarse) and (min-height: 780px) and (max-aspect-ratio: 3 / 4) {
     .track {
       height: 88px;
     }
