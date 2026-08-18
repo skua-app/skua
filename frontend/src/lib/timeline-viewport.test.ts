@@ -6,6 +6,7 @@ import {
   MAX_SPAN,
   clampViewSpan,
   centredViewStart,
+  anchoredViewStart,
   clampViewStart,
   clampPlayhead
 } from './timeline-viewport'
@@ -59,10 +60,18 @@ class ViewportModel {
     this.position = t
     if (this.follow) this.centreOnPlayhead()
   }
-  // The only writer of viewSpan.
+  // A writer of viewSpan: the follow-mode zoom, and the fixed-mode fallback
+  // for a gesture that reports no anchor.
   setViewSpan(span: number) {
     this.viewSpan = span
     if (this.follow) this.centreOnPlayhead()
+  }
+  // The other writer of viewSpan: the fixed-mode zoom, anchored on a position
+  // across the drawn window.
+  setViewSpanAnchored(span: number, fraction: number) {
+    const target = anchoredViewStart(this.viewStart, this.viewSpan, span, fraction)
+    this.viewSpan = span
+    this.setViewStart(target)
   }
 
   // --- the route's call sites ---
@@ -81,9 +90,18 @@ class ViewportModel {
   seek(t: number) {
     this.setPosition(clampPlayhead(t, this.playbackFloor, this.liveEdge))
   }
-  // onZoom: pinch ratio / wheel step.
-  zoom(target: number) {
-    this.setViewSpan(clampViewSpan(target))
+  // onZoom: pinch ratio / wheel step, plus WHERE the gesture wants to zoom
+  // about (a position across the drawn window). fraction null = the gesture
+  // expressed no anchor, which is what pinch passes; it defaults to null so
+  // the scenarios written against the pre-anchor model drive it unchanged.
+  // The MODE decides: follow ignores the anchor outright.
+  zoom(target: number, fraction: number | null = null) {
+    const span = clampViewSpan(target)
+    if (this.follow || fraction === null) {
+      this.setViewSpan(span)
+      return
+    }
+    this.setViewSpanAnchored(span, fraction)
   }
   // Full-res timeupdate and the ensurePlaybackAt coverage snap. Neither clamps
   // in the route: both derive from a chunk whose end is itself capped at
@@ -221,6 +239,58 @@ describe('centredViewStart', () => {
     let s = centredViewStart(NOW, 3601)
     for (let i = 0; i < 1000; i++) s = centredViewStart(NOW, 3601)
     expect(s).toBe(centredViewStart(NOW, 3601))
+  })
+})
+
+describe('anchoredViewStart', () => {
+  // The load-bearing property: the wall-clock time under `fraction` before the
+  // zoom is the wall-clock time under it after. Recovering the anchor from the
+  // new window re-associates (t - f*next) + f*next, which IEEE754 does not
+  // guarantee to be exact, so it is asserted to within one ULP at unix-second
+  // magnitude — the same tolerance, and the same reason, as windowEnd above.
+  it('holds the time under the anchor fixed across any span change', () => {
+    const start = NOW - 1800
+    const span = 3600
+    for (const fraction of [0, 0.01, 0.25, 1 / 3, 0.5, 0.75, 0.999, 1]) {
+      const anchorTime = start + fraction * span
+      for (const next of [MIN_SPAN, 900, 1799, 3600, 3601, 4 * 3600, MAX_SPAN]) {
+        const nextStart = anchoredViewStart(start, span, next, fraction)
+        expect(Math.abs(nextStart + fraction * next - anchorTime)).toBeLessThanOrEqual(ULP)
+      }
+    }
+  })
+
+  it('is a no-op when the span does not change', () => {
+    for (const fraction of [0, 0.25, 0.5, 1]) {
+      expect(anchoredViewStart(NOW - 1800, 3600, 3600, fraction)).toBe(NOW - 1800)
+    }
+  })
+
+  it('anchored at the midpoint is the centred window', () => {
+    // Why follow mode never needs this function: at fraction 0.5 the anchor IS
+    // the centre, so the anchored window and the centred window are the same
+    // window. Follow mode still uses centredViewStart, because that is the
+    // expression its invariant is stated in.
+    const span = 3600
+    const start = centredViewStart(NOW, span)
+    for (const next of [MIN_SPAN, 1800, 7200, MAX_SPAN]) {
+      expect(anchoredViewStart(start, span, next, 0.5)).toBe(centredViewStart(NOW, next))
+    }
+  })
+
+  it('anchored at an edge pins that edge', () => {
+    // fraction 0: the left edge does not move. fraction 1: the right edge does not.
+    const start = NOW - 1800
+    expect(anchoredViewStart(start, 3600, 600, 0)).toBe(start)
+    expect(anchoredViewStart(start, 3600, 600, 1) + 600).toBe(start + 3600)
+  })
+
+  it('zooms toward the anchor, not away from it', () => {
+    // A concrete case, checked by hand: a 1h window, cursor a quarter of the way
+    // across it, zoomed to 10 minutes. The quarter mark is 15 min into the old
+    // window and must be 2.5 min into the new one.
+    const start = 1_000_000
+    expect(anchoredViewStart(start, 3600, 600, 0.25)).toBe(start + 900 - 150)
   })
 })
 
@@ -577,5 +647,145 @@ describe('viewport invariant: follow is what ties the two together', () => {
     // Clamp still enforced when the viewport is written directly.
     m.setViewStart(NOW + 10000)
     expect(m.viewStart).toBe(NOW - m.viewSpan / 2)
+  })
+})
+
+// The wall-clock time drawn at `fraction` across the current window — what a
+// fixed-mode zoom promises to keep under the cursor.
+function timeUnder(m: ViewportModel, fraction: number): number {
+  return m.windowStart + fraction * (m.windowEnd - m.windowStart)
+}
+
+// A model in fixed mode from the entry onward, as a user who has the
+// preference set to 'fixed' gets it.
+function fixedModel(floor = NOW - 30 * 86400, now = NOW, t: string | null = null): ViewportModel {
+  const m = new ViewportModel()
+  m.follow = false
+  m.playbackFloor = floor
+  m.enter(now, t)
+  return m
+}
+
+// Is the playhead outside the drawn window? Read directly here rather than
+// through a shared predicate: nothing in the model branches on it any more.
+function playheadOutside(m: ViewportModel): boolean {
+  return m.position < m.windowStart || m.position > m.windowEnd
+}
+
+describe('the mode decides what a zoom holds in place', () => {
+  it('follow mode ignores the reported anchor entirely', () => {
+    // The acceptance property for this whole change, stated as a comparison:
+    // two identical follow-mode models, one driven with an anchor on every
+    // notch and one driven with none, must stay bitwise identical. Follow mode
+    // is byte-for-byte what it was before the anchor existed.
+    const v: Violation[] = []
+    const anchored = freshModel()
+    const plain = freshModel()
+    // Fractions chosen to be nowhere near the centre, so an anchor that leaked
+    // through would show immediately.
+    const fractions = [0, 0.05, 0.17, 0.42, 0.83, 1]
+    for (let i = 0; i < 30; i++) {
+      const target = wheelSpan(anchored, i % 3 === 0 ? 1 : -1)
+      anchored.zoom(target, fractions[i % fractions.length])
+      plain.zoom(target)
+      expect(anchored.viewStart).toBe(plain.viewStart)
+      expect(anchored.viewSpan).toBe(plain.viewSpan)
+      expect(anchored.follow).toBe(true)
+      checkInvariants(anchored, `follow ignores anchor ${i}`, v)
+    }
+    expect(v).toEqual([])
+  })
+
+  it('fixed mode holds the time under the cursor across a run of notches', () => {
+    const m = fixedModel()
+    const F = 0.2
+    const anchor = timeUnder(m, F)
+    for (let i = 0; i < 12; i++) {
+      m.zoom(wheelSpan(m, -1), F)
+      // Every notch, not just the last: the anchor is recomputed from the
+      // viewport each time, so an accumulating error would show up here.
+      expect(Math.abs(timeUnder(m, F) - anchor)).toBeLessThanOrEqual(ULP)
+    }
+    expect(m.viewSpan).toBeLessThan(DEFAULT_VIEW_SPAN)
+    // The playhead has not moved, and the window is no longer centred on it —
+    // which is the point of a stationary track.
+    expect(m.position).toBe(NOW - DEFAULT_VIEW_SPAN / 2)
+    expect(m.viewStart).not.toBe(centredViewStart(m.position, m.viewSpan))
+  })
+
+  it('fixed mode leaves the window put for a gesture that reports no anchor', () => {
+    // Pinch, which this change deliberately does not touch. The span changes
+    // and the left edge stays where it is; nothing chases the playhead.
+    const m = fixedModel()
+    const parked = m.viewStart
+    const startSpan = m.viewSpan
+    for (let d = 40; d <= 800; d += 7) {
+      m.zoom(pinchSpan(startSpan, 200, d))
+      expect(m.viewStart).toBe(parked)
+    }
+    expect(m.follow).toBe(false)
+  })
+
+  it('fixed mode holds the anchor when the zoom runs into the span clamp', () => {
+    const m = fixedModel()
+    const F = 0.8
+    // Zoom in far past MIN_SPAN. clampViewSpan bounds the span BEFORE the
+    // anchor arithmetic sees it, so the anchor is computed against the span
+    // actually applied and stays exact rather than drifting by the clamped-off
+    // remainder.
+    for (let i = 0; i < 60; i++) m.zoom(wheelSpan(m, -1), F)
+    expect(m.viewSpan).toBe(MIN_SPAN)
+    const anchor = timeUnder(m, F)
+    const parked = m.viewStart
+    // Further notches request a span below MIN_SPAN: the applied span does not
+    // change, so the window does not move at all.
+    for (let i = 0; i < 10; i++) m.zoom(wheelSpan(m, -1), F)
+    expect(m.viewSpan).toBe(MIN_SPAN)
+    expect(m.viewStart).toBe(parked)
+    expect(timeUnder(m, F)).toBe(anchor)
+    // And the same at the far end.
+    for (let i = 0; i < 80; i++) m.zoom(wheelSpan(m, 1), F)
+    expect(m.viewSpan).toBe(MAX_SPAN)
+    const wideAnchor = timeUnder(m, F)
+    for (let i = 0; i < 10; i++) m.zoom(wheelSpan(m, 1), F)
+    expect(m.viewSpan).toBe(MAX_SPAN)
+    expect(timeUnder(m, F)).toBe(wideAnchor)
+  })
+
+  it('lets the live-edge clamp win over the anchor', () => {
+    const v: Violation[] = []
+    // Parked at live in follow mode, so the window overhangs live by half a
+    // span, then switched to fixed — the state a mode change at the live edge
+    // lands in. Zooming IN with the cursor out in the overhang pulls the
+    // viewport centre PAST live, which is the one bound clampViewStart
+    // enforces regardless of mode.
+    const m = freshModel()
+    m.seek(NOW + 100000)
+    expect(m.position).toBe(NOW)
+    m.follow = false
+    const anchor = timeUnder(m, 1)
+    const before = m.viewStart
+    m.zoom(wheelSpan(m, -1), 1)
+    checkInvariants(m, 'live clamp', v)
+    // The bound wins: the centre is held at live and the anchor is NOT kept.
+    expect(m.viewStart).toBe(NOW - m.viewSpan / 2)
+    expect(timeUnder(m, 1)).toBeLessThan(anchor)
+    // The unclamped answer is what got overridden, and by exactly the overshoot.
+    const wanted = anchoredViewStart(before, DEFAULT_VIEW_SPAN, m.viewSpan, 1)
+    expect(wanted).toBeGreaterThan(m.viewStart)
+    expect(v).toEqual([])
+  })
+
+  it('keeps a fixed-mode zoom through playback — nothing drags the window back', () => {
+    // The reason follow had to stop being gesture-driven state: with the mode
+    // deciding, an anchored window simply survives every timeupdate. No
+    // hysteresis, no re-engagement, no snap back to centre.
+    const m = fixedModel()
+    m.zoom(MIN_SPAN, 0) // pin the left edge: the centred playhead falls off the right
+    const anchored = m.viewStart
+    expect(playheadOutside(m)).toBe(true)
+    for (let i = 0; i < 500; i++) m.advance(m.position + 0.25)
+    expect(m.viewStart).toBe(anchored)
+    expect(m.follow).toBe(false)
   })
 })

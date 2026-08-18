@@ -34,7 +34,19 @@
     // distance ratio or wheel step). The consumer owns viewSpan and clamps it;
     // the scrubber stays stateless about the span (reads windowEnd-windowStart
     // as the current span).
-    onZoom?: (targetSpan: number) => void
+    //
+    // anchorFraction says WHERE the gesture wants to zoom about, as a position
+    // across the drawn window (0 = left edge, 1 = right edge), or null for "no
+    // anchor expressed". The scrubber only reports where the gesture happened;
+    // whether to honour it is the consumer's decision, because the timeline
+    // mode lives there and not here.
+    //
+    // The wheel passes its pointer position. Pinch DELIBERATELY passes null:
+    // its natural anchor in fixed mode is the midpoint between the fingers, but
+    // no touch handler changes here, so it keeps behaving exactly as it did.
+    // The parameter is shaped so pinch can start passing that midpoint later
+    // without another signature change.
+    onZoom?: (targetSpan: number, anchorFraction: number | null) => void
     // Live control: when set, a "LIVE" capsule is drawn at the live-edge
     // position on the track and clicking it navigates away (the consumer routes
     // to the camera's live focus view). Omitted → no capsule.
@@ -314,9 +326,11 @@
     if (!trackEl || !activePointers.has(e.pointerId)) return
     activePointers.set(e.pointerId, e.clientX)
     if (pinching && activePointers.size === 2) {
-      // Fingers apart -> currentDist up -> smaller span -> zoom in.
+      // Fingers apart -> currentDist up -> smaller span -> zoom in. null
+      // anchor: pinch reports no anchor (see the onZoom prop comment) —
+      // nothing about touch changes here.
       const currentDist = pointerDistance()
-      if (currentDist > 0) onZoom?.((pinchStartSpan * pinchStartDist) / currentDist)
+      if (currentDist > 0) onZoom?.((pinchStartSpan * pinchStartDist) / currentDist, null)
       return
     }
     if (!pinching && activePointers.size === 1) {
@@ -346,15 +360,31 @@
     }
   }
 
-  // Wheel zoom (desktop). Multiplicative step around the centred playhead:
-  // scroll down/away -> larger span -> zoom out. The parent clamps to
-  // [MIN_SPAN, MAX_SPAN]. The handler is attached non-passively in an $effect
-  // below so preventDefault actually suppresses page scroll.
+  // Where the pointer sits across the track, as a position in the drawn window
+  // (0 = left edge, 1 = right edge) — the coordinate onZoom's anchor is
+  // expressed in. Read from the live rect rather than trackWidth so a scrolled
+  // or resized page can't shift the anchor. Clamped: a wheel event can arrive
+  // with the cursor a hair outside the bounds. null when there is no measurable
+  // track, which the consumer reads as "no anchor expressed".
+  function pointerFraction(clientX: number): number | null {
+    const el = trackEl
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0) return null
+    const f = (clientX - r.left) / r.width
+    return f < 0 ? 0 : f > 1 ? 1 : f
+  }
+
+  // Wheel zoom (desktop). Multiplicative step: scroll down/away -> larger span
+  // -> zoom out. The parent clamps to [MIN_SPAN, MAX_SPAN] and decides what to
+  // anchor on — we just report the pointer position with it. The handler is
+  // attached non-passively in an $effect below so preventDefault actually
+  // suppresses page scroll.
   function onWheel(e: WheelEvent) {
     if (!onZoom) return
     e.preventDefault()
     const span = windowEnd - windowStart
-    onZoom(span * (e.deltaY > 0 ? 1.15 : 1 / 1.15))
+    onZoom(span * (e.deltaY > 0 ? 1.15 : 1 / 1.15), pointerFraction(e.clientX))
   }
   $effect(() => {
     const el = trackEl

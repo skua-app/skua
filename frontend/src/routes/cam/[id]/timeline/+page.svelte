@@ -44,6 +44,7 @@
     DEFAULT_VIEW_SPAN,
     clampViewSpan,
     centredViewStart,
+    anchoredViewStart,
     clampViewStart,
     clampPlayhead
   } from '$lib/timeline-viewport'
@@ -186,14 +187,34 @@
     if (follow) centreOnPlayhead()
   }
 
-  // The ONLY writer of `viewSpan` — the zoom entry point. With follow on the
-  // playhead IS the zoom anchor, so re-centring after the span change
-  // reproduces today's zoom-around-the-centred-playhead exactly (position does
-  // not move, so no chunk refetch is triggered). A follow-off zoom needs a real
-  // anchor; that arrives with the change that turns follow off.
+  // A writer of `viewSpan` — the FOLLOW mode zoom. The playhead IS the zoom
+  // anchor there, so re-centring after the span change reproduces the
+  // zoom-around-the-centred-playhead exactly (position does not move, so no
+  // chunk refetch is triggered). Deliberately kept as the arithmetic for this
+  // case rather than routing it through the anchored writer below at fraction
+  // 0.5: centredViewStart is the expression the centring invariant is stated
+  // in, and re-deriving it through the anchor formula would re-associate the
+  // floating point.
+  //
+  // In fixed mode this is also what a gesture that reports NO anchor lands on:
+  // the span changes and the window's left edge stays where it is, which moves
+  // nothing the user is pointing at. Pinch is the only such gesture, and it is
+  // deliberately untouched here — anchoring it on the finger midpoint is a
+  // later change.
   function setViewSpan(span: number) {
     viewSpan = span
     if (follow) centreOnPlayhead()
+  }
+
+  // The other writer of `viewSpan` — the FIXED mode zoom. Holds the wall-clock
+  // time under `fraction` (a position across the drawn window) fixed while the
+  // span changes, which is what a stationary track requires: the moment under
+  // the cursor is the moment you are zooming into. Never called in follow mode,
+  // where the playhead is the anchor and setViewSpan above is the arithmetic.
+  function setViewSpanAnchored(span: number, fraction: number) {
+    const target = anchoredViewStart(viewStart, viewSpan, span, fraction)
+    viewSpan = span
+    setViewStart(target)
   }
 
   // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
@@ -1341,12 +1362,24 @@
   }
 
   // Zoom: the scrubber requests an absolute target span (pinch distance ratio
-  // or wheel step). clampViewSpan bounds and rounds it, then setViewSpan
-  // re-centres the viewport on the (unmoved) playhead while follow is on — so
-  // the gesture still zooms around the playhead and still triggers no chunk
-  // refetch.
-  function onZoom(targetSpan: number) {
-    setViewSpan(clampViewSpan(targetSpan))
+  // or wheel step) plus WHERE the gesture happened, as a position across the
+  // drawn window. clampViewSpan bounds and rounds the span; the MODE decides
+  // what the zoom holds in place, which is the whole reason the scrubber
+  // reports the anchor rather than applying it.
+  //
+  // follow: the playhead is the centre of the track and the zoom is about it,
+  // exactly as before — the reported anchor is ignored outright.
+  // fixed: the track is stationary, so the zoom holds the time under the
+  // pointer. anchorFraction is null when the gesture expressed no anchor
+  // (pinch, which this change does not touch), and then the span simply
+  // changes without moving the window.
+  function onZoom(targetSpan: number, anchorFraction: number | null) {
+    const span = clampViewSpan(targetSpan)
+    if (follow || anchorFraction === null) {
+      setViewSpan(span)
+      return
+    }
+    setViewSpanAnchored(span, anchorFraction)
   }
 
   // Play button. From scrubbing, or when the playhead is outside the loaded
