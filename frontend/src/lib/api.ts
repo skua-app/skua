@@ -21,6 +21,12 @@ export type MobileColumns = 1 | 2
 export type GlanceWindowHours = 6 | 12 | 24 | 48 | 72
 export type GlanceMaxMoments = 10 | 20 | 30 | 50
 export type GridFps = 1 | 2
+// Which interaction model the recording timeline uses. 'follow' pins the
+// playhead to the centre of the track and moves the film past it; 'fixed'
+// holds the track still and moves the playhead along it. One choice rather
+// than a set of per-gesture options, because it changes what every gesture on
+// the timeline means.
+export type TimelineMode = 'follow' | 'fixed'
 
 export type Prefs = {
   grid_mode: 'hd' | 'eco'
@@ -36,6 +42,7 @@ export type Prefs = {
   glance_window_hours: GlanceWindowHours
   glance_max_moments: GlanceMaxMoments
   grid_fps: GridFps
+  timeline_mode: TimelineMode
 }
 
 // EventKind mirrors backend/internal/events.Kind exactly. 'motion' is not

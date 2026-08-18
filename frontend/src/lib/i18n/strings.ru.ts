@@ -141,6 +141,9 @@ export const ui = {
   showTimestampDesc: 'Время поверх снимков и видео.',
   gridFpsLabel: 'Частота обновления сетки',
   gridFpsDesc: 'Как часто обновляются плитки сетки. 2 Гц примерно удваивают трафик.',
+  timelineModeLabel: 'Таймлайн',
+  timelineModeDesc:
+    'В режиме «Слежение» указатель времени стоит по центру, а запись движется мимо него. В режиме «Фиксированный» запись стоит, а указатель движется по ней.',
   accentLabel: 'Акцент',
   accentDesc: 'Используется в подсветках и элементах управления.',
   nameLabel: 'Имя',
@@ -211,6 +214,8 @@ export const ui = {
   nameStyleBelow: 'Снизу',
   nameStyleOverlay: 'Поверх',
   nameStyleOff: 'Выкл.',
+  timelineModeFollow: 'Слежение',
+  timelineModeFixed: 'Фиксированный',
   accentCyan: 'Синий',
   accentSage: 'Зелёный',
   accentAmber: 'Жёлтый',
