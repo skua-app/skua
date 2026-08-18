@@ -66,6 +66,26 @@ export function anchoredViewStart(
   return anchorTime - fraction * nextSpan
 }
 
+// Which side of the drawn window the playhead has left on, or null while it is
+// visible. Inclusive of both edges: a playhead exactly on an edge is drawn, so
+// it is not off-screen.
+//
+// This drives an INDICATOR and nothing else. An earlier design used a
+// containment predicate to decide when the viewport should snap back to the
+// playhead, which was invisible to the user and read as a random jump; the mode
+// decides that now, and the only remaining question about a playhead outside
+// the window is how to say so. Nothing here feeds back into the viewport.
+//
+// Only meaningful in fixed mode. In follow mode the viewport is centred on the
+// playhead by construction, so the answer is always null.
+export type PlayheadEdge = 'before' | 'after' | null
+
+export function playheadEdge(position: number, viewStart: number, viewSpan: number): PlayheadEdge {
+  if (position < viewStart) return 'before'
+  if (position > viewStart + viewSpan) return 'after'
+  return null
+}
+
 // Clamp the viewport CENTRE to the live edge. While the viewport was derived
 // from the playhead this bound was emergent: the window was a function of the
 // playhead and the playhead was clamped to liveEdge. A viewport that is real

@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { timeToFraction } from '$lib/timeline'
-  import type { ReviewSegment, AudioMarker, CoverageSegment } from '$lib/api'
+  import { timeToFraction, fractionToTime } from '$lib/timeline'
+  import { resolveGesture, exceedsClickSlop, type Gesture } from '$lib/timeline-gestures'
+  import { playheadEdge } from '$lib/timeline-viewport'
+  import type { ReviewSegment, AudioMarker, CoverageSegment, TimelineMode } from '$lib/api'
   import Icon from '$lib/components/Icon.svelte'
   import { ui } from '$lib/i18n/strings'
 
@@ -8,6 +10,12 @@
     windowStart: number
     windowEnd: number
     position: number
+    // Which interaction model is active. It is not a style flag: it decides
+    // what a press on the track MEANS, so the scrubber has to know it rather
+    // than be handed one callback per possible meaning. Nothing here ever
+    // writes it — it is the user's preference, echoed down. Defaults to the
+    // behaviour the track has always had.
+    mode?: TimelineMode
     // Playable-domain bounds, used only to dim the out-of-footage track regions.
     // Default to the viewport edges so no band shows when not provided.
     playbackFloor?: number
@@ -48,9 +56,9 @@
     // without another signature change.
     onZoom?: (targetSpan: number, anchorFraction: number | null) => void
     // Pan request: how far to move the viewport, in seconds, positive = later.
-    // Pointer-only (shift+wheel). Omitted → shift+wheel is not bound at all and
-    // the page keeps its own scroll, which is what the consumer passes when the
-    // active timeline mode gives shift no special meaning.
+    // Pointer-only (shift+wheel and shift+drag), and fixed mode only — the mode
+    // gates it, not the presence of the prop, so both pan gestures answer to
+    // one source of truth.
     onPan?: (deltaSeconds: number) => void
     // Live control: when set, a "LIVE" capsule is drawn at the live-edge
     // position on the track and clicking it navigates away (the consumer routes
@@ -62,6 +70,7 @@
     windowStart,
     windowEnd,
     position,
+    mode = 'follow',
     playbackFloor = windowStart,
     liveEdge = windowEnd,
     coverage = [],
@@ -115,6 +124,30 @@
   let pinchStartDist = 0
   let pinchStartSpan = 0
 
+  // What the CURRENT press means, settled at pointerdown by resolveGesture and
+  // then read — never recomputed — for the rest of the gesture. Non-reactive:
+  // no template branches on it. Reset to 'idle' when the last pointer lifts.
+  let gesture: Gesture = 'idle'
+  // Press bookkeeping for the click / drag distinction. pressClientX is where
+  // the press landed (the click's target time is read from it, not from the
+  // release point — see clickSeek); movedBeyondSlop is LATCHED, so a press that
+  // wanders past the slop and comes back is a drag for good; pressIsMouse gates
+  // the click, because a touch tap deliberately does not seek.
+  let pressClientX = 0
+  let movedBeyondSlop = false
+  let pressIsMouse = false
+  // How far the press landed from the centre of the playhead line, in pixels.
+  // The grab zone is wider than the line, so a press can be up to
+  // PLAYHEAD_GRAB_PX off it; carrying that offset through the drag keeps the
+  // playhead exactly where it was grabbed instead of snapping it under the
+  // cursor on the first move.
+  let grabOffsetPx = 0
+  // Previous pointer x of a shift+drag pan. The pan writer is RELATIVE, so
+  // each move contributes only its own step; accumulating from the press point
+  // instead would fight the live-edge clamp, which can absorb part of a pan and
+  // must not then be re-applied from scratch on the next move.
+  let panLastX = 0
+
   // Coverage bands: each recorded range mapped onto the viewport, same idiom as
   // reviewBands but with NO severity and — crucially — NO min-width clamp, so a
   // recorded range renders at its true width and a real gap between ranges stays
@@ -136,6 +169,13 @@
   // or the oldest footage. No drag override — during a drag the CONTENT moves,
   // not the playhead, so the round-tripped position drives it throughout.
   const playheadFraction = $derived(timeToFraction(position, windowStart, windowEnd))
+  // Which edge the playhead left on, or null while it is drawn. Fixed mode
+  // only: in follow mode the window is centred on the playhead by construction,
+  // so the marker could never appear and asking is pointless. An INDICATOR —
+  // it says which way the playhead went and does nothing else.
+  const offEdge = $derived(
+    mode === 'fixed' ? playheadEdge(position, windowStart, windowEnd - windowStart) : null
+  )
   // Local-time readout for the flag above the playhead — the same HH:MM:SS
   // format the controls bar used to show before the clock moved up here.
   function pad(n: number): string {
@@ -304,20 +344,65 @@
     startPosition = position
   }
 
+  // Where a client x sits across the track, in CSS pixels from its left edge.
+  // Unclamped — a press that begins inside the track can travel outside it
+  // under pointer capture, and the gesture arithmetic wants the true offset.
+  function trackX(clientX: number): number {
+    const el = trackEl
+    if (!el) return 0
+    return clientX - el.getBoundingClientRect().left
+  }
+
+  // Seek to where a click landed — fixed mode only, and only once the press has
+  // been confirmed not to be a drag.
+  //
+  // The target is read from the PRESS point rather than the release point. They
+  // are within the slop of each other by definition, but the press point is the
+  // one the user aimed at, and using it makes the landed time independent of
+  // any sub-threshold drift while the button was held.
+  //
+  // The whole scrub lifecycle runs here, in order, so the route sees exactly
+  // what a drag of zero duration would produce: engage the preview layer, seek,
+  // then settle to full-res at the landed time.
+  function clickSeek() {
+    const f = pointerFraction(pressClientX)
+    if (f === null) return
+    onScrubStart?.()
+    onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
+    onScrubEnd?.()
+  }
+
   // Pointer-Events filmstrip drag + pinch zoom. setPointerCapture means we keep
   // receiving pointermove even after the finger/cursor leaves the track bounds;
   // touch-action: none on the track (CSS) cancels the page's pan/zoom gestures
-  // without resorting to non-passive listeners. A 1-finger drag is a RELATIVE
-  // pan from the press point — a tap does not seek (no jump). A 2-finger gesture
-  // pinches the viewport span via onZoom while pan is suspended.
+  // without resorting to non-passive listeners. In follow mode a 1-finger drag
+  // is a RELATIVE pan from the press point — a tap does not seek (no jump). A
+  // 2-finger gesture pinches the viewport span via onZoom while pan is
+  // suspended.
+  //
+  // In fixed mode the press is routed by resolveGesture instead, and the scrub
+  // lifecycle is fired only for the gestures that actually MOVE THE PLAYHEAD.
+  // A pan must not pause full-res and re-settle it, and an inert press on empty
+  // track must not either.
   function onPointerDown(e: PointerEvent) {
     if (!trackEl) return
     trackEl.setPointerCapture(e.pointerId)
     activePointers.set(e.pointerId, e.clientX)
-    // First pointer of the gesture starts the scrub lifecycle.
+    // First pointer of the gesture: settle what it means, once.
     if (activePointers.size === 1) {
       dragging = true
-      onScrubStart?.()
+      gesture = resolveGesture({
+        mode,
+        shiftKey: e.shiftKey,
+        pressX: trackX(e.clientX),
+        playheadX: playheadFraction * trackWidth
+      })
+      pressClientX = e.clientX
+      movedBeyondSlop = false
+      pressIsMouse = e.pointerType === 'mouse'
+      grabOffsetPx = trackX(e.clientX) - playheadFraction * trackWidth
+      panLastX = e.clientX
+      if (gesture === 'tape' || gesture === 'playhead') onScrubStart?.()
     }
     if (activePointers.size === 2) {
       // Second finger down: begin a pinch and snapshot its baseline.
@@ -340,13 +425,46 @@
       return
     }
     if (!pinching && activePointers.size === 1) {
+      // Latch the click / drag distinction before anything acts on the move.
+      if (!movedBeyondSlop && exceedsClickSlop(pressClientX, e.clientX)) movedBeyondSlop = true
       const w = trackWidth || trackEl.clientWidth
       if (w <= 0) return
       const span = windowEnd - windowStart
-      // Drag right -> content moves right -> earlier time -> position decreases.
-      // (If device-test shows the direction inverted, flip this one sign.)
-      const target = startPosition - ((e.clientX - startClientX) / w) * span
-      onSeek(Math.round(target))
+      if (gesture === 'tape') {
+        // Drag right -> content moves right -> earlier time -> position
+        // decreases. (If device-test shows the direction inverted, flip this
+        // one sign.)
+        const target = startPosition - ((e.clientX - startClientX) / w) * span
+        onSeek(Math.round(target))
+      } else if (gesture === 'playhead') {
+        // Fixed mode: the track is stationary, so the PLAYHEAD follows the
+        // cursor — the opposite of the tape drag above, where the cursor drags
+        // the content past a fixed playhead. Absolute, minus the grab offset,
+        // so the line stays exactly where it was picked up.
+        //
+        // pointerFraction clamps to the drawn window, so dragging off either
+        // end parks the playhead at that edge rather than running the window
+        // along with it. The track not moving is the whole of fixed mode; the
+        // route then bounds the seek by what is actually playable.
+        const f = pointerFraction(e.clientX - grabOffsetPx)
+        if (f === null) return
+        onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
+      } else if (gesture === 'pan') {
+        // Shift+drag: grab the track and move it. The playhead is not touched
+        // and keeps playing where it is.
+        //
+        // Drag right -> the window shows EARLIER time, so the content appears
+        // to travel with the cursor. This is the opposite sign to shift+WHEEL,
+        // deliberately: a wheel is a scrollbar (scroll right, go later) and a
+        // drag is a grab (pull right, bring earlier content into view). Both
+        // are the conventions of their own idiom, and every map and canvas
+        // application pairs them the same way.
+        onPan?.(((panLastX - e.clientX) / w) * span)
+        panLastX = e.clientX
+      }
+      // 'idle' moves nothing: a fixed-mode press on empty track is inert by
+      // design, because panning is an explicit gesture rather than something a
+      // bare drag falls into.
     }
   }
   function onPointerUp(e: PointerEvent) {
@@ -362,7 +480,17 @@
     } else if (activePointers.size === 0) {
       pinching = false
       dragging = false
-      onScrubEnd?.()
+      if (gesture === 'tape' || gesture === 'playhead') {
+        onScrubEnd?.()
+      } else if (gesture === 'idle' && !movedBeyondSlop && pressIsMouse) {
+        // A fixed-mode press that never travelled, made with a mouse: a click,
+        // which seeks. The pointerType gate is what keeps a touch TAP inert —
+        // an accidental tap must not seek, and that decision predates the mode
+        // work. It also means a pinch can never end as a click, since a mouse
+        // cannot raise a second pointer.
+        clickSeek()
+      }
+      gesture = 'idle'
     }
   }
 
@@ -401,10 +529,13 @@
     // Shift, not ctrl/cmd — those are the browser's own page zoom — and not
     // alt, which differs across platforms. Shift+wheel is the web's
     // horizontal-scroll convention, so it is what a pan should be bound to.
-    // With no onPan we do not preventDefault either: the page keeps its scroll
-    // rather than having the gesture swallowed and silently do nothing.
+    //
+    // Gated on the MODE, the same way shift+drag is: in follow mode shift has
+    // no special meaning, so the event is left alone entirely — no
+    // preventDefault — and the page keeps its own scroll rather than having
+    // the gesture swallowed to do nothing.
     if (e.shiftKey) {
-      if (!onPan) return
+      if (mode !== 'fixed' || !onPan) return
       e.preventDefault()
       const w = trackWidth || trackEl?.clientWidth || 0
       if (w <= 0) return
@@ -533,6 +664,18 @@
         <span class="live-jump-label">{ui.liveTag}</span>
         <Icon name="chevRight" size={15} />
       </button>
+    {/if}
+
+    <!-- Off-screen playhead marker (fixed mode only). Deliberately NOT a
+         control: no handler, no hit area, no cursor, pointer-events:none. It is
+         a piece of the playhead line showing through the edge it went out of,
+         which is why it is a bare accent bar with a fade rather than anything
+         with a border, a label or a background — the LIVE capsule is the
+         bordered pill that MEANS something when pressed, and the two must not
+         be mistaken for each other. Pinned to the track edge rather than placed
+         at a content fraction, so it never rides with a pan. -->
+    {#if offEdge}
+      <span class="off-edge {offEdge}" aria-hidden="true"></span>
     {/if}
 
     <span
@@ -749,6 +892,43 @@
     color: var(--text-2);
     letter-spacing: 0.2px;
     white-space: nowrap;
+  }
+  /* Off-screen playhead marker: a full-height accent bar hard against the track
+     edge, with a short gradient fading inward — the playhead line seen edge-on
+     through the side it left by. No border, no background plate, no label, so
+     it cannot read as the LIVE capsule (a bordered, pressable pill sitting at a
+     content fraction mid-track). Never interactive. First-pass sizes — tune on
+     device. */
+  .off-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 22px;
+    pointer-events: none;
+  }
+  .off-edge.before {
+    left: 0;
+    background: linear-gradient(to right, var(--accent), transparent);
+  }
+  .off-edge.after {
+    right: 0;
+    background: linear-gradient(to left, var(--accent), transparent);
+  }
+  /* The hard 3px stripe at the very edge: the line itself, as opposed to the
+     glow that points back toward it. */
+  .off-edge::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+  }
+  .off-edge.before::before {
+    left: 0;
+  }
+  .off-edge.after::before {
+    right: 0;
   }
   .playhead {
     position: absolute;

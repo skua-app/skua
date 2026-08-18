@@ -37,7 +37,8 @@
     PreviewFrame,
     ReviewSegment,
     AudioMarker,
-    CoverageSegment
+    CoverageSegment,
+    TimelineMode
   } from '$lib/api'
   import { footageToWallclock, previewTailKey, tailHourOpen } from '$lib/timeline'
   import {
@@ -54,6 +55,7 @@
   import ZoomPane from '$lib/components/ZoomPane.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
+  import Segmented from '$lib/components/Segmented.svelte'
   import { ui } from '$lib/i18n/strings'
 
   // Full-res chunk: 10 min. The viewport's default span and its zoom bounds
@@ -145,6 +147,16 @@
   // than as a side effect of follow being on, so a flip mid-load moves nothing.
   const follow = $derived(prefsStore.timelineMode === 'follow')
 
+  // The on-timeline mode switch. The SAME server-side preference the Settings
+  // control writes, so the two are never two settings — switching in either
+  // place is reflected in the other the next time it is drawn. It lives here as
+  // well as in Settings because the mode is switched often and Settings is a
+  // different screen.
+  const timelineModeOptions: { value: TimelineMode; label: string }[] = [
+    { value: 'follow', label: ui.timelineModeFollow },
+    { value: 'fixed', label: ui.timelineModeFixed }
+  ]
+
   // The window the scrubber draws. Unchanged in meaning and still the exact
   // pair of props passed to TimelineScrubber — only their source moved, from
   // the playhead to the viewport state above. With follow on,
@@ -187,11 +199,12 @@
     if (follow) centreOnPlayhead()
   }
 
-  // Pan the viewport WITHOUT moving the playhead — the shift+wheel gesture, and
-  // FIXED mode only. The playhead keeps playing where it is while the window
-  // shows another stretch of time, which is what the viewport/playhead split
-  // was for. It is not bound in follow mode: there the track is already
-  // draggable and shift has no special meaning, so nothing calls this.
+  // Pan the viewport WITHOUT moving the playhead — shift+wheel and shift+drag,
+  // both FIXED mode only. The playhead keeps playing where it is while the
+  // window shows another stretch of time, which is what the viewport/playhead
+  // split was for. The mode gate lives in the scrubber, which is where the
+  // gesture is recognised: follow mode never calls this, because there the
+  // track is already draggable and shift has no special meaning.
   function panViewport(deltaSeconds: number) {
     setViewStart(viewStart + deltaSeconds)
   }
@@ -233,6 +246,39 @@
     viewSpan = span
     setViewStart(target)
   }
+
+  // Switching the mode back to FOLLOW re-centres the window on the playhead at
+  // once. Without this the viewport would keep whatever the fixed-mode session
+  // left it with until the next write to position — which during playback is
+  // the next timeupdate, but while paused is never. "Follow" that visibly does
+  // not follow until something else happens is not a mode.
+  //
+  // This is where it belongs, and NOT in the mode control's click handler.
+  // `follow` is derived from the preference, so the preference changing is the
+  // event; a handler would miss a change made in Settings, or on another device.
+  // The effect READS follow and WRITES the viewport, which is the one direction
+  // of causality the mode model allows — nothing here writes follow, and
+  // reintroducing a gesture-driven write to it is exactly what the model exists
+  // to prevent.
+  //
+  // TRANSITION only, tracked by a plain non-reactive flag. Fixed → follow
+  // re-centres; follow → fixed leaves the window exactly where it is, which is
+  // right — the ruler should start from what you were already looking at. The
+  // first run only records the starting mode, so mounting never snaps.
+  //
+  // The ORDERING RULE above does not bite here. It forbids re-centring from an
+  // effect that tracks POSITION, because that lands a frame after the render
+  // which already drew the new position. This tracks the mode alone, which
+  // changes at most once per user action and never mid-drag, and the write sits
+  // inside untrack so position and viewSpan cannot become dependencies.
+  let wasFollowing = true
+  $effect(() => {
+    const f = follow
+    untrack(() => {
+      if (f && !wasFollowing) centreOnPlayhead()
+      wasFollowing = f
+    })
+  })
 
   // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
   // the full-res chunk drives it.
@@ -1930,10 +1976,24 @@
   </div>
 
   <div class="scrub">
+    <!-- Mode switch, directly above the track it governs. Trailing-aligned in
+         its own row rather than folded into .controls, which would push the
+         transport cluster off centre. It is nowhere near the LIVE capsule,
+         which lives INSIDE the track at the live-edge fraction — a different
+         concept in a different place. Visual treatment is a first pass. -->
+    <div class="mode-row" role="group" aria-label={ui.timelineModeAria}>
+      <Segmented
+        value={prefsStore.timelineMode}
+        options={timelineModeOptions}
+        onChange={(v) => prefsStore.setTimelineMode(v)}
+      />
+    </div>
+
     <TimelineScrubber
       {windowStart}
       {windowEnd}
       {position}
+      mode={prefsStore.timelineMode}
       {playbackFloor}
       {liveEdge}
       {coverage}
@@ -1943,7 +2003,7 @@
       onScrubStart={handleScrubStart}
       onScrubEnd={handleScrubEnd}
       {onZoom}
-      onPan={follow ? undefined : panViewport}
+      onPan={panViewport}
       onGoLive={() => goto(`/cam/${camId}`)}
     />
 
@@ -2337,6 +2397,13 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  /* Mode switch row. Trailing-aligned so it sits over the newest end of the
+     track, away from the earliest-time edge the eye reads first. .scrub is a
+     flex column with its own gap, so no margin is needed here. */
+  .mode-row {
+    display: flex;
+    justify-content: flex-end;
   }
   .scrub-note {
     min-height: 16px;
