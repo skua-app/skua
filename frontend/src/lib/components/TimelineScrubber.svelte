@@ -135,6 +135,12 @@
   let pressClientX = 0
   let movedBeyondSlop = false
   let pressIsMouse = false
+  // How far the press landed from the centre of the playhead line, in pixels.
+  // The grab zone is wider than the line, so a press can be up to
+  // PLAYHEAD_GRAB_PX off it; carrying that offset through the drag keeps the
+  // playhead exactly where it was grabbed instead of snapping it under the
+  // cursor on the first move.
+  let grabOffsetPx = 0
 
   // Coverage bands: each recorded range mapped onto the viewport, same idiom as
   // reviewBands but with NO severity and — crucially — NO min-width clamp, so a
@@ -381,7 +387,8 @@
       pressClientX = e.clientX
       movedBeyondSlop = false
       pressIsMouse = e.pointerType === 'mouse'
-      if (gesture === 'tape') onScrubStart?.()
+      grabOffsetPx = trackX(e.clientX) - playheadFraction * trackWidth
+      if (gesture === 'tape' || gesture === 'playhead') onScrubStart?.()
     }
     if (activePointers.size === 2) {
       // Second finger down: begin a pinch and snapshot its baseline.
@@ -415,6 +422,19 @@
         // one sign.)
         const target = startPosition - ((e.clientX - startClientX) / w) * span
         onSeek(Math.round(target))
+      } else if (gesture === 'playhead') {
+        // Fixed mode: the track is stationary, so the PLAYHEAD follows the
+        // cursor — the opposite of the tape drag above, where the cursor drags
+        // the content past a fixed playhead. Absolute, minus the grab offset,
+        // so the line stays exactly where it was picked up.
+        //
+        // pointerFraction clamps to the drawn window, so dragging off either
+        // end parks the playhead at that edge rather than running the window
+        // along with it. The track not moving is the whole of fixed mode; the
+        // route then bounds the seek by what is actually playable.
+        const f = pointerFraction(e.clientX - grabOffsetPx)
+        if (f === null) return
+        onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
       }
       // Every other gesture moves nothing on pointermove in this state: a
       // fixed-mode press on empty track is inert by design, because panning is
@@ -434,7 +454,7 @@
     } else if (activePointers.size === 0) {
       pinching = false
       dragging = false
-      if (gesture === 'tape') {
+      if (gesture === 'tape' || gesture === 'playhead') {
         onScrubEnd?.()
       } else if (gesture === 'idle' && !movedBeyondSlop && pressIsMouse) {
         // A fixed-mode press that never travelled, made with a mouse: a click,
