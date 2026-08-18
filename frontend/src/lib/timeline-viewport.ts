@@ -66,6 +66,34 @@ export function anchoredViewStart(
   return anchorTime - fraction * nextSpan
 }
 
+// Zoom AND pan from one two-finger gesture: the viewport left edge that puts
+// `anchorTime` under `midFraction` at `nextSpan`.
+//
+// This is the two-fraction generalisation of anchoredViewStart. That one holds
+// the time under a fraction fixed and reads the anchor from the SAME fraction,
+// which is all a wheel needs — the cursor does not move during a notch. Two
+// fingers do move: they change their separation AND their midpoint at once, so
+// the anchor is captured once from where the midpoint started and then placed
+// under wherever the midpoint is now.
+//
+// Both components fall out of that single expression, which is why they need no
+// discrimination. Finger separation drives nextSpan, so symmetric fingers zoom.
+// Midpoint travel drives midFraction, so fingers moving together pan. Doing
+// both at once does both, proportionally, with no threshold to cross and no
+// point at which the gesture changes character. It is the one-dimensional,
+// wall-clock counterpart of what ZoomPane computes in two dimensions and pixels
+// for the picture pinch.
+//
+// A PURE RECOMPUTE from inputs frozen at the start of the gesture, never an
+// accumulation of per-frame deltas, so a pinch cannot drift however many
+// pointermove events it is fed. Same reason centredViewStart is a recompute.
+//
+// Pure of the clamps by design, like anchoredViewStart: the caller bounds the
+// span first and passes the result through clampViewStart.
+export function pinchViewStart(anchorTime: number, nextSpan: number, midFraction: number): number {
+  return anchorTime - midFraction * nextSpan
+}
+
 // Which side of the drawn window the playhead has left on, or null while it is
 // visible. Inclusive of both edges: a playhead exactly on an edge is drawn, so
 // it is not off-screen.

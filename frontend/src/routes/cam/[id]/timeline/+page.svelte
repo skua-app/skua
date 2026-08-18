@@ -46,6 +46,7 @@
     clampViewSpan,
     centredViewStart,
     anchoredViewStart,
+    pinchViewStart,
     clampViewStart,
     clampPlayhead
   } from '$lib/timeline-viewport'
@@ -243,6 +244,18 @@
   // where the playhead is the anchor and setViewSpan above is the arithmetic.
   function setViewSpanAnchored(span: number, fraction: number) {
     const target = anchoredViewStart(viewStart, viewSpan, span, fraction)
+    viewSpan = span
+    setViewStart(target)
+  }
+
+  // The third writer of `viewSpan` — the FIXED mode two-finger gesture, which
+  // zooms and pans at the same time. anchorTime is the wall-clock point the
+  // fingers took hold of, frozen when the second finger landed; fraction is
+  // where their midpoint is now. Both halves of the viewport are written from
+  // those frozen inputs in one synchronous pass, so the pair is never seen
+  // half-updated and repeated calls at pointermove rate cannot drift.
+  function setViewSpanPinched(span: number, anchorTime: number, fraction: number) {
+    const target = pinchViewStart(anchorTime, span, fraction)
     viewSpan = span
     setViewStart(target)
   }
@@ -1452,6 +1465,15 @@
     setViewSpanAnchored(span, anchorFraction)
   }
 
+  // Two-finger gesture, fixed mode only. The scrubber has already resolved the
+  // separation into a target span and the midpoint into a fraction; here the
+  // span is bounded and the whole viewport recomputed from the anchor. Follow
+  // mode never reaches this — its pinch reports no anchor and goes through
+  // onZoom above, exactly as it always has.
+  function onPinch(targetSpan: number, anchorTime: number, midFraction: number) {
+    setViewSpanPinched(clampViewSpan(targetSpan), anchorTime, midFraction)
+  }
+
   // Play button. From scrubbing, or when the playhead is outside the loaded
   // chunk, settle+play; otherwise toggle the loaded chunk.
   function togglePlay() {
@@ -2004,6 +2026,7 @@
       onScrubEnd={handleScrubEnd}
       {onZoom}
       onPan={panViewport}
+      {onPinch}
       onGoLive={() => goto(`/cam/${camId}`)}
     />
 
