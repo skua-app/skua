@@ -38,7 +38,7 @@
     AudioMarker,
     CoverageSegment
   } from '$lib/api'
-  import { footageToWallclock } from '$lib/timeline'
+  import { footageToWallclock, previewTailKey, tailHourOpen } from '$lib/timeline'
   import {
     DEFAULT_VIEW_SPAN,
     clampViewSpan,
@@ -201,6 +201,21 @@
   let previewEl = $state<HTMLVideoElement | null>(null)
   let previewDuration = $state(0)
   let previewPrimed = $state(false)
+  // Bumped on every activeClip swap — the generation token the async prime
+  // compares itself against. The prime is a play()/pause() round trip, and a
+  // drag that crosses a clip boundary and comes straight back can swap the clip
+  // out from under one that is mid-flight: the element's play() promise has
+  // already been resolved by the engine, the swap then runs the media load
+  // algorithm, and the .then lands afterwards against a file it does not
+  // describe. Without the token it sets previewPrimed for a clip that was never
+  // played, the new clip's own on-metadata prime early-returns on that flag, and
+  // its currentTime seek never decodes — a bare seek paints nothing on mobile
+  // until the element has been played once. That is a black preview with no way
+  // out: pickClip early-returns on re-entering the same clip, and previewReady
+  // is deliberately sticky across clip swaps, so nothing retries. This is the
+  // activeClip equivalent of the camId guard loadClipsAround / loadFramesTail
+  // already carry.
+  let previewGen = 0
   // Coalesces rapid drag seeks to one currentTime assignment per frame.
   let previewSeekRaf: number | null = null
   // Same coalescing for the open-tail webp <img> swap (one src per frame).
@@ -247,8 +262,10 @@
   let clipFollowTimer: ReturnType<typeof setTimeout> | null = null
 
   // Open-tail webp frame layer. frames is the tail's frame list (sorted by ts);
-  // framesKey keys which tail span's frames are loaded (load once per tail +
-  // staleness guard); frameSrc is the current nearest-frame src.
+  // framesKey is previewTailKey(tail start, clock hour) — which tail's frames
+  // are loaded and which hour they were fetched in, so the list is loaded once
+  // per tail and stops being trusted when the hour it covers closes (see
+  // loadFramesTail); frameSrc is the current nearest-frame src.
   let frames = $state<PreviewFrame[]>([])
   let framesKey = $state<string | null>(null)
   let frameSrc = $state('')
@@ -495,6 +512,9 @@
       // Fresh camera: drop the loaded clips/clip, then load the clip list
       // around the playhead and pick the clip there.
       clips = []
+      // Same retirement as pickClip's: a prime still in flight for the previous
+      // camera's clip must not mark the newly entered camera's clip primed.
+      previewGen++
       activeClip = null
       // Drop the review lane for the previous camera; it reloads below over
       // the same span as the clips.
@@ -686,8 +706,18 @@
   function primePreview() {
     const el = previewEl
     if (previewPrimed || !el) return
+    // The clip this prime is for. Every caller runs in a task (a media event, a
+    // pointerdown, the readiness poll), and Svelte flushes the src in a
+    // microtask, so the element already holds activeClip's file here — only the
+    // RESOLUTION below can land against a different one.
+    const gen = previewGen
     el.play()
       .then(() => {
+        // A stale resolution touches nothing at all: the swap that bumped the
+        // generation ran the media load algorithm, which already stopped this
+        // playback, and pausing across generations could abort the new clip's
+        // own prime.
+        if (gen !== previewGen) return
         el.pause()
         previewPrimed = true
         seekPreview()
@@ -714,6 +744,9 @@
       }
     }
     if (next?.src === activeClip?.src) return
+    // Retire any prime still in flight for the outgoing clip before the swap,
+    // so its resolution cannot claim the incoming one as primed.
+    previewGen++
     activeClip = next
     previewDuration = 0
     previewPrimed = false
@@ -770,23 +803,49 @@
   }
 
   // Lazily load the open live tail's webp preview frame list, once per tail
-  // span. The tail spans [lastClipEnd, windowEnd] — the live, not-yet-clipped
-  // footage after the newest preview clip, which has no assembled mp4, so we
-  // scrub it frame-by-frame. framesKey is set to String(lastClipEnd)
-  // immediately so a fast drag firing this repeatedly does not spawn duplicate
-  // fetches (and an error never retry-loops; the key only changes when a new
-  // clip closes). On resolve, guard against a stale camId AND a stale tail span
-  // (the user may have scrubbed off the tail, or a new clip closed, before the
-  // list lands); on error the list stays empty (the layer shows the feed bg).
+  // span AND per clock hour. The tail spans [lastClipEnd, windowEnd] — the
+  // live, not-yet-clipped footage after the newest preview clip, which has no
+  // assembled mp4, so we scrub it frame-by-frame. framesKey is set to
+  // previewTailKey(...) immediately so a fast drag firing this repeatedly does
+  // not spawn duplicate fetches (and an error never retry-loops).
+  //
+  // The hour is half the key because Frigate DELETES the tail's frames the
+  // moment that hour closes and its assembled mp4 appears — a list keyed on the
+  // span alone keeps requesting webps that no longer exist for the rest of the
+  // session, since lastClipEnd only moves when the clip list is refetched and
+  // that has its own trigger. The clock is read here, on demand: every open-tail
+  // seek already calls this, so a rollover is noticed the next time the tail is
+  // actually touched, with no timer and no work while nobody is scrubbing.
+  //
+  // On resolve, guard against a stale camId AND a stale key (the user may have
+  // scrubbed off the tail, or the hour may have rolled, before the list lands);
+  // on error the list stays empty (the layer shows the feed bg).
   async function loadFramesTail() {
     const end = lastClipEnd
     if (end == null) return
-    const key = String(end)
+    const nowSec = Date.now() / 1000
+    const key = previewTailKey(end, nowSec)
     if (framesKey === key) return
     framesKey = key
+    // The hour this tail was open in has closed. There are no frames to fetch
+    // for it any more, and the honest source for the span is the preview mp4
+    // Frigate has just assembled — so drop the dead list and refetch the clips,
+    // which advances lastClipEnd and takes the playhead off the tail entirely.
+    // frameSrc is deliberately left alone: the already-decoded webp holds as the
+    // poster (pickFrame no-ops on an empty list) until the clip preview paints,
+    // instead of blanking the picture. Guarded by framesKey, so this runs once
+    // per (tail, hour) and cannot loop.
+    if (!tailHourOpen(end, nowSec)) {
+      frames = []
+      void loadClipsAround(position)
+      return
+    }
     const id = camId
     try {
-      const list = await fetchPreviewFrameList(id, Math.floor(end), windowEnd)
+      // Both bounds must be integer unix seconds (validUnixSeconds), same as
+      // the clip / review / coverage routes — a VHS rush or a full-res
+      // timeupdate leaves position fractional, which makes windowEnd fractional.
+      const list = await fetchPreviewFrameList(id, Math.floor(end), Math.floor(windowEnd))
       if (camId !== id || framesKey !== key) return
       frames = [...list].sort((a, b) => a.ts - b.ts)
       pickFrame()

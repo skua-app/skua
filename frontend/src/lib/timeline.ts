@@ -103,3 +103,28 @@ export function footageToWallclock(
   // back to continuous mapping rather than snapping backward to the last band.
   return chunkStart + footageSeconds
 }
+
+// Open-tail identity. Frigate serves the CURRENT clock hour as individual webp
+// preview frames because that hour's preview mp4 does not exist yet; the moment
+// the hour closes it assembles the mp4, adds it to the preview-clips list, and
+// DELETES the frames. So a loaded frame list is described by two things, not
+// one: the span it covers AND the clock hour it was open in. Keyed on the span
+// alone it outlives its footage the instant the wall clock crosses an hour
+// boundary, and every further scrub requests webps that are gone.
+
+// tailHourOpen reports whether the open tail beginning at `tailStartSec` is
+// still inside the hour Frigate is serving as frames. `tailStartSec` is the end
+// of the newest preview clip — an hour boundary — so the tail is open exactly
+// while `nowSec` has not left that hour. False also covers the degenerate case
+// of a tail start more than an hour behind now (a stale clip list, or a
+// recording gap): those hours are closed too, and their frames are gone.
+export function tailHourOpen(tailStartSec: number, nowSec: number): boolean {
+  return Math.floor(tailStartSec / 3600) === Math.floor(nowSec / 3600)
+}
+
+// previewTailKey identifies a loaded open-tail frame list by both halves of
+// that identity, so a key comparison is enough to load once per tail AND to
+// stop trusting the list once the clock leaves the hour it was fetched in.
+export function previewTailKey(tailStartSec: number, nowSec: number): string {
+  return `${Math.floor(tailStartSec)}|${Math.floor(nowSec / 3600)}`
+}
