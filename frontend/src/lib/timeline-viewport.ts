@@ -6,7 +6,8 @@
 // The model has three parts:
 //   viewport  viewStart + viewSpan — the only thing that decides what is drawn
 //   playhead  position — what is playing
-//   follow    whether the viewport tracks the playhead
+//   follow    whether the viewport tracks the playhead — the user's chosen
+//             timeline mode, and nothing the gestures write
 //
 // While follow is on the viewport is kept centred on the playhead, so
 // viewStart === centredViewStart(position, viewSpan) and the scrubber draws the
@@ -32,6 +33,37 @@ export function clampViewSpan(span: number): number {
 // rate (a pinch fires it on every pointermove) cannot drift.
 export function centredViewStart(position: number, viewSpan: number): number {
   return position - viewSpan / 2
+}
+
+// Zoom ABOUT A POINT: the viewport left edge that holds the wall-clock time
+// under `fraction` fixed while the span changes from viewSpan to nextSpan.
+// fraction is a position across the drawn window, 0 = left edge, 1 = right
+// edge — the scrubber's own coordinate, so a caller converts a pointer x into
+// it by dividing by the track width.
+//
+// This is the one-dimensional, wall-clock counterpart of what ZoomPane already
+// does in two dimensions and pixels for the picture zoom: keep the content
+// point under the cursor where it is, and let everything else scale around it.
+// It is the FIXED mode's zoom: the track is stationary, so a zoom has to hold
+// a point on the track rather than move the track to the playhead. Follow mode
+// never calls it — there the playhead is the centre, and centredViewStart is
+// the expression the centring invariant is stated in.
+//
+// The invariant, and what the tests pin: the time under `fraction` before the
+// zoom is the time under `fraction` after it.
+//
+// Pure of the clamps by design: the caller passes a span that clampViewSpan has
+// already bounded, and passes the result through clampViewStart. The live-edge
+// clamp CAN override the anchor near live — the bound wins over the gesture, so
+// the last part of a zoom-out there slides rather than staying pinned.
+export function anchoredViewStart(
+  viewStart: number,
+  viewSpan: number,
+  nextSpan: number,
+  fraction: number
+): number {
+  const anchorTime = viewStart + fraction * viewSpan
+  return anchorTime - fraction * nextSpan
 }
 
 // Clamp the viewport CENTRE to the live edge. While the viewport was derived

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -285,6 +286,108 @@ func TestUpdate_InvalidGridFPS_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestNew_MissingFile_ReturnsTimelineModeDefault(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := store.Get().TimelineMode; got != "follow" {
+		t.Errorf("TimelineMode: got %q, want default %q", got, "follow")
+	}
+}
+
+func TestUpdate_TimelineMode_PersistsAcrossReload(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefs.json")
+	store, err := prefs.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := store.Update(map[string]any{"timeline_mode": "fixed"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.TimelineMode != "fixed" {
+		t.Errorf("TimelineMode: got %q, want %q", updated.TimelineMode, "fixed")
+	}
+
+	reloaded, err := prefs.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Get().TimelineMode; got != "fixed" {
+		t.Errorf("TimelineMode after reload: got %q, want %q", got, "fixed")
+	}
+}
+
+func TestUpdate_InvalidTimelineMode_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Update(map[string]any{"timeline_mode": "ruler"}); err == nil {
+		t.Fatal("expected error for invalid timeline_mode, got nil")
+	}
+	if _, err := store.Update(map[string]any{"timeline_mode": 1}); err == nil {
+		t.Fatal("expected error for non-string timeline_mode, got nil")
+	}
+}
+
+// A prefs file written before timeline_mode existed — including one written by
+// a build that carried the discarded timeline_zoom_anchor key — must load as
+// "follow" with no migration step. Two separate mechanisms give that:
+// encoding/json ignores a JSON key with no matching struct field, and New
+// seeds the struct with defaults BEFORE unmarshalling, so a key that is absent
+// from the file leaves the default in place. The value never passes through
+// the zero value, so sanitize does not fire and no reset is logged.
+func TestNew_FileWithoutTimelineMode_LoadsDefaultWithoutReset(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefs.json")
+
+	raw := []byte(`{
+		"grid_mode": "hd",
+		"name_style": "overlay",
+		"timeline_zoom_anchor": "pointer"
+	}`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := prefs.New(path)
+	if err != nil {
+		t.Fatalf("New must not error on a file with an unknown key, got: %v", err)
+	}
+	p := store.Get()
+
+	if p.TimelineMode != "follow" {
+		t.Errorf("TimelineMode: got %q, want default %q", p.TimelineMode, "follow")
+	}
+	// The rest of the file is untouched by the absent key.
+	if p.GridMode != "hd" {
+		t.Errorf("GridMode: got %q, want preserved %q", p.GridMode, "hd")
+	}
+	if p.NameStyle != "overlay" {
+		t.Errorf("NameStyle: got %q, want preserved %q", p.NameStyle, "overlay")
+	}
+
+	// The discarded key is dropped rather than carried: the next write emits
+	// the struct, so nothing re-persists it.
+	if _, err := store.Update(map[string]any{"timeline_mode": "fixed"}); err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(written), "timeline_zoom_anchor") {
+		t.Errorf("rewritten prefs still carry the discarded key: %s", written)
+	}
+}
+
 func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prefs.json")
@@ -300,7 +403,8 @@ func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 		"accent": "neon",
 		"name_style": "sideways",
 		"desktop_columns": 99,
-		"mobile_columns": 7
+		"mobile_columns": 7,
+		"timeline_mode": "ruler"
 	}`)
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
@@ -329,6 +433,9 @@ func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 	}
 	if p.MobileColumns != 1 {
 		t.Errorf("MobileColumns: got %d, want default 1", p.MobileColumns)
+	}
+	if p.TimelineMode != "follow" {
+		t.Errorf("TimelineMode: got %q, want default %q", p.TimelineMode, "follow")
 	}
 
 	// Valid non-default bool fields must be preserved across sanitize.

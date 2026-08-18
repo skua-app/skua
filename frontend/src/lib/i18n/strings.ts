@@ -140,6 +140,9 @@ export const ui = {
   showTimestampDesc: 'Burn a clock onto live snapshots and feeds.',
   gridFpsLabel: 'Grid frame rate',
   gridFpsDesc: 'How often grid tiles refresh. 2 Hz roughly doubles bandwidth.',
+  timelineModeLabel: 'Timeline',
+  timelineModeDesc:
+    'Follow keeps the playhead centred and runs the recording past it. Fixed holds the recording still and moves the playhead along it.',
   accentLabel: 'Accent',
   accentDesc: 'Used across highlights and controls.',
   nameLabel: 'Name',
@@ -210,6 +213,8 @@ export const ui = {
   nameStyleBelow: 'Below',
   nameStyleOverlay: 'Overlay',
   nameStyleOff: 'Off',
+  timelineModeFollow: 'Follow',
+  timelineModeFixed: 'Fixed',
   accentCyan: 'Cyan',
   accentSage: 'Sage',
   accentAmber: 'Amber',

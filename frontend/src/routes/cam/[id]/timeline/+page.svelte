@@ -20,6 +20,7 @@
   import { untrack } from 'svelte'
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
+  import { prefsStore } from '$lib/stores/prefs.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
   import {
     timelineMasterURL,
@@ -43,6 +44,7 @@
     DEFAULT_VIEW_SPAN,
     clampViewSpan,
     centredViewStart,
+    anchoredViewStart,
     clampViewStart,
     clampPlayhead
   } from '$lib/timeline-viewport'
@@ -121,15 +123,27 @@
   // VIEWPORT-only — playback bounds are liveEdge/playbackFloor.
   let viewStart = $state(0)
 
-  // FOLLOW — whether the viewport tracks the playhead. While true the viewport
-  // is kept centred on the playhead, so the playhead sits dead-centre
-  // (timeToFraction(position, windowStart, windowEnd) === 0.5) and a drag or
-  // playback moves the CONTENT under it — exactly what the old
-  // viewport-derived-from-playhead model produced by construction. Nothing
-  // clears it yet and nothing exposes it to the user; the whole point of
-  // splitting viewport from playhead is that it CAN be cleared. Re-armed on
-  // every camera entry / deep-link capture.
-  let follow = $state(true)
+  // FOLLOW — whether the viewport tracks the playhead. It IS the user's chosen
+  // timeline mode and nothing else: read from the preference, written by
+  // nobody. While true the viewport is kept centred on the playhead, so the
+  // playhead sits dead-centre (timeToFraction(position, windowStart,
+  // windowEnd) === 0.5) and a drag or playback moves the CONTENT under it —
+  // exactly what the old viewport-derived-from-playhead model produced by
+  // construction. While false the track is stationary and the playhead travels
+  // along it.
+  //
+  // It was briefly hidden state that gestures mutated, and every gesture then
+  // carried its own private assumption about what it meant: a drag that moved
+  // the playhead instead of the track, a zoom anchor that silently became the
+  // window centre, a re-engagement rule the user could not see. Making it the
+  // mode is what makes each gesture answerable — the mode decides what the
+  // gesture means, rather than the gesture deciding what the mode is.
+  //
+  // No prefsSynced gate is needed here, unlike the effects that branch on a
+  // preference once: this is a derivation, so it simply flips when /api/prefs
+  // lands. The entry window is placed explicitly by the capture effect rather
+  // than as a side effect of follow being on, so a flip mid-load moves nothing.
+  const follow = $derived(prefsStore.timelineMode === 'follow')
 
   // The window the scrubber draws. Unchanged in meaning and still the exact
   // pair of props passed to TimelineScrubber — only their source moved, from
@@ -173,14 +187,51 @@
     if (follow) centreOnPlayhead()
   }
 
-  // The ONLY writer of `viewSpan` — the zoom entry point. With follow on the
-  // playhead IS the zoom anchor, so re-centring after the span change
-  // reproduces today's zoom-around-the-centred-playhead exactly (position does
-  // not move, so no chunk refetch is triggered). A follow-off zoom needs a real
-  // anchor; that arrives with the change that turns follow off.
+  // Pan the viewport WITHOUT moving the playhead — the shift+wheel gesture, and
+  // FIXED mode only. The playhead keeps playing where it is while the window
+  // shows another stretch of time, which is what the viewport/playhead split
+  // was for. It is not bound in follow mode: there the track is already
+  // draggable and shift has no special meaning, so nothing calls this.
+  function panViewport(deltaSeconds: number) {
+    setViewStart(viewStart + deltaSeconds)
+  }
+
+  // A writer of `viewSpan` — the FOLLOW mode zoom. The playhead IS the zoom
+  // anchor there, so re-centring after the span change reproduces the
+  // zoom-around-the-centred-playhead exactly (position does not move, so no
+  // chunk refetch is triggered). Deliberately kept as the arithmetic for this
+  // case rather than routing it through the anchored writer below at fraction
+  // 0.5: centredViewStart is the expression the centring invariant is stated
+  // in, and re-deriving it through the anchor formula would re-associate the
+  // floating point.
+  //
+  // In fixed mode this is also what a gesture that reports NO anchor lands on:
+  // the span changes and the window's left edge stays where it is, which moves
+  // nothing the user is pointing at. Pinch is the only such gesture, and it is
+  // deliberately untouched here — anchoring it on the finger midpoint is a
+  // later change.
+  //
+  // Either way the left edge is re-written after the span changes. In follow
+  // mode that is the re-centring the mode is defined by. In fixed mode the
+  // window stays exactly where it is and the write exists only to re-apply the
+  // live-edge bound, which TIGHTENS as the span grows: a viewport parked at the
+  // bound and then zoomed out would otherwise be left overhanging live by more
+  // than half a span, which is the one thing that bound exists to prevent.
   function setViewSpan(span: number) {
     viewSpan = span
     if (follow) centreOnPlayhead()
+    else setViewStart(viewStart)
+  }
+
+  // The other writer of `viewSpan` — the FIXED mode zoom. Holds the wall-clock
+  // time under `fraction` (a position across the drawn window) fixed while the
+  // span changes, which is what a stationary track requires: the moment under
+  // the cursor is the moment you are zooming into. Never called in follow mode,
+  // where the playhead is the anchor and setViewSpan above is the arithmetic.
+  function setViewSpanAnchored(span: number, fraction: number) {
+    const target = anchoredViewStart(viewStart, viewSpan, span, fraction)
+    viewSpan = span
+    setViewStart(target)
   }
 
   // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
@@ -440,13 +491,13 @@
 
   // On camId change: capture the playable bounds, re-arm follow, place the
   // playhead, reset to scrubbing, drop any loaded chunk, and pull the summary
-  // for the recording floor. Follow is on for the entry, so setPosition places
-  // the viewport with the playhead in one step: an optional ?t=<unix> deep-link
-  // (from an event's "See on timeline") lands the playhead at t and the
-  // viewport centred on it; without it the playhead rests centred in the last
-  // viewSpan up to live (so the entry window is the last viewSpan ending at
-  // live), then autoplays forward. Read the raw t param in the tracked scope so
-  // a same-camera deep-link with a new t re-captures.
+  // for the recording floor. The entry window is centred on the playhead in
+  // BOTH modes: an optional ?t=<unix> deep-link (from an event's "See on
+  // timeline") lands the playhead at t and the viewport centred on it; without
+  // it the playhead rests centred in the last viewSpan up to live (so the entry
+  // window is the last viewSpan ending at live), then autoplays forward. Read
+  // the raw t param in the tracked scope so a same-camera deep-link with a new
+  // t re-captures.
   const tParam = $derived(page.url.searchParams.get('t'))
   // Fires the heavy reset + one-shot autoplay once per real (camId, t) change.
   // The effect also re-runs on unrelated page.url churn (tParam is derived from
@@ -466,9 +517,6 @@
       // deep-link branch: a deep-link's derived viewport end may sit in the
       // past, but full-res must still play/stop at real now.
       liveEdge = now
-      // Entry always follows: the viewport is placed by the playhead below and
-      // tracks it from there. Set BEFORE the playhead so setPosition centres.
-      follow = true
       // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
       // the default last-1h window, never NaN.
       const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
@@ -483,6 +531,13 @@
         // the viewport shows the last 1h; autoplay then runs it forward to live.
         setPosition(liveEdge - viewSpan / 2)
       }
+      // Place the entry window explicitly rather than relying on setPosition
+      // having done it: in fixed mode the viewport does not track the playhead,
+      // so nothing else would put it anywhere, and it would still be sitting on
+      // the previous camera's window (or on unix 0 for a first mount). In
+      // follow mode this is the same pure recompute setPosition just made, so
+      // it lands on exactly the same second and changes nothing.
+      centreOnPlayhead()
       mode = 'scrubbing'
       // Reset BOTH buffers and the swap state.
       active = 'a'
@@ -845,7 +900,14 @@
       // Both bounds must be integer unix seconds (validUnixSeconds), same as
       // the clip / review / coverage routes — a VHS rush or a full-res
       // timeupdate leaves position fractional, which makes windowEnd fractional.
-      const list = await fetchPreviewFrameList(id, Math.floor(end), Math.floor(windowEnd))
+      // The end bound also takes the playhead into account: the tail is reached
+      // BY POSITION, and in fixed mode the viewport routinely sits entirely
+      // before it — the track does not move while the playhead runs on, so this
+      // is the ordinary case there rather than a corner one. Asking for an
+      // inverted range 400s, and framesKey would then pin the empty list for
+      // the rest of the hour: a live tail that never paints again.
+      const tailEnd = Math.floor(Math.max(windowEnd, position))
+      const list = await fetchPreviewFrameList(id, Math.floor(end), tailEnd)
       if (camId !== id || framesKey !== key) return
       frames = [...list].sort((a, b) => a.ts - b.ts)
       pickFrame()
@@ -1324,12 +1386,24 @@
   }
 
   // Zoom: the scrubber requests an absolute target span (pinch distance ratio
-  // or wheel step). clampViewSpan bounds and rounds it, then setViewSpan
-  // re-centres the viewport on the (unmoved) playhead while follow is on — so
-  // the gesture still zooms around the playhead and still triggers no chunk
-  // refetch.
-  function onZoom(targetSpan: number) {
-    setViewSpan(clampViewSpan(targetSpan))
+  // or wheel step) plus WHERE the gesture happened, as a position across the
+  // drawn window. clampViewSpan bounds and rounds the span; the MODE decides
+  // what the zoom holds in place, which is the whole reason the scrubber
+  // reports the anchor rather than applying it.
+  //
+  // follow: the playhead is the centre of the track and the zoom is about it,
+  // exactly as before — the reported anchor is ignored outright.
+  // fixed: the track is stationary, so the zoom holds the time under the
+  // pointer. anchorFraction is null when the gesture expressed no anchor
+  // (pinch, which this change does not touch), and then the span simply
+  // changes without moving the window.
+  function onZoom(targetSpan: number, anchorFraction: number | null) {
+    const span = clampViewSpan(targetSpan)
+    if (follow || anchorFraction === null) {
+      setViewSpan(span)
+      return
+    }
+    setViewSpanAnchored(span, anchorFraction)
   }
 
   // Play button. From scrubbing, or when the playhead is outside the loaded
@@ -1869,6 +1943,7 @@
       onScrubStart={handleScrubStart}
       onScrubEnd={handleScrubEnd}
       {onZoom}
+      onPan={follow ? undefined : panViewport}
       onGoLive={() => goto(`/cam/${camId}`)}
     />
 

@@ -7,7 +7,8 @@ import type {
   MobileColumns,
   GlanceWindowHours,
   GlanceMaxMoments,
-  GridFps
+  GridFps,
+  TimelineMode
 } from '$lib/api'
 
 class PrefsStore {
@@ -24,6 +25,7 @@ class PrefsStore {
   glanceWindowHours = $state<GlanceWindowHours>(24)
   glanceMaxMoments = $state<GlanceMaxMoments>(20)
   gridFps = $state<GridFps>(1)
+  timelineMode = $state<TimelineMode>('follow')
   loaded = $state(false)
 
   async load() {
@@ -42,6 +44,7 @@ class PrefsStore {
       this.glanceWindowHours = prefs.glance_window_hours
       this.glanceMaxMoments = prefs.glance_max_moments
       this.gridFps = prefs.grid_fps
+      this.timelineMode = prefs.timeline_mode
       this.applyAccent()
     } catch (err) {
       console.error('[prefs] load failed, using defaults:', err)
@@ -133,6 +136,11 @@ class PrefsStore {
   async setGridFps(v: GridFps) {
     this.gridFps = v
     await this.#persist({ grid_fps: v }, 'grid_fps')
+  }
+
+  async setTimelineMode(v: TimelineMode) {
+    this.timelineMode = v
+    await this.#persist({ timeline_mode: v }, 'timeline_mode')
   }
 }
 

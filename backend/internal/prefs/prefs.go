@@ -28,6 +28,12 @@ type Prefs struct {
 	GlanceWindowHours int     `json:"glance_window_hours"`
 	GlanceMaxMoments  int     `json:"glance_max_moments"`
 	GridFPS           int     `json:"grid_fps"`
+	// TimelineMode selects which interaction model the recording timeline
+	// uses. "follow" pins the playhead to the centre of the track and moves the
+	// film past it; "fixed" holds the track still and moves the playhead along
+	// it. It is one choice rather than a set of per-gesture options because it
+	// changes what every gesture on the timeline means.
+	TimelineMode string `json:"timeline_mode"`
 }
 
 var defaults = Prefs{
@@ -44,6 +50,9 @@ var defaults = Prefs{
 	GlanceWindowHours: 24,
 	GlanceMaxMoments:  20,
 	GridFPS:           1,
+	// Follow by default: it is the behaviour the timeline shipped with, and a
+	// centred playhead is the one that needs no explanation.
+	TimelineMode: "follow",
 }
 
 var validGridModes = map[string]bool{"hd": true, "eco": true}
@@ -54,14 +63,14 @@ var validMobileColumns = map[int]bool{1: true, 2: true}
 var validGlanceWindowHours = map[int]bool{6: true, 12: true, 24: true, 48: true, 72: true}
 var validGlanceMaxMoments = map[int]bool{10: true, 20: true, 30: true, 50: true}
 var validGridFPS = map[int]bool{1: true, 2: true}
+var validTimelineModes = map[string]bool{"follow": true, "fixed": true}
 
-// nameStyleList renders the accepted name_style values for the validation
-// error message. Derived from validNameStyles rather than restated, so
-// adding a style cannot leave the message naming a stale set. Sorted for a
-// stable message.
-func nameStyleList() string {
-	out := make([]string, 0, len(validNameStyles))
-	for k := range validNameStyles {
+// valueList renders an accepted-value set for a validation error message.
+// Derived from the set rather than restated, so adding a value cannot leave
+// the message naming a stale set. Sorted for a stable message.
+func valueList(valid map[string]bool) string {
+	out := make([]string, 0, len(valid))
+	for k := range valid {
 		out = append(out, k)
 	}
 	sort.Strings(out)
@@ -82,6 +91,7 @@ var knownFields = map[string]bool{
 	"glance_window_hours": true,
 	"glance_max_moments":  true,
 	"grid_fps":            true,
+	"timeline_mode":       true,
 }
 
 // Store is a thread-safe, file-backed preferences store.
@@ -155,6 +165,14 @@ func sanitize(p Prefs) (Prefs, []string) {
 	if !validGridFPS[p.GridFPS] {
 		p.GridFPS = defaults.GridFPS
 		reset = append(reset, "grid_fps")
+	}
+	// Note that a prefs file with NO timeline_mode key never reaches this
+	// branch: New seeds the struct with defaults before unmarshalling, so an
+	// absent key leaves "follow" in place rather than the zero value. This
+	// catches a present-but-invalid value only.
+	if !validTimelineModes[p.TimelineMode] {
+		p.TimelineMode = defaults.TimelineMode
+		reset = append(reset, "timeline_mode")
 	}
 	return p, reset
 }
@@ -235,7 +253,7 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("name_style must be a string")
 		}
 		if !validNameStyles[ns] {
-			return Prefs{}, fmt.Errorf("name_style must be one of %s, got %q", nameStyleList(), ns)
+			return Prefs{}, fmt.Errorf("name_style must be one of %s, got %q", valueList(validNameStyles), ns)
 		}
 		next.NameStyle = ns
 	}
@@ -334,6 +352,17 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("grid_fps must be 1 or 2, got %d", n)
 		}
 		next.GridFPS = n
+	}
+
+	if v, ok := partial["timeline_mode"]; ok {
+		m, ok := v.(string)
+		if !ok {
+			return Prefs{}, fmt.Errorf("timeline_mode must be a string")
+		}
+		if !validTimelineModes[m] {
+			return Prefs{}, fmt.Errorf("timeline_mode must be one of %s, got %q", valueList(validTimelineModes), m)
+		}
+		next.TimelineMode = m
 	}
 
 	if err := s.atomicWrite(next); err != nil {
