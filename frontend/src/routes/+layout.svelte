@@ -170,7 +170,7 @@
 
 <svelte:window bind:innerWidth={width} />
 
-<div class="min-h-screen bg-[var(--bg)] text-[var(--text)]">
+<div class="shell bg-[var(--bg)] text-[var(--text)]">
   {#if !isImmersive || isDesktop}
     <AppHeader {isDesktop} />
   {/if}
@@ -186,3 +186,16 @@
 </div>
 
 <InstallPrompt />
+
+<style>
+  /* Was Tailwind's `min-h-screen`, i.e. `min-height: 100vh` — the viewport
+     measured with a mobile browser's toolbar retracted, so while that toolbar
+     was showing the document was taller than the screen on every route and the
+     page could be dragged up by the toolbar's height to reveal nothing.
+     --screen-h is the space body actually offers; see app.css for why it is not
+     simply 100dvh. Still a minimum, so a page taller than the screen grows and
+     scrolls as before. */
+  .shell {
+    min-height: var(--screen-h);
+  }
+</style>

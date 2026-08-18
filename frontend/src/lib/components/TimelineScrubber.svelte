@@ -827,8 +827,8 @@
      two fingers, and 60px is a thin strip to land them in — especially since
      the fingers then cover most of what they are aiming at.
      Gated on BOTH conditions, because the height has to come out of a real
-     budget: the timeline screen is `min-height: 100dvh` with no overflow clip
-     below 900px, so anything that overflows scrolls, and it must not.
+     budget: below 900px the timeline screen is a min-height of one screen with
+     no overflow clip, so anything that overflows scrolls, and it must not.
        pointer: coarse   only a finger needs this; a cursor does not, and on
                          desktop the page is height-capped with the video
                          flexing, so every pixel here is taken from the picture.
