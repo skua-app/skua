@@ -8,7 +8,8 @@ import {
   centredViewStart,
   anchoredViewStart,
   clampViewStart,
-  clampPlayhead
+  clampPlayhead,
+  playheadEdge
 } from './timeline-viewport'
 
 // The viewport model's load-bearing property is an INVARIANT, not a value:
@@ -329,6 +330,68 @@ describe('clampViewStart', () => {
     // A ?t= deep-link older than the permissive floor must still land centred.
     const old = NOW - 400 * 86400
     expect(clampViewStart(old, 3600, NOW)).toBe(old)
+  })
+})
+
+describe('playheadEdge', () => {
+  const START = NOW - 1800
+  const SPAN = 3600
+
+  it('is null while the playhead is drawn, edges included', () => {
+    expect(playheadEdge(NOW, START, SPAN)).toBe(null)
+    // Exactly on an edge is still drawn, so it is not off-screen.
+    expect(playheadEdge(START, START, SPAN)).toBe(null)
+    expect(playheadEdge(START + SPAN, START, SPAN)).toBe(null)
+    // And one second inside either edge, which is visibly on the track.
+    expect(playheadEdge(START + 1, START, SPAN)).toBe(null)
+    expect(playheadEdge(START + SPAN - 1, START, SPAN)).toBe(null)
+  })
+
+  it('names the side the playhead left on', () => {
+    expect(playheadEdge(START - 0.001, START, SPAN)).toBe('before')
+    expect(playheadEdge(START - 86400, START, SPAN)).toBe('before')
+    expect(playheadEdge(START + SPAN + 0.001, START, SPAN)).toBe('after')
+    expect(playheadEdge(START + SPAN + 86400, START, SPAN)).toBe('after')
+  })
+
+  it('is null throughout a follow-mode session, by construction', () => {
+    // Follow mode centres the viewport on the playhead, so the marker can
+    // never appear there. Driven through the real gesture math rather than
+    // asserted once, since that is what makes it a property of the mode.
+    const m = freshModel()
+    for (const span of [MIN_SPAN, DEFAULT_VIEW_SPAN, MAX_SPAN]) {
+      m.zoom(span)
+      expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe(null)
+      for (let i = 0; i < 200; i++) {
+        m.advance(Math.min(m.position + 3.7, m.liveEdge))
+        expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe(null)
+      }
+      m.seek(NOW - 6 * 3600)
+      expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe(null)
+    }
+  })
+
+  it('appears in fixed mode when playback carries the playhead off the right', () => {
+    // The case the marker exists for: the track is stationary and the playhead
+    // runs on past the window end.
+    const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
+    expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe(null)
+    while (m.position <= m.windowEnd) m.advance(m.position + 30)
+    expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe('after')
+  })
+
+  it('appears on the left when a pan carries the window past the playhead', () => {
+    const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
+    // Pan forward far enough that the whole window sits after the playhead.
+    m.pan(2 * m.viewSpan)
+    expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe('before')
+    // Pan back and it is drawn again.
+    m.pan(-2 * m.viewSpan)
+    expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe(null)
   })
 })
 

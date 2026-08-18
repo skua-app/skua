@@ -1,6 +1,7 @@
 <script lang="ts">
   import { timeToFraction, fractionToTime } from '$lib/timeline'
   import { resolveGesture, exceedsClickSlop, type Gesture } from '$lib/timeline-gestures'
+  import { playheadEdge } from '$lib/timeline-viewport'
   import type { ReviewSegment, AudioMarker, CoverageSegment, TimelineMode } from '$lib/api'
   import Icon from '$lib/components/Icon.svelte'
   import { ui } from '$lib/i18n/strings'
@@ -168,6 +169,13 @@
   // or the oldest footage. No drag override — during a drag the CONTENT moves,
   // not the playhead, so the round-tripped position drives it throughout.
   const playheadFraction = $derived(timeToFraction(position, windowStart, windowEnd))
+  // Which edge the playhead left on, or null while it is drawn. Fixed mode
+  // only: in follow mode the window is centred on the playhead by construction,
+  // so the marker could never appear and asking is pointless. An INDICATOR —
+  // it says which way the playhead went and does nothing else.
+  const offEdge = $derived(
+    mode === 'fixed' ? playheadEdge(position, windowStart, windowEnd - windowStart) : null
+  )
   // Local-time readout for the flag above the playhead — the same HH:MM:SS
   // format the controls bar used to show before the clock moved up here.
   function pad(n: number): string {
@@ -658,6 +666,18 @@
       </button>
     {/if}
 
+    <!-- Off-screen playhead marker (fixed mode only). Deliberately NOT a
+         control: no handler, no hit area, no cursor, pointer-events:none. It is
+         a piece of the playhead line showing through the edge it went out of,
+         which is why it is a bare accent bar with a fade rather than anything
+         with a border, a label or a background — the LIVE capsule is the
+         bordered pill that MEANS something when pressed, and the two must not
+         be mistaken for each other. Pinned to the track edge rather than placed
+         at a content fraction, so it never rides with a pan. -->
+    {#if offEdge}
+      <span class="off-edge {offEdge}" aria-hidden="true"></span>
+    {/if}
+
     <span
       class="playhead"
       class:dragging
@@ -872,6 +892,43 @@
     color: var(--text-2);
     letter-spacing: 0.2px;
     white-space: nowrap;
+  }
+  /* Off-screen playhead marker: a full-height accent bar hard against the track
+     edge, with a short gradient fading inward — the playhead line seen edge-on
+     through the side it left by. No border, no background plate, no label, so
+     it cannot read as the LIVE capsule (a bordered, pressable pill sitting at a
+     content fraction mid-track). Never interactive. First-pass sizes — tune on
+     device. */
+  .off-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 22px;
+    pointer-events: none;
+  }
+  .off-edge.before {
+    left: 0;
+    background: linear-gradient(to right, var(--accent), transparent);
+  }
+  .off-edge.after {
+    right: 0;
+    background: linear-gradient(to left, var(--accent), transparent);
+  }
+  /* The hard 3px stripe at the very edge: the line itself, as opposed to the
+     glow that points back toward it. */
+  .off-edge::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+  }
+  .off-edge.before::before {
+    left: 0;
+  }
+  .off-edge.after::before {
+    right: 0;
   }
   .playhead {
     position: absolute;
