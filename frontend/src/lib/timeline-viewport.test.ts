@@ -1,0 +1,536 @@
+import { describe, it, expect } from 'vitest'
+import { timeToFraction } from './timeline'
+import {
+  DEFAULT_VIEW_SPAN,
+  MIN_SPAN,
+  MAX_SPAN,
+  clampViewSpan,
+  centredViewStart,
+  clampViewStart,
+  clampPlayhead
+} from './timeline-viewport'
+
+// The viewport model's load-bearing property is an INVARIANT, not a value:
+// while follow is on, the viewport is centred on the playhead, so
+//
+//   viewStart   === position - viewSpan/2
+//   windowStart === position - viewSpan/2
+//   windowEnd   === position + viewSpan/2
+//
+// and the scrubber therefore draws the playhead dead centre. Every gesture,
+// every entry path and every playback tick has to leave that true. These tests
+// drive the model through the real gesture math and assert the invariant after
+// every single mutation, rather than checking a handful of expected numbers.
+
+// ---------------------------------------------------------------------------
+// Harness: mirrors the four viewport writers in
+// routes/cam/[id]/timeline/+page.svelte. The reactive state lives in the route;
+// all the arithmetic lives in the module under test, so what is reproduced here
+// is only the assignment and the follow branching. Keep in step with the route.
+// ---------------------------------------------------------------------------
+class ViewportModel {
+  viewSpan = DEFAULT_VIEW_SPAN
+  viewStart = 0
+  position = 0
+  follow = true
+  liveEdge = 0
+  playbackFloor = 0
+
+  get windowStart(): number {
+    return this.viewStart
+  }
+  get windowEnd(): number {
+    return this.viewStart + this.viewSpan
+  }
+
+  // The only writer of viewStart.
+  setViewStart(start: number) {
+    this.viewStart = clampViewStart(start, this.viewSpan, this.liveEdge)
+  }
+  centreOnPlayhead() {
+    this.setViewStart(centredViewStart(this.position, this.viewSpan))
+  }
+  // The only writer of position.
+  setPosition(t: number) {
+    this.position = t
+    if (this.follow) this.centreOnPlayhead()
+  }
+  // The only writer of viewSpan.
+  setViewSpan(span: number) {
+    this.viewSpan = span
+    if (this.follow) this.centreOnPlayhead()
+  }
+
+  // --- the route's call sites ---
+  // Capture effect: re-arm follow, then place the playhead (deep-link t, else
+  // centred in the last viewSpan up to live).
+  enter(now: number, tParam: string | null) {
+    this.liveEdge = now
+    this.follow = true
+    const tSec = tParam !== null ? Number.parseInt(tParam, 10) : Number.NaN
+    if (Number.isFinite(tSec)) this.setPosition(tSec > this.liveEdge ? this.liveEdge : tSec)
+    else this.setPosition(this.liveEdge - this.viewSpan / 2)
+  }
+  // handleSeek: drag, VHS rush and keyboard nudge all land here.
+  seek(t: number) {
+    this.setPosition(clampPlayhead(t, this.playbackFloor, this.liveEdge))
+  }
+  // onZoom: pinch ratio / wheel step.
+  zoom(target: number) {
+    this.setViewSpan(clampViewSpan(target))
+  }
+  // Full-res timeupdate and the ensurePlaybackAt coverage snap. Neither clamps
+  // in the route: both derive from a chunk whose end is itself capped at
+  // liveEdge, so callers here feed values that respect that bound.
+  advance(t: number) {
+    this.setPosition(t)
+  }
+}
+
+// Gesture math transcribed from lib/components/TimelineScrubber.svelte. The
+// scrubber is stateless about the viewport — it reads windowEnd-windowStart as
+// the current span — so driving these against the model reproduces what a real
+// finger/wheel/key produces.
+const TRACK_W = 1000
+function panTarget(m: ViewportModel, startPosition: number, startX: number, x: number): number {
+  const span = m.windowEnd - m.windowStart
+  return Math.round(startPosition - ((x - startX) / TRACK_W) * span)
+}
+function wheelSpan(m: ViewportModel, deltaY: number): number {
+  const span = m.windowEnd - m.windowStart
+  return span * (deltaY > 0 ? 1.15 : 1 / 1.15)
+}
+function pinchSpan(startSpan: number, startDist: number, dist: number): number {
+  return (startSpan * startDist) / dist
+}
+function keyTarget(m: ViewportModel, dir: -1 | 1, shift: boolean): number {
+  const step = shift ? 300 : 60
+  return Math.round(Math.max(m.windowStart, Math.min(m.windowEnd, m.position + dir * step)))
+}
+
+// ---------------------------------------------------------------------------
+// Invariant checker
+// ---------------------------------------------------------------------------
+// viewStart and windowStart are asserted EXACTLY: both are the same expression
+// the code evaluates, so they are bitwise identical or the model is wrong.
+//
+// windowEnd is viewStart + viewSpan, i.e. (p - s/2) + s, which is a
+// re-association of p + s/2 and so not guaranteed exact in IEEE754. Measured
+// over 2,000,000 random (position, span) pairs at unix-second magnitudes the
+// error is exactly 0 every time, but the guarantee does not hold in general, so
+// it is asserted to within one ULP at this scale (2^-22 s ≈ 240 ns) rather than
+// bitwise. That is ~7 orders of magnitude below one pixel at the tightest zoom.
+const ULP = 2 ** -22
+
+type Violation = { at: string; what: string; expected: number; actual: number }
+
+function checkInvariants(m: ViewportModel, at: string, out: Violation[]) {
+  // The playhead never outruns live. This is what keeps the live-edge clamp
+  // inert, which is in turn what makes the centring invariant below hold.
+  if (m.position > m.liveEdge) {
+    out.push({ at, what: 'position <= liveEdge', expected: m.liveEdge, actual: m.position })
+  }
+  // The live-edge guarantee itself, which holds whether or not follow is on.
+  const maxStart = m.liveEdge - m.viewSpan / 2
+  if (m.viewStart > maxStart + ULP) {
+    out.push({
+      at,
+      what: 'viewStart <= liveEdge - viewSpan/2',
+      expected: maxStart,
+      actual: m.viewStart
+    })
+  }
+  if (!m.follow) return
+  const centre = m.position - m.viewSpan / 2
+  if (m.viewStart !== centre) {
+    out.push({
+      at,
+      what: 'viewStart === position - viewSpan/2',
+      expected: centre,
+      actual: m.viewStart
+    })
+  }
+  if (m.windowStart !== centre) {
+    out.push({
+      at,
+      what: 'windowStart === position - viewSpan/2',
+      expected: centre,
+      actual: m.windowStart
+    })
+  }
+  const end = m.position + m.viewSpan / 2
+  if (Math.abs(m.windowEnd - end) > ULP) {
+    out.push({
+      at,
+      what: 'windowEnd === position + viewSpan/2',
+      expected: end,
+      actual: m.windowEnd
+    })
+  }
+  // What the invariant is FOR: TimelineScrubber places the playhead with
+  // timeToFraction, so centring must survive all the way to the drawn fraction.
+  const f = timeToFraction(m.position, m.windowStart, m.windowEnd)
+  if (Math.abs(f - 0.5) > 1e-9) {
+    out.push({ at, what: 'playhead draws dead centre', expected: 0.5, actual: f })
+  }
+}
+
+const NOW = 1787000000
+// Permissive floor: what playbackFloor falls back to before the recording
+// summary lands (liveEdge - 7d).
+const PERMISSIVE_FLOOR = NOW - 7 * 24 * 3600
+
+function freshModel(floor = NOW - 30 * 86400, now = NOW, t: string | null = null): ViewportModel {
+  const m = new ViewportModel()
+  m.playbackFloor = floor
+  m.enter(now, t)
+  return m
+}
+
+// ---------------------------------------------------------------------------
+
+describe('clampViewSpan', () => {
+  it('bounds to [MIN_SPAN, MAX_SPAN] and rounds to a whole second', () => {
+    expect(clampViewSpan(0)).toBe(MIN_SPAN)
+    expect(clampViewSpan(MIN_SPAN - 1)).toBe(MIN_SPAN)
+    expect(clampViewSpan(MAX_SPAN + 1)).toBe(MAX_SPAN)
+    expect(clampViewSpan(1e12)).toBe(MAX_SPAN)
+    expect(clampViewSpan(-1e12)).toBe(MIN_SPAN)
+    expect(clampViewSpan(3600.4)).toBe(3600)
+    expect(clampViewSpan(3600.5)).toBe(3601)
+  })
+  it('leaves the default span untouched', () => {
+    expect(clampViewSpan(DEFAULT_VIEW_SPAN)).toBe(DEFAULT_VIEW_SPAN)
+    expect(DEFAULT_VIEW_SPAN).toBeGreaterThanOrEqual(MIN_SPAN)
+    expect(DEFAULT_VIEW_SPAN).toBeLessThanOrEqual(MAX_SPAN)
+  })
+})
+
+describe('centredViewStart', () => {
+  it('puts the playhead at the middle of the span', () => {
+    expect(centredViewStart(1000, 600)).toBe(700)
+    expect(centredViewStart(NOW, DEFAULT_VIEW_SPAN)).toBe(NOW - 1800)
+    // Idempotent: recomputing from the same inputs never drifts, which is what
+    // lets a pinch call it on every pointermove.
+    let s = centredViewStart(NOW, 3601)
+    for (let i = 0; i < 1000; i++) s = centredViewStart(NOW, 3601)
+    expect(s).toBe(centredViewStart(NOW, 3601))
+  })
+})
+
+describe('clampViewStart', () => {
+  it('is inert while the viewport centre is at or before the live edge', () => {
+    expect(clampViewStart(NOW - 1800, 3600, NOW)).toBe(NOW - 1800)
+    expect(clampViewStart(NOW - 5000, 3600, NOW)).toBe(NOW - 5000)
+    // Centre exactly at live: still inert.
+    expect(clampViewStart(NOW - 1800, 3600, NOW)).toBe(NOW - 1800)
+  })
+  it('holds the viewport CENTRE at the live edge once pushed past it', () => {
+    const clamped = clampViewStart(NOW + 500, 3600, NOW)
+    expect(clamped).toBe(NOW - 1800)
+    expect(clamped + 3600 / 2).toBe(NOW)
+  })
+  it('leaves the window END free to overhang live by half a span', () => {
+    // The overhang is load-bearing: it is what draws the scrubber's right-hand
+    // hatch band and parks the LIVE capsule inside the track.
+    const start = clampViewStart(NOW - 1800, 3600, NOW)
+    expect(start + 3600).toBe(NOW + 1800)
+  })
+  it('is one-sided — there is no floor-side clamp', () => {
+    // A ?t= deep-link older than the permissive floor must still land centred.
+    const old = NOW - 400 * 86400
+    expect(clampViewStart(old, 3600, NOW)).toBe(old)
+  })
+})
+
+describe('clampPlayhead', () => {
+  it('bounds a seek target to the playable domain', () => {
+    expect(clampPlayhead(NOW, PERMISSIVE_FLOOR, NOW)).toBe(NOW)
+    expect(clampPlayhead(NOW + 1e6, PERMISSIVE_FLOOR, NOW)).toBe(NOW)
+    expect(clampPlayhead(PERMISSIVE_FLOOR - 1e6, PERMISSIVE_FLOOR, NOW)).toBe(PERMISSIVE_FLOOR)
+    expect(clampPlayhead(NOW - 60, PERMISSIVE_FLOOR, NOW)).toBe(NOW - 60)
+  })
+})
+
+describe('viewport invariant: entry', () => {
+  it('holds for the default entry, and the window is the last viewSpan up to live', () => {
+    const v: Violation[] = []
+    const m = freshModel()
+    checkInvariants(m, 'default entry', v)
+    expect(v).toEqual([])
+    expect(m.windowEnd).toBe(NOW)
+    expect(m.windowEnd - m.windowStart).toBe(DEFAULT_VIEW_SPAN)
+  })
+
+  it('holds for ?t= deep links, including older than the permissive floor', () => {
+    const v: Violation[] = []
+    for (const age of [0, 60, 1800, 3600, 86400, 6 * 86400, 30 * 86400, 400 * 86400]) {
+      const t = NOW - age
+      // playbackFloor is still the permissive fallback: the summary has not
+      // landed, and the entry position is deliberately not clamped by it.
+      const m = freshModel(PERMISSIVE_FLOOR, NOW, String(t))
+      checkInvariants(m, `deep-link age=${age}`, v)
+      expect(m.position).toBe(t)
+      expect(m.windowStart).toBe(t - DEFAULT_VIEW_SPAN / 2)
+    }
+    expect(v).toEqual([])
+  })
+
+  it('holds for a future ?t= (clamped to live) and for malformed ?t=', () => {
+    const v: Violation[] = []
+    const future = freshModel(PERMISSIVE_FLOOR, NOW, String(NOW + 100000))
+    checkInvariants(future, 'future t', v)
+    expect(future.position).toBe(NOW)
+    for (const raw of ['', 'abc', 'NaN', '-', '+']) {
+      const m = freshModel(PERMISSIVE_FLOOR, NOW, raw)
+      checkInvariants(m, `malformed ${JSON.stringify(raw)}`, v)
+      // Falls back to the default window, never NaN.
+      expect(Number.isFinite(m.position)).toBe(true)
+      expect(m.windowEnd).toBe(NOW)
+    }
+    // parseInt is lenient, so a partially-numeric t parses to its leading
+    // digits rather than falling back: ?t=12x lands the playhead at unix 12.
+    // Pre-existing route behaviour, only reachable by hand-editing the URL (the
+    // app generates t itself) — pinned here so a future parse change is a
+    // deliberate one. The invariant holds either way, which is the point.
+    const lenient = freshModel(PERMISSIVE_FLOOR, NOW, '12x')
+    checkInvariants(lenient, 'lenient parse', v)
+    expect(lenient.position).toBe(12)
+    expect(v).toEqual([])
+  })
+})
+
+describe('viewport invariant: gestures', () => {
+  it('holds through a relative pan, both directions, at several zoom levels', () => {
+    const v: Violation[] = []
+    const m = freshModel()
+    for (const span of [MIN_SPAN, DEFAULT_VIEW_SPAN, 6 * 3600]) {
+      m.zoom(span)
+      checkInvariants(m, `pan zoom=${span}`, v)
+      for (const dir of [-1, 1]) {
+        const startX = 500
+        const startPosition = m.position
+        for (let px = 1; px <= 300; px++) {
+          m.seek(panTarget(m, startPosition, startX, startX + dir * px))
+          checkInvariants(m, `pan span=${span} dir=${dir} px=${px}`, v)
+        }
+      }
+    }
+    expect(v).toEqual([])
+  })
+
+  it('holds through wheel zoom driven to both clamps', () => {
+    const v: Violation[] = []
+    const m = freshModel()
+    for (let i = 0; i < 40; i++) {
+      m.zoom(wheelSpan(m, 1))
+      checkInvariants(m, `wheel out ${i}`, v)
+    }
+    expect(m.viewSpan).toBe(MAX_SPAN)
+    for (let i = 0; i < 80; i++) {
+      m.zoom(wheelSpan(m, -1))
+      checkInvariants(m, `wheel in ${i}`, v)
+    }
+    expect(m.viewSpan).toBe(MIN_SPAN)
+    expect(v).toEqual([])
+  })
+
+  it('holds through a pinch ratio and its pan handoff', () => {
+    const v: Violation[] = []
+    const m = freshModel()
+    const startDist = 200
+    const startSpan = m.windowEnd - m.windowStart
+    for (let d = 40; d <= 800; d += 7) {
+      m.zoom(pinchSpan(startSpan, startDist, d))
+      checkInvariants(m, `pinch dist=${d}`, v)
+    }
+    // Second finger lifts: the scrubber re-arms a pan from the remaining
+    // pointer, so a pinch flows into a pan without a jump.
+    const startPosition = m.position
+    for (let px = 1; px <= 200; px++) {
+      m.seek(panTarget(m, startPosition, 300, 300 + px))
+      checkInvariants(m, `handoff px=${px}`, v)
+    }
+    expect(v).toEqual([])
+  })
+
+  it('holds through keyboard nudges, plain and shifted, at several zoom levels', () => {
+    const v: Violation[] = []
+    const m = freshModel()
+    for (const span of [MIN_SPAN, DEFAULT_VIEW_SPAN, MAX_SPAN]) {
+      m.zoom(span)
+      for (const shift of [false, true]) {
+        for (const dir of [-1, 1] as const) {
+          for (let i = 0; i < 40; i++) {
+            m.seek(keyTarget(m, dir, shift))
+            checkInvariants(m, `key span=${span} shift=${shift} dir=${dir} i=${i}`, v)
+          }
+        }
+      }
+    }
+    expect(v).toEqual([])
+  })
+})
+
+describe('viewport invariant: playback', () => {
+  it('holds through a timeupdate advance across a coverage gap, and the snap', () => {
+    const v: Violation[] = []
+    // liveEdge in the past so playback has room to run forward.
+    const m = freshModel(NOW - 30 * 86400, NOW - 4000)
+    let t = m.position
+    for (let i = 0; i < 1200; i++) {
+      // A realistic non-integer timeupdate cadence; footageToWallclock returns
+      // floats and jumps forward by the gap size when playback crosses one.
+      t += 0.2503
+      if (i === 500) t += 137.4
+      m.advance(t)
+      checkInvariants(m, `tick ${i}`, v)
+    }
+    // ensurePlaybackAt's coverage snap moves the playhead forward onto footage.
+    m.advance(Math.floor(t) + 43)
+    checkInvariants(m, 'coverage snap', v)
+    expect(v).toEqual([])
+  })
+
+  it('holds while parked at the live edge, at several zoom levels', () => {
+    const v: Violation[] = []
+    const m = freshModel()
+    for (const span of [MIN_SPAN, 1800, DEFAULT_VIEW_SPAN, 4 * 3600, MAX_SPAN]) {
+      m.zoom(span)
+      m.seek(NOW + 100000) // over-seek: clamped to live
+      checkInvariants(m, `park span=${span}`, v)
+      expect(m.position).toBe(NOW)
+      // Parked at live, the window still overhangs live by half a span — the
+      // hatch band and the LIVE capsule depend on it.
+      expect(m.windowEnd - NOW).toBeCloseTo(span / 2, 6)
+      // Keep dragging into the future: the playhead stays parked, the viewport
+      // stays put, and the invariant holds.
+      const startPosition = m.position
+      for (let px = 1; px <= 40; px++) {
+        m.seek(panTarget(m, startPosition, 500, 500 - px))
+        checkInvariants(m, `park push span=${span} px=${px}`, v)
+      }
+      expect(m.position).toBe(NOW)
+    }
+    expect(v).toEqual([])
+  })
+})
+
+describe('viewport invariant: randomised session', () => {
+  // Sizing. The walk's job is to explore INTERLEAVINGS of the seven mutation
+  // kinds that the fixed scenarios above each exercise in isolation — it is
+  // what found the only reachable divergence during the refactor. With seven
+  // branches, 3,000 steps covers every ordered pair (49) and triple (343) many
+  // times over and hits each branch ~400 times, so the marginal value of more
+  // steps in the same walk falls away fast. Six independent seeds beat one
+  // 18,000-step walk at the same cost: a single walk drifts into one region of
+  // the state space, and each seed is reproducible on its own when it fails.
+  // The coverage assertions at the end are what actually defend this number —
+  // if a change ever made 3,000 steps too few to reach the interesting states,
+  // they fail loudly instead of the walk quietly going vacuous.
+  const SEEDS = [1, 7, 12345, 99991, 20260817, 2 ** 31 - 9]
+  const STEPS = 3000
+
+  it('holds across interleaved pans, zooms, ticks, snaps, nudges and re-arms', () => {
+    const v: Violation[] = []
+    let panned = 0
+    let zoomed = 0
+    let ticked = 0
+    let snapped = 0
+    let nudged = 0
+    let rearmed = 0
+    let atLive = 0
+    let atFloor = 0
+    let minSpan = Infinity
+    let maxSpan = 0
+
+    for (const s of SEEDS) {
+      let seed = s
+      const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+      // A deliberately SHALLOW playable domain: one hour, as on a camera an
+      // hour into its first recording. A pan step moves at most ~0.45 x span
+      // and the walk drifts forward (playback and the coverage snap both
+      // advance), so a deep floor is simply never reached and the floor clamp
+      // goes untested — at one hour every seed parks on BOTH bounds. It also
+      // puts the whole playable domain inside a single viewport at most zoom
+      // levels, which is the awkward case where the window is wider than
+      // everything there is to play.
+      const m = freshModel(NOW - 3600)
+      let startPosition = m.position
+      let startX = 500
+      for (let i = 0; i < STEPS; i++) {
+        const r = rnd()
+        if (r < 0.4) {
+          m.seek(panTarget(m, startPosition, startX, startX + (rnd() - 0.5) * 900))
+          panned++
+        } else if (r < 0.55) {
+          m.zoom(wheelSpan(m, rnd() > 0.5 ? 1 : -1))
+          zoomed++
+        } else if (r < 0.65) {
+          m.zoom(pinchSpan(m.windowEnd - m.windowStart, 200, 40 + rnd() * 700))
+          zoomed++
+        } else if (r < 0.8) {
+          // timeupdate: forward-biased, and never past live (the route's chunk
+          // end is itself capped at liveEdge).
+          m.advance(Math.min(m.position + (rnd() - 0.3) * 5, m.liveEdge))
+          ticked++
+        } else if (r < 0.87) {
+          m.seek(keyTarget(m, rnd() > 0.5 ? 1 : -1, rnd() > 0.5))
+          nudged++
+        } else if (r < 0.94) {
+          m.advance(Math.min(m.position + Math.floor(rnd() * 600), m.liveEdge))
+          snapped++
+        } else {
+          // pointerdown: re-arm a relative pan from the current position.
+          startPosition = m.position
+          startX = 200 + rnd() * 600
+          rearmed++
+        }
+        checkInvariants(m, `seed=${s} step=${i}`, v)
+        if (m.position === m.liveEdge) atLive++
+        if (m.position === m.playbackFloor) atFloor++
+        if (m.viewSpan < minSpan) minSpan = m.viewSpan
+        if (m.viewSpan > maxSpan) maxSpan = m.viewSpan
+      }
+    }
+
+    expect(v).toEqual([])
+
+    // Coverage: the walk must actually have reached the states that matter.
+    // These are what justify the step count — not the number itself.
+    expect(panned).toBeGreaterThan(100)
+    expect(zoomed).toBeGreaterThan(100)
+    expect(ticked).toBeGreaterThan(100)
+    expect(snapped).toBeGreaterThan(100)
+    expect(nudged).toBeGreaterThan(100)
+    expect(rearmed).toBeGreaterThan(100)
+    // Both playable bounds parked on, and both zoom clamps reached. Observed
+    // ~2400 live parks and ~440 floor parks across the six seeds, so these
+    // thresholds carry an order of magnitude of slack.
+    expect(atLive).toBeGreaterThan(200)
+    expect(atFloor).toBeGreaterThan(50)
+    expect(minSpan).toBe(MIN_SPAN)
+    expect(maxSpan).toBe(MAX_SPAN)
+  })
+})
+
+describe('viewport invariant: follow is what ties the two together', () => {
+  it('stops re-centring when follow is off, and the live clamp still holds', () => {
+    // Nothing in the app clears follow yet. This pins the seam the split
+    // exists for: with follow off the playhead moves and the viewport does not,
+    // which is precisely what lets the timeline show one stretch of time while
+    // playing another. The live-edge clamp is deliberately independent of
+    // follow, so it keeps applying.
+    const m = freshModel()
+    const frozen = m.viewStart
+    m.follow = false
+    m.seek(NOW - 3600)
+    expect(m.position).toBe(NOW - 3600)
+    expect(m.viewStart).toBe(frozen)
+    m.zoom(MIN_SPAN)
+    expect(m.viewStart).toBe(frozen)
+    // Clamp still enforced when the viewport is written directly.
+    m.setViewStart(NOW + 10000)
+    expect(m.viewStart).toBe(NOW - m.viewSpan / 2)
+  })
+})
