@@ -143,8 +143,8 @@
 
   // What the CURRENT press means, settled at pointerdown by resolveGesture and
   // then read — never recomputed — for the rest of the gesture. Non-reactive:
-  // no template branches on it. Reset to 'idle' when the last pointer lifts.
-  let gesture: Gesture = 'idle'
+  // no template branches on it. Reset to 'inert' when the last pointer lifts.
+  let gesture: Gesture = 'inert'
   // Press bookkeeping for the click / drag distinction. pressClientX is where
   // the press landed (the click's target time is read from it, not from the
   // release point — see clickSeek); movedBeyondSlop is LATCHED, so a press that
@@ -412,8 +412,9 @@
   //
   // In fixed mode the press is routed by resolveGesture instead, and the scrub
   // lifecycle is fired only for the gestures that actually MOVE THE PLAYHEAD.
-  // A pan must not pause full-res and re-settle it, and an inert press on empty
-  // track must not either.
+  // A pan must not pause full-res and re-settle it, and a press that is still
+  // deciding whether it is a click must not either — a click opens and closes
+  // its own lifecycle on release.
   function onPointerDown(e: PointerEvent) {
     if (!trackEl) return
     trackEl.setPointerCapture(e.pointerId)
@@ -480,7 +481,19 @@
     }
     if (!pinching && activePointers.size === 1) {
       // Latch the click / drag distinction before anything acts on the move.
-      if (!movedBeyondSlop && exceedsClickSlop(pressClientX, e.clientX)) movedBeyondSlop = true
+      // This is the ONLY thing that separates a click from a track pan, and it
+      // is one-way: below the slop nothing has panned yet and a release still
+      // seeks; the instant it flips, the click is off the table for good and
+      // every later move pans.
+      if (!movedBeyondSlop && exceedsClickSlop(pressClientX, e.clientX)) {
+        movedBeyondSlop = true
+        // Re-baseline the pan at the crossing point so the slop distance is not
+        // replayed as a jolt on the first panning frame. The first few pixels of
+        // travel are deliberately absorbed — that is what the threshold costs,
+        // and it is under the width of the playhead line. Only for 'track':
+        // shift+drag pans from its first pixel and must keep doing so.
+        if (gesture === 'track') panLastX = e.clientX
+      }
       const w = trackWidth || trackEl.clientWidth
       if (w <= 0) return
       const span = windowEnd - windowStart
@@ -503,9 +516,11 @@
         const f = pointerFraction(e.clientX - grabOffsetPx)
         if (f === null) return
         onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
-      } else if (gesture === 'pan') {
-        // Shift+drag: grab the track and move it. The playhead is not touched
-        // and keeps playing where it is.
+      } else if (gesture === 'pan' || (gesture === 'track' && movedBeyondSlop)) {
+        // Grab the track and move it. The playhead is not touched and keeps
+        // playing where it is. Reached two ways, which are the same gesture:
+        // shift+drag from the first pixel, and a plain track drag once it has
+        // travelled far enough to stop being a click.
         //
         // Drag right -> the window shows EARLIER time, so the content appears
         // to travel with the cursor. This is the opposite sign to shift+WHEEL,
@@ -516,9 +531,8 @@
         onPan?.(((panLastX - e.clientX) / w) * span)
         panLastX = e.clientX
       }
-      // 'idle' moves nothing: a fixed-mode press on empty track is inert by
-      // design, because panning is an explicit gesture rather than something a
-      // bare drag falls into.
+      // 'track' under the slop moves nothing yet — it is still a candidate
+      // click. 'inert' never moves anything.
     }
   }
   function onPointerUp(e: PointerEvent) {
@@ -532,10 +546,8 @@
         // Fixed mode: the remaining finger goes INERT rather than resuming
         // whatever the first finger was doing. It is somewhere new after the
         // two-finger gesture, so resuming a playhead drag from it would jump
-        // the playhead, and there is no one-finger pan to fall back into.
-        gesture = 'idle'
-        // It can no longer become a click either: two fingers were down.
-        movedBeyondSlop = true
+        // the playhead, and resuming a track pan would jump the window.
+        gesture = 'inert'
       } else {
         // Follow mode: RE-ARM the pan from the remaining pointer so a pinch can
         // flow back into a drag without a jump. Unchanged.
@@ -547,15 +559,19 @@
       if (scrubOpen) {
         scrubOpen = false
         onScrubEnd?.()
-      } else if (gesture === 'idle' && !movedBeyondSlop && pressIsMouse) {
-        // A fixed-mode press that never travelled, made with a mouse: a click,
-        // which seeks. The pointerType gate is what keeps a touch TAP inert —
-        // an accidental tap must not seek, and that decision predates the mode
-        // work. It also means a pinch can never end as a click, since a mouse
-        // cannot raise a second pointer.
+      } else if (gesture === 'track' && !movedBeyondSlop && pressIsMouse) {
+        // A fixed-mode track press that never travelled, made with a mouse: a
+        // click, which seeks. Nothing has panned, because the pan branch only
+        // runs once the same flag has flipped — the two are mutually exclusive
+        // by construction, not by ordering.
+        //
+        // The pointerType gate is what keeps a touch TAP inert: an accidental
+        // tap must not seek, and that decision predates the mode work. It also
+        // means a pinch can never end as a click, since a mouse cannot raise a
+        // second pointer.
         clickSeek()
       }
-      gesture = 'idle'
+      gesture = 'inert'
     }
   }
 
