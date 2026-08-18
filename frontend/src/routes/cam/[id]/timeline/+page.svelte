@@ -187,6 +187,15 @@
     if (follow) centreOnPlayhead()
   }
 
+  // Pan the viewport WITHOUT moving the playhead — the shift+wheel gesture, and
+  // FIXED mode only. The playhead keeps playing where it is while the window
+  // shows another stretch of time, which is what the viewport/playhead split
+  // was for. It is not bound in follow mode: there the track is already
+  // draggable and shift has no special meaning, so nothing calls this.
+  function panViewport(deltaSeconds: number) {
+    setViewStart(viewStart + deltaSeconds)
+  }
+
   // A writer of `viewSpan` — the FOLLOW mode zoom. The playhead IS the zoom
   // anchor there, so re-centring after the span change reproduces the
   // zoom-around-the-centred-playhead exactly (position does not move, so no
@@ -201,9 +210,17 @@
   // nothing the user is pointing at. Pinch is the only such gesture, and it is
   // deliberately untouched here — anchoring it on the finger midpoint is a
   // later change.
+  //
+  // Either way the left edge is re-written after the span changes. In follow
+  // mode that is the re-centring the mode is defined by. In fixed mode the
+  // window stays exactly where it is and the write exists only to re-apply the
+  // live-edge bound, which TIGHTENS as the span grows: a viewport parked at the
+  // bound and then zoomed out would otherwise be left overhanging live by more
+  // than half a span, which is the one thing that bound exists to prevent.
   function setViewSpan(span: number) {
     viewSpan = span
     if (follow) centreOnPlayhead()
+    else setViewStart(viewStart)
   }
 
   // The other writer of `viewSpan` — the FIXED mode zoom. Holds the wall-clock
@@ -1919,6 +1936,7 @@
       onScrubStart={handleScrubStart}
       onScrubEnd={handleScrubEnd}
       {onZoom}
+      onPan={follow ? undefined : panViewport}
       onGoLive={() => goto(`/cam/${camId}`)}
     />
 

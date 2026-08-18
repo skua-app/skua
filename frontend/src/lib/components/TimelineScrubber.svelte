@@ -47,6 +47,11 @@
     // The parameter is shaped so pinch can start passing that midpoint later
     // without another signature change.
     onZoom?: (targetSpan: number, anchorFraction: number | null) => void
+    // Pan request: how far to move the viewport, in seconds, positive = later.
+    // Pointer-only (shift+wheel). Omitted → shift+wheel is not bound at all and
+    // the page keeps its own scroll, which is what the consumer passes when the
+    // active timeline mode gives shift no special meaning.
+    onPan?: (deltaSeconds: number) => void
     // Live control: when set, a "LIVE" capsule is drawn at the live-edge
     // position on the track and clicking it navigates away (the consumer routes
     // to the camera's live focus view). Omitted → no capsule.
@@ -66,6 +71,7 @@
     onScrubStart,
     onScrubEnd,
     onZoom,
+    onPan,
     onGoLive
   }: Props = $props()
 
@@ -375,15 +381,44 @@
     return f < 0 ? 0 : f > 1 ? 1 : f
   }
 
-  // Wheel zoom (desktop). Multiplicative step: scroll down/away -> larger span
-  // -> zoom out. The parent clamps to [MIN_SPAN, MAX_SPAN] and decides what to
-  // anchor on — we just report the pointer position with it. The handler is
-  // attached non-passively in an $effect below so preventDefault actually
-  // suppresses page scroll.
+  // A wheel event's scroll distance in CSS pixels. Browsers disagree about
+  // which axis a shift+wheel lands on — several report it as deltaX — so take
+  // whichever axis moved, and normalise the unit, since deltaMode can be lines
+  // or pages rather than pixels. WHEEL_LINE_PX is the usual ~1 line of text.
+  const WHEEL_LINE_PX = 16
+  function wheelPixels(e: WheelEvent): number {
+    const raw = e.deltaX !== 0 ? e.deltaX : e.deltaY
+    if (e.deltaMode === 1) return raw * WHEEL_LINE_PX
+    if (e.deltaMode === 2) return raw * (trackWidth || 0)
+    return raw
+  }
+
+  // Wheel (desktop, pointer only). Plain wheel zooms; shift+wheel pans when the
+  // consumer binds it. The handler is attached non-passively in an $effect below
+  // so preventDefault actually suppresses page scroll.
   function onWheel(e: WheelEvent) {
+    const span = windowEnd - windowStart
+    // Shift, not ctrl/cmd — those are the browser's own page zoom — and not
+    // alt, which differs across platforms. Shift+wheel is the web's
+    // horizontal-scroll convention, so it is what a pan should be bound to.
+    // With no onPan we do not preventDefault either: the page keeps its scroll
+    // rather than having the gesture swallowed and silently do nothing.
+    if (e.shiftKey) {
+      if (!onPan) return
+      e.preventDefault()
+      const w = trackWidth || trackEl?.clientWidth || 0
+      if (w <= 0) return
+      // Scrolled distance read as a distance across the track: one track width
+      // of scroll pans by one whole viewport. Positive scrolls right/down and
+      // moves the window LATER, as a horizontal scrollbar would.
+      onPan((wheelPixels(e) / w) * span)
+      return
+    }
+    // Zoom. Multiplicative step: scroll down/away -> larger span -> zoom out.
+    // The parent clamps to [MIN_SPAN, MAX_SPAN] and decides what to anchor on —
+    // we just report the pointer position with it.
     if (!onZoom) return
     e.preventDefault()
-    const span = windowEnd - windowStart
     onZoom(span * (e.deltaY > 0 ? 1.15 : 1 / 1.15), pointerFraction(e.clientX))
   }
   $effect(() => {

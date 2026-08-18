@@ -61,10 +61,13 @@ class ViewportModel {
     if (this.follow) this.centreOnPlayhead()
   }
   // A writer of viewSpan: the follow-mode zoom, and the fixed-mode fallback
-  // for a gesture that reports no anchor.
+  // for a gesture that reports no anchor. The left edge is re-written either
+  // way — re-centred in follow mode, re-clamped in fixed mode, where the
+  // live-edge bound tightens as the span grows.
   setViewSpan(span: number) {
     this.viewSpan = span
     if (this.follow) this.centreOnPlayhead()
+    else this.setViewStart(this.viewStart)
   }
   // The other writer of viewSpan: the fixed-mode zoom, anchored on a position
   // across the drawn window.
@@ -72,6 +75,11 @@ class ViewportModel {
     const target = anchoredViewStart(this.viewStart, this.viewSpan, span, fraction)
     this.viewSpan = span
     this.setViewStart(target)
+  }
+  // panViewport: shift+wheel, bound in fixed mode only. Moves the window,
+  // never the playhead.
+  pan(deltaSeconds: number) {
+    this.setViewStart(this.viewStart + deltaSeconds)
   }
 
   // --- the route's call sites ---
@@ -123,6 +131,11 @@ function panTarget(m: ViewportModel, startPosition: number, startX: number, x: n
 function wheelSpan(m: ViewportModel, deltaY: number): number {
   const span = m.windowEnd - m.windowStart
   return span * (deltaY > 0 ? 1.15 : 1 / 1.15)
+}
+// Shift+wheel pan: the scrolled pixel distance read as a distance across the
+// track, so one track width of scroll pans by one whole viewport.
+function wheelPanSeconds(m: ViewportModel, pixels: number): number {
+  return (pixels / TRACK_W) * (m.windowEnd - m.windowStart)
 }
 function pinchSpan(startSpan: number, startDist: number, dist: number): number {
   return (startSpan * startDist) / dist
@@ -716,7 +729,11 @@ describe('the mode decides what a zoom holds in place', () => {
   it('fixed mode leaves the window put for a gesture that reports no anchor', () => {
     // Pinch, which this change deliberately does not touch. The span changes
     // and the left edge stays where it is; nothing chases the playhead.
+    // Well back from live, so the live-edge bound — which legitimately wins
+    // over any gesture — is not what is being measured here.
     const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
     const parked = m.viewStart
     const startSpan = m.viewSpan
     for (let d = 40; d <= 800; d += 7) {
@@ -776,6 +793,31 @@ describe('the mode decides what a zoom holds in place', () => {
     expect(v).toEqual([])
   })
 
+  it('re-applies the live-edge bound when an unanchored zoom widens the span', () => {
+    // The bound is on the viewport CENTRE, so it tightens as the span grows: a
+    // window already parked at it and then zoomed out would be left overhanging
+    // live by more than half a span. Follow mode never hit this because
+    // re-centring re-wrote the left edge anyway. Found by the randomised
+    // fixed-mode walk below.
+    const v: Violation[] = []
+    const m = fixedModel()
+    m.seek(NOW + 100000)
+    // Park the window at the bound, then widen it with a gesture that reports
+    // no anchor — pinch, the one path that does not go through setViewStart on
+    // its own.
+    m.setViewStart(NOW + 100000)
+    expect(m.viewStart).toBe(NOW - m.viewSpan / 2)
+    for (let d = 200; d >= 40; d -= 8) {
+      m.zoom(pinchSpan(DEFAULT_VIEW_SPAN, 200, d))
+      checkInvariants(m, `widen at live d=${d}`, v)
+      expect(m.viewStart).toBe(NOW - m.viewSpan / 2)
+    }
+    // The widest the fingers-together end of that pinch asks for, five times
+    // the entry span — well clear of the entry window, which is the point.
+    expect(m.viewSpan).toBe(5 * DEFAULT_VIEW_SPAN)
+    expect(v).toEqual([])
+  })
+
   it('keeps a fixed-mode zoom through playback — nothing drags the window back', () => {
     // The reason follow had to stop being gesture-driven state: with the mode
     // deciding, an anchored window simply survives every timeupdate. No
@@ -787,5 +829,109 @@ describe('the mode decides what a zoom holds in place', () => {
     for (let i = 0; i < 500; i++) m.advance(m.position + 0.25)
     expect(m.viewStart).toBe(anchored)
     expect(m.follow).toBe(false)
+  })
+})
+
+describe('shift+wheel pan, fixed mode only', () => {
+  // Room to pan in both directions: liveEdge a few hours ahead of the playhead,
+  // so the live-edge clamp does not eat the pans.
+  function pannable(): ViewportModel {
+    const m = fixedModel()
+    m.seek(NOW - 4 * 3600)
+    m.centreOnPlayhead()
+    return m
+  }
+
+  it('moves the window and leaves the playhead alone', () => {
+    const m = pannable()
+    const before = m.viewStart
+    const playing = m.position
+    const span = m.viewSpan
+    m.pan(wheelPanSeconds(m, 0.25 * TRACK_W))
+    expect(m.viewStart).toBe(before + span / 4)
+    expect(m.position).toBe(playing)
+    expect(m.viewSpan).toBe(span)
+  })
+
+  it('one track width of scroll pans by one whole viewport', () => {
+    const m = pannable()
+    const before = m.viewStart
+    const span = m.viewSpan
+    m.pan(wheelPanSeconds(m, TRACK_W))
+    expect(m.viewStart).toBe(before + span)
+    // And back, exactly.
+    m.pan(wheelPanSeconds(m, -TRACK_W))
+    expect(m.viewStart).toBe(before)
+  })
+
+  it('survives playback — nothing drags the window back to the playhead', () => {
+    // The property that made the gesture impossible while follow was inferred:
+    // playback's next position update used to re-centre the viewport, so the
+    // pan never lasted a frame. With the mode deciding, it simply holds.
+    const m = pannable()
+    m.pan(wheelPanSeconds(m, 0.8 * TRACK_W))
+    const panned = m.viewStart
+    for (let i = 0; i < 400; i++) m.advance(m.position + 0.25)
+    expect(m.viewStart).toBe(panned)
+    expect(m.follow).toBe(false)
+  })
+
+  it('is still bounded by the live edge', () => {
+    // The one clamp that applies regardless of mode. Panning hard into the
+    // future parks the viewport CENTRE at live, leaving the window overhanging
+    // it by half a span — the hatch band and the LIVE capsule depend on that.
+    const v: Violation[] = []
+    const m = pannable()
+    for (let i = 0; i < 50; i++) {
+      m.pan(wheelPanSeconds(m, TRACK_W))
+      checkInvariants(m, `pan to live ${i}`, v)
+    }
+    expect(m.viewStart).toBe(NOW - m.viewSpan / 2)
+    expect(m.windowEnd - NOW).toBeCloseTo(m.viewSpan / 2, 6)
+    expect(v).toEqual([])
+  })
+
+  it('holds every invariant across interleaved pans, zooms and playback', () => {
+    // The same idea as the randomised session above, in fixed mode and with the
+    // two new mutations mixed in. checkInvariants still asserts the live-edge
+    // bound on every step; the centring invariant is asserted only while follow
+    // is on, and here it never is.
+    const v: Violation[] = []
+    let panned = 0
+    let anchored = 0
+    let plain = 0
+
+    for (const s of [3, 1234, 777771, 20260818]) {
+      let seed = s
+      const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+      const m = fixedModel(NOW - 6 * 3600)
+      m.seek(NOW - 3 * 3600)
+      m.centreOnPlayhead()
+      for (let i = 0; i < 2000; i++) {
+        const r = rnd()
+        if (r < 0.3) {
+          m.pan(wheelPanSeconds(m, (rnd() - 0.5) * 2 * TRACK_W))
+          panned++
+        } else if (r < 0.5) {
+          m.zoom(wheelSpan(m, rnd() > 0.5 ? 1 : -1), rnd())
+          anchored++
+        } else if (r < 0.6) {
+          m.zoom(wheelSpan(m, rnd() > 0.5 ? 1 : -1))
+          plain++
+        } else if (r < 0.85) {
+          m.advance(Math.min(m.position + (rnd() - 0.2) * 30, m.liveEdge))
+        } else {
+          m.seek(clampPlayhead(m.position + (rnd() - 0.5) * 600, m.playbackFloor, m.liveEdge))
+        }
+        checkInvariants(m, `seed=${s} step=${i}`, v)
+        // The mode never changes under the gestures. That is the whole model.
+        expect(m.follow).toBe(false)
+      }
+    }
+
+    expect(v).toEqual([])
+    expect(panned).toBeGreaterThan(100)
+    expect(anchored).toBeGreaterThan(100)
+    expect(plain).toBeGreaterThan(50)
   })
 })
