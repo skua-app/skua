@@ -20,6 +20,7 @@
   import { untrack } from 'svelte'
   import { goto } from '$app/navigation'
   import { camerasStore } from '$lib/stores/cameras.svelte'
+  import { prefsStore } from '$lib/stores/prefs.svelte'
   import { timelineStore } from '$lib/stores/timeline.svelte'
   import {
     timelineMasterURL,
@@ -121,15 +122,27 @@
   // VIEWPORT-only — playback bounds are liveEdge/playbackFloor.
   let viewStart = $state(0)
 
-  // FOLLOW — whether the viewport tracks the playhead. While true the viewport
-  // is kept centred on the playhead, so the playhead sits dead-centre
-  // (timeToFraction(position, windowStart, windowEnd) === 0.5) and a drag or
-  // playback moves the CONTENT under it — exactly what the old
-  // viewport-derived-from-playhead model produced by construction. Nothing
-  // clears it yet and nothing exposes it to the user; the whole point of
-  // splitting viewport from playhead is that it CAN be cleared. Re-armed on
-  // every camera entry / deep-link capture.
-  let follow = $state(true)
+  // FOLLOW — whether the viewport tracks the playhead. It IS the user's chosen
+  // timeline mode and nothing else: read from the preference, written by
+  // nobody. While true the viewport is kept centred on the playhead, so the
+  // playhead sits dead-centre (timeToFraction(position, windowStart,
+  // windowEnd) === 0.5) and a drag or playback moves the CONTENT under it —
+  // exactly what the old viewport-derived-from-playhead model produced by
+  // construction. While false the track is stationary and the playhead travels
+  // along it.
+  //
+  // It was briefly hidden state that gestures mutated, and every gesture then
+  // carried its own private assumption about what it meant: a drag that moved
+  // the playhead instead of the track, a zoom anchor that silently became the
+  // window centre, a re-engagement rule the user could not see. Making it the
+  // mode is what makes each gesture answerable — the mode decides what the
+  // gesture means, rather than the gesture deciding what the mode is.
+  //
+  // No prefsSynced gate is needed here, unlike the effects that branch on a
+  // preference once: this is a derivation, so it simply flips when /api/prefs
+  // lands. The entry window is placed explicitly by the capture effect rather
+  // than as a side effect of follow being on, so a flip mid-load moves nothing.
+  const follow = $derived(prefsStore.timelineMode === 'follow')
 
   // The window the scrubber draws. Unchanged in meaning and still the exact
   // pair of props passed to TimelineScrubber — only their source moved, from
@@ -440,13 +453,13 @@
 
   // On camId change: capture the playable bounds, re-arm follow, place the
   // playhead, reset to scrubbing, drop any loaded chunk, and pull the summary
-  // for the recording floor. Follow is on for the entry, so setPosition places
-  // the viewport with the playhead in one step: an optional ?t=<unix> deep-link
-  // (from an event's "See on timeline") lands the playhead at t and the
-  // viewport centred on it; without it the playhead rests centred in the last
-  // viewSpan up to live (so the entry window is the last viewSpan ending at
-  // live), then autoplays forward. Read the raw t param in the tracked scope so
-  // a same-camera deep-link with a new t re-captures.
+  // for the recording floor. The entry window is centred on the playhead in
+  // BOTH modes: an optional ?t=<unix> deep-link (from an event's "See on
+  // timeline") lands the playhead at t and the viewport centred on it; without
+  // it the playhead rests centred in the last viewSpan up to live (so the entry
+  // window is the last viewSpan ending at live), then autoplays forward. Read
+  // the raw t param in the tracked scope so a same-camera deep-link with a new
+  // t re-captures.
   const tParam = $derived(page.url.searchParams.get('t'))
   // Fires the heavy reset + one-shot autoplay once per real (camId, t) change.
   // The effect also re-runs on unrelated page.url churn (tParam is derived from
@@ -466,9 +479,6 @@
       // deep-link branch: a deep-link's derived viewport end may sit in the
       // past, but full-res must still play/stop at real now.
       liveEdge = now
-      // Entry always follows: the viewport is placed by the playhead below and
-      // tracks it from there. Set BEFORE the playhead so setPosition centres.
-      follow = true
       // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
       // the default last-1h window, never NaN.
       const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
@@ -483,6 +493,13 @@
         // the viewport shows the last 1h; autoplay then runs it forward to live.
         setPosition(liveEdge - viewSpan / 2)
       }
+      // Place the entry window explicitly rather than relying on setPosition
+      // having done it: in fixed mode the viewport does not track the playhead,
+      // so nothing else would put it anywhere, and it would still be sitting on
+      // the previous camera's window (or on unix 0 for a first mount). In
+      // follow mode this is the same pure recompute setPosition just made, so
+      // it lands on exactly the same second and changes nothing.
+      centreOnPlayhead()
       mode = 'scrubbing'
       // Reset BOTH buffers and the swap state.
       active = 'a'

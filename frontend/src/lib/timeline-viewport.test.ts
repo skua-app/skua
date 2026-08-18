@@ -32,6 +32,10 @@ class ViewportModel {
   viewSpan = DEFAULT_VIEW_SPAN
   viewStart = 0
   position = 0
+  // follow IS the user's timeline mode: true = 'follow', false = 'fixed'. It is
+  // an INPUT to the writers below, never something they write — in the route it
+  // is a $derived off the preference. A test sets it the way a user picks the
+  // mode, before driving the gestures.
   follow = true
   liveEdge = 0
   playbackFloor = 0
@@ -62,14 +66,16 @@ class ViewportModel {
   }
 
   // --- the route's call sites ---
-  // Capture effect: re-arm follow, then place the playhead (deep-link t, else
-  // centred in the last viewSpan up to live).
+  // Capture effect: place the playhead (deep-link t, else centred in the last
+  // viewSpan up to live), then place the entry window on it explicitly — in
+  // fixed mode nothing else would, and in follow mode it is the same pure
+  // recompute setPosition just made.
   enter(now: number, tParam: string | null) {
     this.liveEdge = now
-    this.follow = true
     const tSec = tParam !== null ? Number.parseInt(tParam, 10) : Number.NaN
     if (Number.isFinite(tSec)) this.setPosition(tSec > this.liveEdge ? this.liveEdge : tSec)
     else this.setPosition(this.liveEdge - this.viewSpan / 2)
+    this.centreOnPlayhead()
   }
   // handleSeek: drag, VHS rush and keyboard nudge all land here.
   seek(t: number) {
@@ -297,6 +303,45 @@ describe('viewport invariant: entry', () => {
     checkInvariants(lenient, 'lenient parse', v)
     expect(lenient.position).toBe(12)
     expect(v).toEqual([])
+  })
+})
+
+describe('entry in fixed mode', () => {
+  // The one thing entry cannot inherit from follow mode. While follow was
+  // implicitly on for every entry, the window was placed as a side effect of
+  // setPosition centring; in fixed mode setPosition does not centre, so the
+  // capture effect places it explicitly or the viewport stays on whatever the
+  // previous camera left behind.
+  function fixedEntry(now: number, t: string | null = null): ViewportModel {
+    const m = new ViewportModel()
+    m.follow = false
+    m.playbackFloor = now - 30 * 86400
+    // A stale window from a previous camera, deliberately nowhere near `now`.
+    m.viewStart = now - 400 * 86400
+    m.enter(now, t)
+    return m
+  }
+
+  it('centres the entry window on the playhead even though nothing tracks it', () => {
+    const m = fixedEntry(NOW)
+    expect(m.position).toBe(NOW - DEFAULT_VIEW_SPAN / 2)
+    expect(m.viewStart).toBe(centredViewStart(m.position, m.viewSpan))
+    expect(m.windowEnd).toBe(NOW)
+  })
+
+  it('centres a deep-link entry window too, and then stops tracking', () => {
+    const t = NOW - 6 * 3600
+    const m = fixedEntry(NOW, String(t))
+    expect(m.position).toBe(t)
+    expect(m.viewStart).toBe(t - DEFAULT_VIEW_SPAN / 2)
+    // From there the track is stationary: playback moves the playhead and the
+    // window does not follow it, which is the whole of fixed mode.
+    const parked = m.viewStart
+    for (let i = 0; i < 4000; i++) m.advance(m.position + 1)
+    expect(m.viewStart).toBe(parked)
+    expect(m.position).toBe(t + 4000)
+    // And the playhead has legitimately left the window. Nothing re-engages.
+    expect(m.position).toBeGreaterThan(m.windowEnd)
   })
 })
 
