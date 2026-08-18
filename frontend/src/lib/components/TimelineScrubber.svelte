@@ -823,6 +823,33 @@
     touch-action: none;
     user-select: none;
   }
+  /* Taller track for fingers. Two-finger pan and pinch need somewhere to put
+     two fingers, and 60px is a thin strip to land them in — especially since
+     the fingers then cover most of what they are aiming at.
+     Gated on BOTH conditions, because the height has to come out of a real
+     budget: the timeline screen is `min-height: 100dvh` with no overflow clip
+     below 900px, so anything that overflows scrolls, and it must not.
+       pointer: coarse   only a finger needs this; a cursor does not, and on
+                         desktop the page is height-capped with the video
+                         flexing, so every pixel here is taken from the picture.
+       min-height: 780   the screen can afford it. Measured against the mobile
+                         stack (safe-area + 12, bar 38, gap 14, 16:9 frame,
+                         gap 14, controls 46 or 102 wrapped, gap 14, mode row
+                         38 + 8 + flag 26 + track, safe-area + 96 for the tab
+                         bar): at 88px the tightest case in range — 375px wide,
+                         wrapped controls, notched insets, summary still loading
+                         — clears by 31px, and a 375x812 phone by 63px. Below
+                         the threshold a 375x667 phone has only ~10px spare
+                         while loading, so it keeps 60px rather than being given
+                         a few pixels that would cost it a scroll.
+     In an installed PWA the viewport is stable, so this does not flip about;
+     in a browser tab with chrome showing, a shorter viewport correctly gets
+     the shorter track. */
+  @media (pointer: coarse) and (min-height: 780px) {
+    .track {
+      height: 88px;
+    }
+  }
   .track:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
