@@ -37,7 +37,8 @@
     PreviewFrame,
     ReviewSegment,
     AudioMarker,
-    CoverageSegment
+    CoverageSegment,
+    TimelineMode
   } from '$lib/api'
   import { footageToWallclock, previewTailKey, tailHourOpen } from '$lib/timeline'
   import {
@@ -54,6 +55,7 @@
   import ZoomPane from '$lib/components/ZoomPane.svelte'
   import Icon from '$lib/components/Icon.svelte'
   import Mono from '$lib/components/Mono.svelte'
+  import Segmented from '$lib/components/Segmented.svelte'
   import { ui } from '$lib/i18n/strings'
 
   // Full-res chunk: 10 min. The viewport's default span and its zoom bounds
@@ -144,6 +146,16 @@
   // lands. The entry window is placed explicitly by the capture effect rather
   // than as a side effect of follow being on, so a flip mid-load moves nothing.
   const follow = $derived(prefsStore.timelineMode === 'follow')
+
+  // The on-timeline mode switch. The SAME server-side preference the Settings
+  // control writes, so the two are never two settings — switching in either
+  // place is reflected in the other the next time it is drawn. It lives here as
+  // well as in Settings because the mode is switched often and Settings is a
+  // different screen.
+  const timelineModeOptions: { value: TimelineMode; label: string }[] = [
+    { value: 'follow', label: ui.timelineModeFollow },
+    { value: 'fixed', label: ui.timelineModeFixed }
+  ]
 
   // The window the scrubber draws. Unchanged in meaning and still the exact
   // pair of props passed to TimelineScrubber — only their source moved, from
@@ -1931,6 +1943,19 @@
   </div>
 
   <div class="scrub">
+    <!-- Mode switch, directly above the track it governs. Trailing-aligned in
+         its own row rather than folded into .controls, which would push the
+         transport cluster off centre. It is nowhere near the LIVE capsule,
+         which lives INSIDE the track at the live-edge fraction — a different
+         concept in a different place. Visual treatment is a first pass. -->
+    <div class="mode-row" role="group" aria-label={ui.timelineModeAria}>
+      <Segmented
+        value={prefsStore.timelineMode}
+        options={timelineModeOptions}
+        onChange={(v) => prefsStore.setTimelineMode(v)}
+      />
+    </div>
+
     <TimelineScrubber
       {windowStart}
       {windowEnd}
@@ -2339,6 +2364,13 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+  /* Mode switch row. Trailing-aligned so it sits over the newest end of the
+     track, away from the earliest-time edge the eye reads first. .scrub is a
+     flex column with its own gap, so no margin is needed here. */
+  .mode-row {
+    display: flex;
+    justify-content: flex-end;
   }
   .scrub-note {
     min-height: 16px;

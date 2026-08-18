@@ -216,6 +216,7 @@ export const ui = {
   nameStyleOff: 'Выкл.',
   timelineModeFollow: 'Слежение',
   timelineModeFixed: 'Фиксированный',
+  timelineModeAria: 'Режим таймлайна',
   accentCyan: 'Синий',
   accentSage: 'Зелёный',
   accentAmber: 'Жёлтый',

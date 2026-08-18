@@ -215,6 +215,7 @@ export const ui = {
   nameStyleOff: 'Off',
   timelineModeFollow: 'Follow',
   timelineModeFixed: 'Fixed',
+  timelineModeAria: 'Timeline mode',
   accentCyan: 'Cyan',
   accentSage: 'Sage',
   accentAmber: 'Amber',
