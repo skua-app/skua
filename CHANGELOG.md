@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Added
 
 - Recording timeline: the mouse wheel now zooms around the pointer, so the moment under the cursor stays under the cursor as the timeline scales — the same way the wheel already zooms the picture in the focus view. The two gestures used to disagree: the timeline always recentred on the playhead. Which one you get is a new setting under Settings → Appearance → Timeline zoom, either Pointer (the new default) or Playhead (the previous behaviour). Pinch on a touchscreen is unchanged and still zooms about the playhead.
+- Recording timeline: hold Shift and scroll to pan the timeline, instead of having to drag it with the cursor. Shift+wheel is the browser's usual horizontal scroll, so Ctrl and Cmd are left to the browser's own page zoom. Panning (and a pointer-anchored zoom) lets the window show a different stretch of time from the one playing, so the timeline stops following the playhead while you are looking elsewhere; the moment the playhead comes back into view, it starts tracking it again and recentres.
 
 Fixed
 

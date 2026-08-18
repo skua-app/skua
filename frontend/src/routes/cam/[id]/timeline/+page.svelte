@@ -45,6 +45,7 @@
     clampViewSpan,
     centredViewStart,
     anchoredViewStart,
+    playheadInView,
     clampViewStart,
     clampPlayhead
   } from '$lib/timeline-viewport'
@@ -127,11 +128,18 @@
   // is kept centred on the playhead, so the playhead sits dead-centre
   // (timeToFraction(position, windowStart, windowEnd) === 0.5) and a drag or
   // playback moves the CONTENT under it — exactly what the old
-  // viewport-derived-from-playhead model produced by construction. An anchored
-  // zoom that leaves the window off-centre clears it, so that playback's next
-  // position update cannot undo the anchoring. Nothing exposes it to the user
-  // yet. Re-armed on every camera entry / deep-link capture.
+  // viewport-derived-from-playhead model produced by construction. A pan, and
+  // an anchored zoom that leaves the window off-centre, clear it — otherwise
+  // playback's next position update would drag the viewport straight back and
+  // the gesture would be impossible. Nothing exposes it to the user yet, so it
+  // re-engages on its own (see syncFollow). Re-armed on every camera entry /
+  // deep-link capture.
   let follow = $state(true)
+  // Has the playhead been OUT of the drawn window since follow was turned off?
+  // The re-engagement rule waits on this; see syncFollow for why. Deliberately
+  // NOT reactive: it is read and written only inside the writers below, never
+  // in a derivation or the template.
+  let playheadLeftView = false
 
   // The window the scrubber draws. Unchanged in meaning and still the exact
   // pair of props passed to TimelineScrubber — only their source moved, from
@@ -168,11 +176,62 @@
     setViewStart(centredViewStart(position, viewSpan))
   }
 
+  // Turn follow off, arming the re-engagement rule afresh. Only the TRANSITION
+  // clears the memory: the gesture that disengages usually leaves the playhead
+  // visible, and clearing it on every subsequent write would also swallow the
+  // moment the playhead comes back into the window.
+  function disengageFollow() {
+    if (!follow) return
+    follow = false
+    playheadLeftView = false
+  }
+
+  // Re-engage follow — the playhead is back inside the drawn window, so the
+  // timeline goes back to tracking it. Called from EVERY writer that can change
+  // the geometry, because either half can move: playback carries the playhead
+  // under a still viewport, and a pan carries the viewport under a still
+  // playhead. Called synchronously inside the writers rather than from an
+  // $effect, for the ordering reason above — an effect would re-centre a frame
+  // after the render that already drew the new position.
+  //
+  // Containment alone is not enough to act on, though, and this is the subtle
+  // part: the gesture that just turned follow off nearly always leaves the
+  // playhead visible (a pan starts from a centred window, and an anchored zoom
+  // usually keeps the playhead on screen). Re-engaging on containment there
+  // would undo the gesture on its very next notch, which is exactly the fight
+  // turning follow off exists to prevent. So the rule waits for the playhead to
+  // actually LEAVE the window first; once it has, coming back re-engages. The
+  // predicate itself stays plain containment — no margins, no fractions of the
+  // span — and lives in $lib/timeline-viewport where it is unit-tested.
+  function syncFollow() {
+    if (follow) return
+    if (!playheadInView(position, viewStart, viewSpan)) {
+      playheadLeftView = true
+      return
+    }
+    if (!playheadLeftView) return
+    playheadLeftView = false
+    follow = true
+    centreOnPlayhead()
+  }
+
   // The ONLY writer of `position`. Drag, VHS rush, the coverage snap and the
   // full-res timeupdate all land here.
   function setPosition(t: number) {
     position = t
+    syncFollow()
     if (follow) centreOnPlayhead()
+  }
+
+  // Pan the viewport WITHOUT moving the playhead — the shift+wheel gesture. The
+  // playhead keeps playing where it is while the window shows another stretch
+  // of time, which is what the viewport/playhead split was for. Follow has to
+  // go off first: leave it on and playback's next position update re-centres
+  // the window, so the pan would never survive a frame.
+  function panViewport(deltaSeconds: number) {
+    disengageFollow()
+    setViewStart(viewStart + deltaSeconds)
+    syncFollow()
   }
 
   // A writer of `viewSpan` — the playhead-anchored zoom. With follow on the
@@ -203,7 +262,8 @@
     const target = anchoredViewStart(viewStart, viewSpan, span, fraction)
     viewSpan = span
     setViewStart(target)
-    if (viewStart !== centredViewStart(position, viewSpan)) follow = false
+    if (viewStart !== centredViewStart(position, viewSpan)) disengageFollow()
+    syncFollow()
   }
 
   // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
@@ -491,7 +551,10 @@
       liveEdge = now
       // Entry always follows: the viewport is placed by the playhead below and
       // tracks it from there. Set BEFORE the playhead so setPosition centres.
+      // The re-engagement memory belongs to the follow-off session that just
+      // ended, so it resets with it.
       follow = true
+      playheadLeftView = false
       // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
       // the default last-1h window, never NaN.
       const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
@@ -868,7 +931,12 @@
       // Both bounds must be integer unix seconds (validUnixSeconds), same as
       // the clip / review / coverage routes — a VHS rush or a full-res
       // timeupdate leaves position fractional, which makes windowEnd fractional.
-      const list = await fetchPreviewFrameList(id, Math.floor(end), Math.floor(windowEnd))
+      // The end bound also takes the playhead into account: the tail is reached
+      // BY POSITION, and once follow can be off the viewport may sit entirely
+      // before it, which would ask for an inverted range. That 400s, and
+      // framesKey would then pin the empty list for the rest of the hour.
+      const tailEnd = Math.floor(Math.max(windowEnd, position))
+      const list = await fetchPreviewFrameList(id, Math.floor(end), tailEnd)
       if (camId !== id || framesKey !== key) return
       frames = [...list].sort((a, b) => a.ts - b.ts)
       pickFrame()
@@ -1909,6 +1977,7 @@
       onScrubStart={handleScrubStart}
       onScrubEnd={handleScrubEnd}
       {onZoom}
+      onPan={panViewport}
       onGoLive={() => goto(`/cam/${camId}`)}
     />
 

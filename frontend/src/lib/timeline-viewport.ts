@@ -66,6 +66,20 @@ export function anchoredViewStart(
   return anchorTime - fraction * nextSpan
 }
 
+// Is the playhead inside the drawn window? The rule that re-engages follow, and
+// deliberately the plainest one available: containment, inclusive of both edges
+// — no margin, no fraction of the span, nothing about being "near" an edge. It
+// says one thing a user can check by eye, which is that a visible playhead is a
+// tracked playhead.
+//
+// WHERE this gets applied is the load-bearing part and lives in the route: a
+// gesture that has just turned follow off usually leaves the playhead visible,
+// so re-engaging on containment alone at every geometry change would snap the
+// viewport back on the first pan notch. See the route's syncFollow.
+export function playheadInView(position: number, viewStart: number, viewSpan: number): boolean {
+  return position >= viewStart && position <= viewStart + viewSpan
+}
+
 // Clamp the viewport CENTRE to the live edge. While the viewport was derived
 // from the playhead this bound was emergent: the window was a function of the
 // playhead and the playhead was clamped to liveEdge. A viewport that is real

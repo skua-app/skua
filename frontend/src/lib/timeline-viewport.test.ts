@@ -7,6 +7,7 @@ import {
   clampViewSpan,
   centredViewStart,
   anchoredViewStart,
+  playheadInView,
   clampViewStart,
   clampPlayhead
 } from './timeline-viewport'
@@ -38,6 +39,8 @@ class ViewportModel {
   follow = true
   liveEdge = 0
   playbackFloor = 0
+  // Has the playhead been out of the window since follow was turned off?
+  playheadLeftView = false
 
   get windowStart(): number {
     return this.viewStart
@@ -53,9 +56,28 @@ class ViewportModel {
   centreOnPlayhead() {
     this.setViewStart(centredViewStart(this.position, this.viewSpan))
   }
+  // Turn follow off, arming re-engagement afresh — only on the transition.
+  disengageFollow() {
+    if (!this.follow) return
+    this.follow = false
+    this.playheadLeftView = false
+  }
+  // Re-engage follow once the playhead has left the window and come back.
+  syncFollow() {
+    if (this.follow) return
+    if (!playheadInView(this.position, this.viewStart, this.viewSpan)) {
+      this.playheadLeftView = true
+      return
+    }
+    if (!this.playheadLeftView) return
+    this.playheadLeftView = false
+    this.follow = true
+    this.centreOnPlayhead()
+  }
   // The only writer of position.
   setPosition(t: number) {
     this.position = t
+    this.syncFollow()
     if (this.follow) this.centreOnPlayhead()
   }
   // A writer of viewSpan: the playhead-anchored zoom.
@@ -69,7 +91,14 @@ class ViewportModel {
     const target = anchoredViewStart(this.viewStart, this.viewSpan, span, fraction)
     this.viewSpan = span
     this.setViewStart(target)
-    if (this.viewStart !== centredViewStart(this.position, this.viewSpan)) this.follow = false
+    if (this.viewStart !== centredViewStart(this.position, this.viewSpan)) this.disengageFollow()
+    this.syncFollow()
+  }
+  // panViewport: shift+wheel. Moves the window, never the playhead.
+  pan(deltaSeconds: number) {
+    this.disengageFollow()
+    this.setViewStart(this.viewStart + deltaSeconds)
+    this.syncFollow()
   }
 
   // --- the route's call sites ---
@@ -78,6 +107,7 @@ class ViewportModel {
   enter(now: number, tParam: string | null) {
     this.liveEdge = now
     this.follow = true
+    this.playheadLeftView = false
     const tSec = tParam !== null ? Number.parseInt(tParam, 10) : Number.NaN
     if (Number.isFinite(tSec)) this.setPosition(tSec > this.liveEdge ? this.liveEdge : tSec)
     else this.setPosition(this.liveEdge - this.viewSpan / 2)
@@ -124,6 +154,11 @@ function panTarget(m: ViewportModel, startPosition: number, startX: number, x: n
 function wheelSpan(m: ViewportModel, deltaY: number): number {
   const span = m.windowEnd - m.windowStart
   return span * (deltaY > 0 ? 1.15 : 1 / 1.15)
+}
+// Shift+wheel pan: the scrolled pixel distance read as a distance across the
+// track, so one track width of scroll pans by one whole viewport.
+function wheelPanSeconds(m: ViewportModel, pixels: number): number {
+  return (pixels / TRACK_W) * (m.windowEnd - m.windowStart)
 }
 function pinchSpan(startSpan: number, startDist: number, dist: number): number {
   return (startSpan * startDist) / dist
@@ -708,6 +743,162 @@ describe('anchored zoom through the model', () => {
     const centre = timeUnder(m, 0.5)
     for (let i = 0; i < 8; i++) m.zoom(wheelSpan(m, -1), 0.1, 'playhead')
     expect(Math.abs(timeUnder(m, 0.5) - centre)).toBeLessThanOrEqual(ULP)
+  })
+})
+
+describe('playheadInView', () => {
+  it('is plain containment, inclusive of both edges', () => {
+    const start = NOW - 1800
+    const span = 3600
+    expect(playheadInView(NOW, start, span)).toBe(true)
+    expect(playheadInView(start, start, span)).toBe(true)
+    expect(playheadInView(start + span, start, span)).toBe(true)
+    expect(playheadInView(start - 0.001, start, span)).toBe(false)
+    expect(playheadInView(start + span + 0.001, start, span)).toBe(false)
+    // No margin and no fraction of the span: a playhead one second inside the
+    // edge counts as visible, because it IS visible.
+    expect(playheadInView(start + 1, start, span)).toBe(true)
+    expect(playheadInView(start + span - 1, start, span)).toBe(true)
+  })
+})
+
+describe('pan and follow re-engagement', () => {
+  // A model with room to pan in both directions: liveEdge is a few hours ahead
+  // of the playhead, so the live-edge clamp does not eat the pans.
+  function pannable(): ViewportModel {
+    const m = freshModel()
+    m.seek(NOW - 4 * 3600)
+    return m
+  }
+
+  it('a pan turns follow off and playback does not drag the viewport back', () => {
+    // The reason panning turns follow off at all. The pan here is small enough
+    // that the playhead stays visible, which is exactly the case where a
+    // containment rule applied on every write would re-engage on the next
+    // timeupdate and make the gesture impossible.
+    const m = pannable()
+    const span = m.viewSpan
+    m.pan(wheelPanSeconds(m, 0.1 * TRACK_W))
+    expect(m.follow).toBe(false)
+    const panned = m.viewStart
+    expect(playheadInView(m.position, m.viewStart, m.viewSpan)).toBe(true)
+    for (let i = 0; i < 50; i++) m.advance(m.position + 0.25)
+    expect(m.viewStart).toBe(panned)
+    expect(m.follow).toBe(false)
+    expect(m.viewSpan).toBe(span)
+  })
+
+  it('re-engages when a pan brings the playhead back into the window', () => {
+    const m = pannable()
+    // Far enough that the playhead leaves the window entirely.
+    m.pan(wheelPanSeconds(m, 0.8 * TRACK_W))
+    expect(playheadInView(m.position, m.viewStart, m.viewSpan)).toBe(false)
+    expect(m.follow).toBe(false)
+    // Pan back. The playhead re-enters, so the timeline tracks it again and the
+    // window snaps back to centred.
+    m.pan(wheelPanSeconds(m, -0.8 * TRACK_W))
+    expect(m.follow).toBe(true)
+    expect(m.viewStart).toBe(centredViewStart(m.position, m.viewSpan))
+    const v: Violation[] = []
+    checkInvariants(m, 'after re-engagement', v)
+    expect(v).toEqual([])
+  })
+
+  it('re-engages when playback carries the playhead back into the window', () => {
+    // The other direction: the viewport is still and the playhead moves.
+    const m = pannable()
+    m.pan(wheelPanSeconds(m, 0.8 * TRACK_W))
+    expect(m.follow).toBe(false)
+    const parked = m.viewStart
+    // Playback runs forward toward the panned-to window. Nothing happens until
+    // the playhead actually reaches it.
+    while (m.position < parked - 1) {
+      m.advance(m.position + 1)
+      expect(m.follow).toBe(false)
+      expect(m.viewStart).toBe(parked)
+    }
+    m.advance(m.position + 2)
+    expect(m.follow).toBe(true)
+    expect(m.viewStart).toBe(centredViewStart(m.position, m.viewSpan))
+  })
+
+  it('keeps an anchored zoom that hides the playhead through playback', () => {
+    // Same no-fight property for the zoom: the anchored window survives the
+    // timeupdates that follow it.
+    const m = pannable()
+    m.zoom(MIN_SPAN, 0) // pin the left edge: the centred playhead falls off the right
+    expect(m.follow).toBe(false)
+    expect(playheadInView(m.position, m.viewStart, m.viewSpan)).toBe(false)
+    const anchored = m.viewStart
+    for (let i = 0; i < 20; i++) m.advance(m.position + 0.25)
+    expect(m.viewStart).toBe(anchored)
+    expect(m.follow).toBe(false)
+  })
+
+  it('re-arms follow on camera entry / deep-link capture', () => {
+    const m = pannable()
+    m.pan(wheelPanSeconds(m, 0.8 * TRACK_W))
+    expect(m.follow).toBe(false)
+    m.enter(NOW, String(NOW - 7200))
+    expect(m.follow).toBe(true)
+    const v: Violation[] = []
+    checkInvariants(m, 're-entry', v)
+    expect(v).toEqual([])
+  })
+
+  it('holds every invariant across interleaved pans, zooms and playback', () => {
+    // Same idea as the randomised session above, with the two new mutations
+    // mixed in. checkInvariants still asserts the live-edge bound on every
+    // step regardless of follow, and the centring invariant whenever follow is
+    // on — including after each re-engagement.
+    const v: Violation[] = []
+    let panned = 0
+    let anchored = 0
+    let disengaged = 0
+    let reengaged = 0
+    let offSteps = 0
+
+    for (const s of [3, 1234, 777771, 20260818]) {
+      let seed = s
+      const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+      const m = freshModel(NOW - 6 * 3600)
+      m.seek(NOW - 3 * 3600)
+      for (let i = 0; i < 2000; i++) {
+        const was = m.follow
+        const r = rnd()
+        if (r < 0.3) {
+          m.pan(wheelPanSeconds(m, (rnd() - 0.5) * 2 * TRACK_W))
+          panned++
+        } else if (r < 0.5) {
+          m.zoom(wheelSpan(m, rnd() > 0.5 ? 1 : -1), rnd())
+          anchored++
+        } else if (r < 0.6) {
+          m.zoom(wheelSpan(m, rnd() > 0.5 ? 1 : -1))
+        } else if (r < 0.85) {
+          m.advance(Math.min(m.position + (rnd() - 0.2) * 30, m.liveEdge))
+        } else {
+          m.seek(clampPlayhead(m.position + (rnd() - 0.5) * 600, m.playbackFloor, m.liveEdge))
+        }
+        if (was && !m.follow) disengaged++
+        if (!was && m.follow) reengaged++
+        if (!m.follow) offSteps++
+        checkInvariants(m, `seed=${s} step=${i}`, v)
+        // The rule, restated as a property: while follow is off, either the
+        // playhead is out of the window, or it is in the window but has not
+        // left since follow went off (the gesture that disengaged is still
+        // being honoured).
+        if (!m.follow && playheadInView(m.position, m.viewStart, m.viewSpan)) {
+          expect(m.playheadLeftView).toBe(false)
+        }
+      }
+    }
+
+    expect(v).toEqual([])
+    expect(panned).toBeGreaterThan(100)
+    expect(anchored).toBeGreaterThan(100)
+    expect(disengaged).toBeGreaterThan(50)
+    expect(reengaged).toBeGreaterThan(20)
+    expect(offSteps).toBeGreaterThan(200)
   })
 })
 
