@@ -55,9 +55,9 @@
     // without another signature change.
     onZoom?: (targetSpan: number, anchorFraction: number | null) => void
     // Pan request: how far to move the viewport, in seconds, positive = later.
-    // Pointer-only (shift+wheel). Omitted → shift+wheel is not bound at all and
-    // the page keeps its own scroll, which is what the consumer passes when the
-    // active timeline mode gives shift no special meaning.
+    // Pointer-only (shift+wheel and shift+drag), and fixed mode only — the mode
+    // gates it, not the presence of the prop, so both pan gestures answer to
+    // one source of truth.
     onPan?: (deltaSeconds: number) => void
     // Live control: when set, a "LIVE" capsule is drawn at the live-edge
     // position on the track and clicking it navigates away (the consumer routes
@@ -141,6 +141,11 @@
   // playhead exactly where it was grabbed instead of snapping it under the
   // cursor on the first move.
   let grabOffsetPx = 0
+  // Previous pointer x of a shift+drag pan. The pan writer is RELATIVE, so
+  // each move contributes only its own step; accumulating from the press point
+  // instead would fight the live-edge clamp, which can absorb part of a pan and
+  // must not then be re-applied from scratch on the next move.
+  let panLastX = 0
 
   // Coverage bands: each recorded range mapped onto the viewport, same idiom as
   // reviewBands but with NO severity and — crucially — NO min-width clamp, so a
@@ -388,6 +393,7 @@
       movedBeyondSlop = false
       pressIsMouse = e.pointerType === 'mouse'
       grabOffsetPx = trackX(e.clientX) - playheadFraction * trackWidth
+      panLastX = e.clientX
       if (gesture === 'tape' || gesture === 'playhead') onScrubStart?.()
     }
     if (activePointers.size === 2) {
@@ -435,10 +441,22 @@
         const f = pointerFraction(e.clientX - grabOffsetPx)
         if (f === null) return
         onSeek(Math.round(fractionToTime(f, windowStart, windowEnd)))
+      } else if (gesture === 'pan') {
+        // Shift+drag: grab the track and move it. The playhead is not touched
+        // and keeps playing where it is.
+        //
+        // Drag right -> the window shows EARLIER time, so the content appears
+        // to travel with the cursor. This is the opposite sign to shift+WHEEL,
+        // deliberately: a wheel is a scrollbar (scroll right, go later) and a
+        // drag is a grab (pull right, bring earlier content into view). Both
+        // are the conventions of their own idiom, and every map and canvas
+        // application pairs them the same way.
+        onPan?.(((panLastX - e.clientX) / w) * span)
+        panLastX = e.clientX
       }
-      // Every other gesture moves nothing on pointermove in this state: a
-      // fixed-mode press on empty track is inert by design, because panning is
-      // an explicit gesture rather than something a bare drag falls into.
+      // 'idle' moves nothing: a fixed-mode press on empty track is inert by
+      // design, because panning is an explicit gesture rather than something a
+      // bare drag falls into.
     }
   }
   function onPointerUp(e: PointerEvent) {
@@ -503,10 +521,13 @@
     // Shift, not ctrl/cmd — those are the browser's own page zoom — and not
     // alt, which differs across platforms. Shift+wheel is the web's
     // horizontal-scroll convention, so it is what a pan should be bound to.
-    // With no onPan we do not preventDefault either: the page keeps its scroll
-    // rather than having the gesture swallowed and silently do nothing.
+    //
+    // Gated on the MODE, the same way shift+drag is: in follow mode shift has
+    // no special meaning, so the event is left alone entirely — no
+    // preventDefault — and the page keeps its own scroll rather than having
+    // the gesture swallowed to do nothing.
     if (e.shiftKey) {
-      if (!onPan) return
+      if (mode !== 'fixed' || !onPan) return
       e.preventDefault()
       const w = trackWidth || trackEl?.clientWidth || 0
       if (w <= 0) return

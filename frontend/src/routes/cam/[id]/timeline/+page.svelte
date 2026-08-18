@@ -187,11 +187,12 @@
     if (follow) centreOnPlayhead()
   }
 
-  // Pan the viewport WITHOUT moving the playhead — the shift+wheel gesture, and
-  // FIXED mode only. The playhead keeps playing where it is while the window
-  // shows another stretch of time, which is what the viewport/playhead split
-  // was for. It is not bound in follow mode: there the track is already
-  // draggable and shift has no special meaning, so nothing calls this.
+  // Pan the viewport WITHOUT moving the playhead — shift+wheel and shift+drag,
+  // both FIXED mode only. The playhead keeps playing where it is while the
+  // window shows another stretch of time, which is what the viewport/playhead
+  // split was for. The mode gate lives in the scrubber, which is where the
+  // gesture is recognised: follow mode never calls this, because there the
+  // track is already draggable and shift has no special meaning.
   function panViewport(deltaSeconds: number) {
     setViewStart(viewStart + deltaSeconds)
   }
@@ -1944,7 +1945,7 @@
       onScrubStart={handleScrubStart}
       onScrubEnd={handleScrubEnd}
       {onZoom}
-      onPan={follow ? undefined : panViewport}
+      onPan={panViewport}
       onGoLive={() => goto(`/cam/${camId}`)}
     />
 
