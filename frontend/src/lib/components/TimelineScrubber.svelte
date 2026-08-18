@@ -60,6 +60,17 @@
     // gates it, not the presence of the prop, so both pan gestures answer to
     // one source of truth.
     onPan?: (deltaSeconds: number) => void
+    // Two-finger request, fixed mode only: an absolute desired span PLUS where
+    // to put the wall-clock time the gesture was anchored on. anchorTime is
+    // captured once, from the midpoint at the moment the second finger landed;
+    // midFraction is where that midpoint is NOW, across the drawn window.
+    //
+    // One callback rather than an onZoom and an onPan, because the two are one
+    // gesture and one viewport write: reporting them separately would apply two
+    // writes per frame and accumulate per-frame deltas, which a pinch fed
+    // hundreds of pointermove events would drift on. The consumer recomputes
+    // the whole viewport from these frozen inputs instead.
+    onPinch?: (targetSpan: number, anchorTime: number, midFraction: number) => void
     // Live control: when set, a "LIVE" capsule is drawn at the live-edge
     // position on the track and clicking it navigates away (the consumer routes
     // to the camera's live focus view). Omitted → no capsule.
@@ -81,6 +92,7 @@
     onScrubEnd,
     onZoom,
     onPan,
+    onPinch,
     onGoLive
   }: Props = $props()
 
@@ -123,6 +135,11 @@
   let pinching = false
   let pinchStartDist = 0
   let pinchStartSpan = 0
+  // The wall-clock time under the MIDPOINT at the moment the second finger
+  // landed. Frozen for the gesture: it is the point the two fingers hold, and
+  // everything the gesture draws is recomputed from it rather than accumulated,
+  // so a long pinch cannot drift. Fixed mode only.
+  let pinchAnchorTime = 0
 
   // What the CURRENT press means, settled at pointerdown by resolveGesture and
   // then read — never recomputed — for the rest of the gesture. Non-reactive:
@@ -142,6 +159,12 @@
   // playhead exactly where it was grabbed instead of snapping it under the
   // cursor on the first move.
   let grabOffsetPx = 0
+  // Is a scrub lifecycle currently open? Tracked separately from `gesture`,
+  // because a gesture can change identity mid-flight — a finger resting on the
+  // playhead becomes a two-finger gesture the moment a second finger lands —
+  // and onScrubStart / onScrubEnd must still pair exactly. An unpaired start
+  // would strand the route on the preview layer.
+  let scrubOpen = false
   // Previous pointer x of a shift+drag pan. The pan writer is RELATIVE, so
   // each move contributes only its own step; accumulating from the press point
   // instead would fight the live-edge clamp, which can absorb part of a pan and
@@ -336,6 +359,13 @@
     if (xs.length < 2) return 0
     return Math.abs(xs[0]! - xs[1]!)
   }
+  // Midpoint between the two active pointers, in client x. The pan half of the
+  // two-finger gesture is entirely this value moving.
+  function pointerMidX(): number {
+    const xs = [...activePointers.values()]
+    if (xs.length < 2) return xs[0] ?? 0
+    return (xs[0]! + xs[1]!) / 2
+  }
   // Arm a relative pan from the given clientX: capture the press point and the
   // current playhead so onPointerMove applies the finger delta to startPosition
   // and the CONTENT moves under the centred playhead.
@@ -395,20 +425,30 @@
         mode,
         shiftKey: e.shiftKey,
         pressX: trackX(e.clientX),
-        playheadX: playheadFraction * trackWidth
+        playheadX: playheadFraction * trackWidth,
+        pointerType: e.pointerType
       })
       pressClientX = e.clientX
       movedBeyondSlop = false
       pressIsMouse = e.pointerType === 'mouse'
       grabOffsetPx = trackX(e.clientX) - playheadFraction * trackWidth
       panLastX = e.clientX
-      if (gesture === 'tape' || gesture === 'playhead') onScrubStart?.()
+      if (gesture === 'tape' || gesture === 'playhead') {
+        scrubOpen = true
+        onScrubStart?.()
+      }
     }
     if (activePointers.size === 2) {
-      // Second finger down: begin a pinch and snapshot its baseline.
+      // Second finger down: begin a two-finger gesture and snapshot its
+      // baseline. Two fingers always mean the two-finger gesture, whatever the
+      // first was doing — the same handoff ZoomPane makes, and the only one
+      // that lets the track be zoomed while a finger rests on the playhead.
       pinching = true
       pinchStartDist = pointerDistance()
       pinchStartSpan = windowEnd - windowStart
+      // The point the fingers are holding, captured once.
+      const midF = pointerFraction(pointerMidX())
+      pinchAnchorTime = midF === null ? position : fractionToTime(midF, windowStart, windowEnd)
     } else if (activePointers.size === 1 && !pinching) {
       armPan(e.clientX)
     }
@@ -417,11 +457,25 @@
     if (!trackEl || !activePointers.has(e.pointerId)) return
     activePointers.set(e.pointerId, e.clientX)
     if (pinching && activePointers.size === 2) {
-      // Fingers apart -> currentDist up -> smaller span -> zoom in. null
-      // anchor: pinch reports no anchor (see the onZoom prop comment) —
-      // nothing about touch changes here.
+      // Fingers apart -> currentDist up -> smaller span -> zoom in.
       const currentDist = pointerDistance()
-      if (currentDist > 0) onZoom?.((pinchStartSpan * pinchStartDist) / currentDist, null)
+      if (currentDist <= 0) return
+      const nextSpan = (pinchStartSpan * pinchStartDist) / currentDist
+      if (mode === 'fixed') {
+        // Fixed mode: the separation zooms and the midpoint pans, both from the
+        // same two fingers and both at once. Nothing discriminates between them
+        // because there is nothing to discriminate — they are independent
+        // readings of one gesture, so fingers that do a bit of each (which they
+        // always do) get a bit of each.
+        const f = pointerFraction(pointerMidX())
+        if (f === null) return
+        onPinch?.(nextSpan, pinchAnchorTime, f)
+      } else {
+        // Follow mode: the playhead is the anchor and the track is not pannable,
+        // so the midpoint is discarded and this stays the span-only zoom it has
+        // always been. null = no anchor expressed.
+        onZoom?.(nextSpan, null)
+      }
       return
     }
     if (!pinching && activePointers.size === 1) {
@@ -472,15 +526,26 @@
     trackEl?.releasePointerCapture(e.pointerId)
     activePointers.delete(e.pointerId)
     if (activePointers.size === 1 && pinching) {
-      // Pinch dropped to one finger: end the pinch and RE-ARM the pan from the
-      // remaining pointer so a pinch can flow back into a pan without a jump.
       pinching = false
       const [clientX] = activePointers.values()
-      armPan(clientX ?? startClientX)
+      if (mode === 'fixed') {
+        // Fixed mode: the remaining finger goes INERT rather than resuming
+        // whatever the first finger was doing. It is somewhere new after the
+        // two-finger gesture, so resuming a playhead drag from it would jump
+        // the playhead, and there is no one-finger pan to fall back into.
+        gesture = 'idle'
+        // It can no longer become a click either: two fingers were down.
+        movedBeyondSlop = true
+      } else {
+        // Follow mode: RE-ARM the pan from the remaining pointer so a pinch can
+        // flow back into a drag without a jump. Unchanged.
+        armPan(clientX ?? startClientX)
+      }
     } else if (activePointers.size === 0) {
       pinching = false
       dragging = false
-      if (gesture === 'tape' || gesture === 'playhead') {
+      if (scrubOpen) {
+        scrubOpen = false
         onScrubEnd?.()
       } else if (gesture === 'idle' && !movedBeyondSlop && pressIsMouse) {
         // A fixed-mode press that never travelled, made with a mouse: a click,
@@ -685,6 +750,15 @@
       style:transform="translateX({playheadFraction * trackWidth - 1}px)"
     >
       <span class="playhead-line"></span>
+      <!-- Grip: the VISIBLE part of the handle. The hit area is far wider and is
+           computed arithmetically at pointerdown (44px on touch, 16px for a
+           cursor), so this only has to be seen, not caught — which is what lets
+           it stay narrow enough to sit over the coverage fill without hiding
+           it, and in the band below the review and audio lanes rather than
+           across them. In fixed mode it takes pointer events purely so the
+           cursor can say "grabbable"; the press still bubbles to the track and
+           is resolved there like any other. -->
+      <span class="playhead-grip" class:grabbable={mode === 'fixed'}></span>
     </span>
   </div>
 
@@ -954,6 +1028,36 @@
     bottom: 0;
     width: 2px;
     background: var(--accent);
+  }
+  /* Visible grip on the playhead line. Sized and placed to be seen rather than
+     caught — the hit area is arithmetic and much wider — so it can stay narrow
+     enough not to hide the coverage fill it sits over, and low enough to clear
+     the review lane (top 6px) and the audio lane (top 10px, 5px tall)
+     completely. It stops above the tick labels, so the ruler stays readable
+     through it. First-pass sizes — tune on device. */
+  .playhead-grip {
+    position: absolute;
+    top: 17px;
+    /* Centre the 12px grip on the 2px line, whose centre sits at x=1. */
+    left: -5px;
+    width: 12px;
+    height: 16px;
+    border-radius: 6px;
+    background: var(--accent);
+    /* Same hairline the hourlines use, so the grip reads as sitting ON the
+       track rather than floating above it. */
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
+    pointer-events: none;
+  }
+  /* Fixed mode: the playhead is what a drag moves, so the grip says so. Taking
+     pointer events here is only for the cursor — the press bubbles to .track
+     and is resolved by resolveGesture exactly as a press on the line would be.
+     Not applied in follow mode, where the grip is decorative: the tape moves,
+     not the playhead, and a resize cursor would promise a gesture that mode
+     does not have. */
+  .playhead-grip.grabbable {
+    pointer-events: auto;
+    cursor: ew-resize;
   }
   /* Time flag — the top cap of the playhead line, sitting in the wrapper's
      reserved padding above the track. Same drag-gated transition as the

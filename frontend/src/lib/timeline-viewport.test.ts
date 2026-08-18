@@ -7,6 +7,7 @@ import {
   clampViewSpan,
   centredViewStart,
   anchoredViewStart,
+  pinchViewStart,
   clampViewStart,
   clampPlayhead,
   playheadEdge
@@ -81,6 +82,17 @@ class ViewportModel {
   // never the playhead.
   pan(deltaSeconds: number) {
     this.setViewStart(this.viewStart + deltaSeconds)
+  }
+  // The other writer of viewSpan: the fixed-mode two-finger gesture. Zooms and
+  // pans at once, recomputed from inputs frozen at the start of the gesture.
+  setViewSpanPinched(span: number, anchorTime: number, fraction: number) {
+    const target = pinchViewStart(anchorTime, span, fraction)
+    this.viewSpan = span
+    this.setViewStart(target)
+  }
+  // onPinch: two fingers, fixed mode only.
+  twoFinger(targetSpan: number, anchorTime: number, midFraction: number) {
+    this.setViewSpanPinched(clampViewSpan(targetSpan), anchorTime, midFraction)
   }
   // The route's mode-change effect: switching BACK to follow re-centres the
   // window on the playhead at once. Transition only — follow -> fixed leaves
@@ -1078,6 +1090,217 @@ describe('switching mode from the timeline screen', () => {
       m.advance(Math.min(m.position + 1.3, m.liveEdge))
       checkInvariants(m, `tracking after switch ${i}`, v)
     }
+    expect(v).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Two-finger gesture (fixed mode): pinch and pan from the same two pointers.
+// ---------------------------------------------------------------------------
+// Transcribed from TimelineScrubber's pinch path. The scrubber tracks two
+// client x values; span comes from their separation, the anchor from where
+// their midpoint started, and the placement from where it is now.
+const TWO_FINGER_TRACK_W = 1000
+
+// Where a client x lands across the track, as the scrubber's clamped fraction.
+function fingerFraction(x: number): number {
+  const f = x / TWO_FINGER_TRACK_W
+  return f < 0 ? 0 : f > 1 ? 1 : f
+}
+// A two-finger gesture, replayed against the model. Returns the frozen anchor
+// so a test can drive further frames of the same gesture.
+function pinchStart(m: ViewportModel, x0: number, x1: number) {
+  const startDist = Math.abs(x0 - x1)
+  const startSpan = m.windowEnd - m.windowStart
+  const midF = fingerFraction((x0 + x1) / 2)
+  const anchorTime = m.windowStart + midF * startSpan
+  return { startDist, startSpan, anchorTime }
+}
+function pinchMove(
+  m: ViewportModel,
+  g: { startDist: number; startSpan: number; anchorTime: number },
+  x0: number,
+  x1: number
+) {
+  const dist = Math.abs(x0 - x1)
+  if (dist <= 0) return
+  m.twoFinger((g.startSpan * g.startDist) / dist, g.anchorTime, fingerFraction((x0 + x1) / 2))
+}
+
+describe('pinchViewStart', () => {
+  it('places the anchor time under the given fraction at the given span', () => {
+    for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+      for (const span of [MIN_SPAN, 3600, MAX_SPAN]) {
+        const start = pinchViewStart(NOW, span, f)
+        // Recovering the anchor re-associates (t - f*s) + f*s, which IEEE754
+        // does not guarantee exact — same ULP tolerance and same reason as
+        // windowEnd and anchoredViewStart above.
+        expect(Math.abs(start + f * span - NOW)).toBeLessThanOrEqual(ULP)
+      }
+    }
+  })
+
+  it('generalises anchoredViewStart to two fractions, and agrees on one', () => {
+    // The wheel holds the time under a fraction fixed and reads the anchor from
+    // that SAME fraction. Feeding pinchViewStart that anchor and that fraction
+    // must be the identical window, or the two zoom paths have diverged.
+    const viewStart = NOW - 1800
+    const viewSpan = 3600
+    for (const f of [0, 0.2, 0.5, 0.9, 1]) {
+      for (const next of [MIN_SPAN, 1800, 7200, MAX_SPAN]) {
+        const anchorTime = viewStart + f * viewSpan
+        expect(pinchViewStart(anchorTime, next, f)).toBe(
+          anchoredViewStart(viewStart, viewSpan, next, f)
+        )
+      }
+    }
+  })
+
+  it('is pure pan when the span does not change', () => {
+    // Midpoint travel alone: the span is fixed, so the window slides by exactly
+    // the distance the midpoint moved, expressed in seconds.
+    const span = 3600
+    const anchor = NOW
+    const a = pinchViewStart(anchor, span, 0.5)
+    const b = pinchViewStart(anchor, span, 0.6)
+    expect(a - b).toBeCloseTo(0.1 * span, 9)
+  })
+})
+
+describe('two-finger gesture through the model', () => {
+  it('holds the grabbed time under the fingers while they only spread', () => {
+    // Symmetric fingers: pure zoom. The midpoint never moves, so the time under
+    // it is the same time throughout.
+    const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
+    const g = pinchStart(m, 400, 600)
+    for (let d = 100; d <= 480; d += 10) {
+      pinchMove(m, g, 500 - d, 500 + d)
+      const under = m.windowStart + 0.5 * (m.windowEnd - m.windowStart)
+      expect(Math.abs(under - g.anchorTime)).toBeLessThanOrEqual(ULP)
+    }
+    expect(m.viewSpan).toBeLessThan(DEFAULT_VIEW_SPAN)
+  })
+
+  it('pans when the fingers keep their separation and slide together', () => {
+    const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
+    const g = pinchStart(m, 400, 600)
+    const spanBefore = m.viewSpan
+    const startBefore = m.viewStart
+    // Slide both fingers 200px right without changing their separation.
+    pinchMove(m, g, 600, 800)
+    expect(m.viewSpan).toBe(spanBefore)
+    // The window moved EARLIER by a fifth of a viewport — the content travels
+    // with the fingers.
+    expect(m.viewStart).toBeCloseTo(startBefore - 0.2 * spanBefore, 6)
+    expect(m.position).toBe(NOW - 6 * 3600)
+  })
+
+  it('does both at once, which is what fingers actually do', () => {
+    // Spreading AND sliding in the same move. The grabbed time stays under the
+    // midpoint wherever the midpoint has got to, and the span follows the
+    // separation — neither component is discarded and no threshold is crossed.
+    const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
+    const g = pinchStart(m, 450, 550)
+    const frames: [number, number][] = [
+      [430, 580],
+      [400, 640],
+      [380, 720],
+      [420, 800],
+      [500, 900]
+    ]
+    for (const [x0, x1] of frames) {
+      pinchMove(m, g, x0, x1)
+      const midF = fingerFraction((x0 + x1) / 2)
+      const under = m.windowStart + midF * (m.windowEnd - m.windowStart)
+      expect(Math.abs(under - g.anchorTime)).toBeLessThanOrEqual(ULP)
+    }
+    // It really did zoom as well as pan.
+    expect(m.viewSpan).toBeLessThan(DEFAULT_VIEW_SPAN)
+  })
+
+  it('cannot drift, however many frames it is fed', () => {
+    // A pure recompute from frozen inputs, so a long gesture ends exactly where
+    // a short one with the same final fingers would. This is what rules out the
+    // per-frame-delta formulation.
+    const long = fixedModel()
+    long.seek(NOW - 6 * 3600)
+    long.centreOnPlayhead()
+    const gl = pinchStart(long, 450, 550)
+    for (let i = 1; i <= 600; i++) {
+      const t = i / 600
+      pinchMove(long, gl, 450 - 120 * t, 550 + 250 * t)
+    }
+
+    const short = fixedModel()
+    short.seek(NOW - 6 * 3600)
+    short.centreOnPlayhead()
+    const gs = pinchStart(short, 450, 550)
+    pinchMove(short, gs, 330, 800)
+
+    expect(long.viewSpan).toBe(short.viewSpan)
+    expect(long.viewStart).toBe(short.viewStart)
+  })
+
+  it('never moves the playhead', () => {
+    // The two-finger gesture is viewport-only. The playhead keeps playing where
+    // it is, and may leave the window — which is what the edge marker is for.
+    const v: Violation[] = []
+    const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
+    const parked = m.position
+    // Fingers deliberately OFF the playhead, so the point they grab is not the
+    // playhead's own time and the window can genuinely travel away from it.
+    const g = pinchStart(m, 100, 300)
+    for (let i = 0; i < 40; i++) {
+      pinchMove(m, g, 100 + i * 14, 300 + i * 20)
+      expect(m.position).toBe(parked)
+      checkInvariants(m, `two-finger ${i}`, v)
+    }
+    expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe('after')
+    expect(v).toEqual([])
+  })
+
+  it('stays bounded by the live edge and the span clamps', () => {
+    const v: Violation[] = []
+    const m = fixedModel()
+    // Drag the whole window into the future as hard as the gesture allows.
+    const g = pinchStart(m, 100, 200)
+    for (let i = 0; i < 60; i++) {
+      pinchMove(m, g, 100 + i * 15, 200 + i * 15)
+      checkInvariants(m, `pan to live ${i}`, v)
+    }
+    expect(m.viewStart).toBeLessThanOrEqual(NOW - m.viewSpan / 2 + ULP)
+    // And squeeze past both span clamps. A narrow starting separation is what
+    // lets the distance RATIO reach far enough to hit them from one gesture.
+    const g2 = pinchStart(m, 480, 520)
+    for (let d = 20; d <= 495; d += 5) pinchMove(m, g2, 500 - d, 500 + d)
+    expect(m.viewSpan).toBe(MIN_SPAN)
+    for (let d = 495; d >= 1; d -= 2) pinchMove(m, g2, 500 - d, 500 + d)
+    expect(m.viewSpan).toBe(MAX_SPAN)
+    expect(v).toEqual([])
+  })
+
+  it('leaves follow mode zooming about the playhead, midpoint discarded', () => {
+    // Follow mode reports no anchor, so its pinch is the span-only zoom it has
+    // always been: the window stays centred on the playhead no matter where the
+    // fingers are or which way their midpoint travels.
+    const v: Violation[] = []
+    const m = freshModel()
+    const startSpan = m.windowEnd - m.windowStart
+    for (let d = 40; d <= 800; d += 7) {
+      // Deliberately asymmetric fingers, so a leaked midpoint would show.
+      m.zoom(pinchSpan(startSpan, 200, d))
+      checkInvariants(m, `follow pinch dist=${d}`, v)
+      expect(m.viewStart).toBe(centredViewStart(m.position, m.viewSpan))
+    }
+    expect(m.follow).toBe(true)
     expect(v).toEqual([])
   })
 })

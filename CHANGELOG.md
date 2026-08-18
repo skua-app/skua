@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Added
+
+- The recording timeline can now hold still while you look around it. Until now the playhead was pinned to the middle of the track and the recording slid past it, which is what you want while something is playing but awkward when you are trying to find something: the moment you are examining keeps sliding away as playback carries on. A new Timeline setting picks between two behaviours. Follow, the default and what the timeline has always done, keeps the playhead centred and moves the recording past it. Fixed holds the track still and lets the playhead travel along it, so you can leave a moment playing and go and look at a different stretch of the day without losing your place — click or drag to place the playhead, and pan and zoom the track independently with Shift and the mouse, or with two fingers on a phone. The playhead gained a grip large enough to catch with a thumb, and if playback carries it outside the stretch you are looking at, a marker shows which side it left by. The switch sits above the timeline itself as well as in Settings → Appearance, since it is worth changing often, and like the other preferences it is stored server-side and applies on every device in the household.
+
 Fixed
 
 - Recording timeline: the scrub preview no longer goes black after a quick drag across an hour boundary and straight back. Returning to the first hour while the second one was still loading could leave the preview marked as ready against a video that had never actually started, so nothing painted — and it stayed black for every further scrub in that hour until you left to another hour and came back. Each clip's load is now tracked separately, so a load that finishes after you have already moved on is discarded instead of being applied to where you are now.
