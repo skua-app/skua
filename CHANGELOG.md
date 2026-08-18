@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Fixed
+
+- Recording timeline: scrubbing the newest, still-recording hour keeps working after the clock passes the top of the hour. That hour is scrubbed frame by frame because its preview video does not exist yet; the moment the hour ends, Frigate replaces those frames with the assembled video and deletes them. The screen used to hold on to the deleted frame list for the rest of the session, so every further scrub in that span asked for images that were gone. It now notices the hour has closed the next time you scrub there, and switches over to the video Frigate has just assembled.
+
 ## [0.17.0] — 2026-08-17
 
 Added

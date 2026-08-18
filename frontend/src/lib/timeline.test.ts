@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { CoverageSegment, RecordingsSummary } from './api'
-import { flattenSummary, footageToWallclock, fractionToTime, timeToFraction } from './timeline'
+import {
+  flattenSummary,
+  footageToWallclock,
+  fractionToTime,
+  previewTailKey,
+  tailHourOpen,
+  timeToFraction
+} from './timeline'
 
 describe('flattenSummary', () => {
   it('returns an empty array for an empty summary', () => {
@@ -167,5 +174,47 @@ describe('footageToWallclock', () => {
     const coverage: CoverageSegment[] = [{ start: 1000, end: 1100 }]
     // Recorded duration is 100s; footage 150 exceeds it -> chunkStart + ct.
     expect(footageToWallclock(1000, 150, coverage)).toBe(1150)
+  })
+})
+
+describe('tailHourOpen', () => {
+  // 2026-08-18T14:00:00Z and friends, as plain unix seconds.
+  const h14 = 1787148000
+  const h15 = h14 + 3600
+
+  it('is open while now is still inside the tail start hour', () => {
+    expect(tailHourOpen(h14, h14)).toBe(true)
+    expect(tailHourOpen(h14, h14 + 2700)).toBe(true)
+    expect(tailHourOpen(h14, h15 - 1)).toBe(true)
+  })
+
+  it('closes the moment the clock crosses the hour boundary', () => {
+    expect(tailHourOpen(h14, h15)).toBe(false)
+    expect(tailHourOpen(h14, h15 + 1)).toBe(false)
+  })
+
+  it('treats a tail start more than an hour behind now as closed', () => {
+    expect(tailHourOpen(h14, h14 + 5 * 3600)).toBe(false)
+  })
+})
+
+describe('previewTailKey', () => {
+  const h14 = 1787148000
+  const h15 = h14 + 3600
+
+  it('is stable across a whole hour so the list loads once per tail', () => {
+    expect(previewTailKey(h14, h14 + 1)).toBe(previewTailKey(h14, h15 - 1))
+  })
+
+  it('changes when the clock crosses an hour boundary under the same tail', () => {
+    expect(previewTailKey(h14, h15 - 1)).not.toBe(previewTailKey(h14, h15))
+  })
+
+  it('changes when a new clip closes and the tail start moves', () => {
+    expect(previewTailKey(h14, h15 + 10)).not.toBe(previewTailKey(h15, h15 + 10))
+  })
+
+  it('ignores subsecond drift in the tail start', () => {
+    expect(previewTailKey(h14 + 0.75, h14 + 10)).toBe(previewTailKey(h14, h14 + 10))
   })
 })
