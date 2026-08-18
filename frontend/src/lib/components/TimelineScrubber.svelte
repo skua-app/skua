@@ -766,15 +766,19 @@
       style:transform="translateX({playheadFraction * trackWidth - 1}px)"
     >
       <span class="playhead-line"></span>
-      <!-- Grip: the VISIBLE part of the handle. The hit area is far wider and is
-           computed arithmetically at pointerdown (44px on touch, 16px for a
-           cursor), so this only has to be seen, not caught — which is what lets
-           it stay narrow enough to sit over the coverage fill without hiding
-           it, and in the band below the review and audio lanes rather than
-           across them. In fixed mode it takes pointer events purely so the
-           cursor can say "grabbable"; the press still bubbles to the track and
-           is resolved there like any other. -->
-      <span class="playhead-grip" class:grabbable={mode === 'fixed'}></span>
+      <!-- Grip: the VISIBLE part of the handle, and FIXED MODE ONLY. The hit
+           area is far wider and is computed arithmetically at pointerdown (44px
+           on touch, 16px for a cursor), so this only has to be seen, not caught
+           — which is what lets it stay narrow enough to sit over the coverage
+           fill without hiding it, and in the band below the review and audio
+           lanes rather than across them.
+           Follow mode does not draw it: there the whole track is the drag
+           surface, so a grip would advertise a distinction that does not exist
+           and invite a grab that means nothing in particular. The cursor
+           affordance goes with it, since there is no handle to promise. -->
+      {#if mode === 'fixed'}
+        <span class="playhead-grip"></span>
+      {/if}
     </span>
   </div>
 
@@ -1063,15 +1067,10 @@
     /* Same hairline the hourlines use, so the grip reads as sitting ON the
        track rather than floating above it. */
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.28);
-    pointer-events: none;
-  }
-  /* Fixed mode: the playhead is what a drag moves, so the grip says so. Taking
-     pointer events here is only for the cursor — the press bubbles to .track
-     and is resolved by resolveGesture exactly as a press on the line would be.
-     Not applied in follow mode, where the grip is decorative: the tape moves,
-     not the playhead, and a resize cursor would promise a gesture that mode
-     does not have. */
-  .playhead-grip.grabbable {
+    /* Only rendered in fixed mode, where the playhead IS what a drag moves, so
+       the grip can say so unconditionally. Taking pointer events is purely for
+       the cursor — the press bubbles to .track and is resolved by
+       resolveGesture exactly as a press on the line would be. */
     pointer-events: auto;
     cursor: ew-resize;
   }
