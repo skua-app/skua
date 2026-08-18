@@ -247,6 +247,39 @@
     setViewStart(target)
   }
 
+  // Switching the mode back to FOLLOW re-centres the window on the playhead at
+  // once. Without this the viewport would keep whatever the fixed-mode session
+  // left it with until the next write to position — which during playback is
+  // the next timeupdate, but while paused is never. "Follow" that visibly does
+  // not follow until something else happens is not a mode.
+  //
+  // This is where it belongs, and NOT in the mode control's click handler.
+  // `follow` is derived from the preference, so the preference changing is the
+  // event; a handler would miss a change made in Settings, or on another device.
+  // The effect READS follow and WRITES the viewport, which is the one direction
+  // of causality the mode model allows — nothing here writes follow, and
+  // reintroducing a gesture-driven write to it is exactly what the model exists
+  // to prevent.
+  //
+  // TRANSITION only, tracked by a plain non-reactive flag. Fixed → follow
+  // re-centres; follow → fixed leaves the window exactly where it is, which is
+  // right — the ruler should start from what you were already looking at. The
+  // first run only records the starting mode, so mounting never snaps.
+  //
+  // The ORDERING RULE above does not bite here. It forbids re-centring from an
+  // effect that tracks POSITION, because that lands a frame after the render
+  // which already drew the new position. This tracks the mode alone, which
+  // changes at most once per user action and never mid-drag, and the write sits
+  // inside untrack so position and viewSpan cannot become dependencies.
+  let wasFollowing = true
+  $effect(() => {
+    const f = follow
+    untrack(() => {
+      if (f && !wasFollowing) centreOnPlayhead()
+      wasFollowing = f
+    })
+  })
+
   // 'scrubbing' = the low-res preview layer drives the picture; 'playback' =
   // the full-res chunk drives it.
   let mode = $state<'scrubbing' | 'playback'>('scrubbing')

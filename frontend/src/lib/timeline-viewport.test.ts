@@ -82,6 +82,14 @@ class ViewportModel {
   pan(deltaSeconds: number) {
     this.setViewStart(this.viewStart + deltaSeconds)
   }
+  // The route's mode-change effect: switching BACK to follow re-centres the
+  // window on the playhead at once. Transition only — follow -> fixed leaves
+  // the window exactly where it is.
+  setMode(next: boolean) {
+    const was = this.follow
+    this.follow = next
+    if (next && !was) this.centreOnPlayhead()
+  }
 
   // --- the route's call sites ---
   // Capture effect: place the playhead (deep-link t, else centred in the last
@@ -996,5 +1004,80 @@ describe('shift+wheel pan, fixed mode only', () => {
     expect(panned).toBeGreaterThan(100)
     expect(anchored).toBeGreaterThan(100)
     expect(plain).toBeGreaterThan(50)
+  })
+})
+
+describe('switching mode from the timeline screen', () => {
+  it('re-centres on the playhead when the mode returns to follow', () => {
+    const v: Violation[] = []
+    const m = fixedModel()
+    m.seek(NOW - 6 * 3600)
+    m.centreOnPlayhead()
+    // A fixed-mode session that leaves the window nowhere near the playhead.
+    m.pan(3 * m.viewSpan)
+    m.zoom(MIN_SPAN, 0.2)
+    expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe('before')
+
+    m.setMode(true)
+    expect(m.viewStart).toBe(centredViewStart(m.position, m.viewSpan))
+    expect(playheadEdge(m.position, m.viewStart, m.viewSpan)).toBe(null)
+    checkInvariants(m, 'back to follow', v)
+    expect(v).toEqual([])
+  })
+
+  it('re-centres even while nothing is playing', () => {
+    // The reason it cannot be left to the next position write: while paused
+    // there is no next write, so a "follow" mode that waited for one would
+    // visibly not follow. No advance() here at all.
+    const m = fixedModel()
+    m.seek(NOW - 4 * 3600)
+    m.centreOnPlayhead()
+    m.pan(2 * m.viewSpan)
+    const parked = m.viewStart
+    expect(m.viewStart).toBe(parked)
+    m.setMode(true)
+    expect(m.viewStart).toBe(centredViewStart(m.position, m.viewSpan))
+    expect(m.viewStart).not.toBe(parked)
+  })
+
+  it('leaves the window alone when the mode goes to fixed', () => {
+    // The ruler starts from whatever you were already looking at.
+    const m = freshModel()
+    const before = m.viewStart
+    m.setMode(false)
+    expect(m.viewStart).toBe(before)
+    expect(m.follow).toBe(false)
+  })
+
+  it('does nothing when the mode is set to what it already is', () => {
+    // Transition only: re-asserting the current mode is not an event. A pan
+    // followed by a redundant setMode(false) must survive.
+    const m = fixedModel()
+    m.seek(NOW - 4 * 3600)
+    m.centreOnPlayhead()
+    m.pan(m.viewSpan)
+    const parked = m.viewStart
+    m.setMode(false)
+    m.setMode(false)
+    expect(m.viewStart).toBe(parked)
+    // And in follow mode, where the window is already centred, it is a no-op.
+    const f = freshModel()
+    const centred = f.viewStart
+    f.setMode(true)
+    expect(f.viewStart).toBe(centred)
+  })
+
+  it('keeps tracking after the switch, not just for the one snap', () => {
+    const v: Violation[] = []
+    const m = fixedModel()
+    m.seek(NOW - 5 * 3600)
+    m.centreOnPlayhead()
+    m.pan(2 * m.viewSpan)
+    m.setMode(true)
+    for (let i = 0; i < 300; i++) {
+      m.advance(Math.min(m.position + 1.3, m.liveEdge))
+      checkInvariants(m, `tracking after switch ${i}`, v)
+    }
+    expect(v).toEqual([])
   })
 })
