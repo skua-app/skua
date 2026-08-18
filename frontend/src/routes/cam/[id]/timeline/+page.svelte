@@ -201,6 +201,21 @@
   let previewEl = $state<HTMLVideoElement | null>(null)
   let previewDuration = $state(0)
   let previewPrimed = $state(false)
+  // Bumped on every activeClip swap — the generation token the async prime
+  // compares itself against. The prime is a play()/pause() round trip, and a
+  // drag that crosses a clip boundary and comes straight back can swap the clip
+  // out from under one that is mid-flight: the element's play() promise has
+  // already been resolved by the engine, the swap then runs the media load
+  // algorithm, and the .then lands afterwards against a file it does not
+  // describe. Without the token it sets previewPrimed for a clip that was never
+  // played, the new clip's own on-metadata prime early-returns on that flag, and
+  // its currentTime seek never decodes — a bare seek paints nothing on mobile
+  // until the element has been played once. That is a black preview with no way
+  // out: pickClip early-returns on re-entering the same clip, and previewReady
+  // is deliberately sticky across clip swaps, so nothing retries. This is the
+  // activeClip equivalent of the camId guard loadClipsAround / loadFramesTail
+  // already carry.
+  let previewGen = 0
   // Coalesces rapid drag seeks to one currentTime assignment per frame.
   let previewSeekRaf: number | null = null
   // Same coalescing for the open-tail webp <img> swap (one src per frame).
@@ -497,6 +512,9 @@
       // Fresh camera: drop the loaded clips/clip, then load the clip list
       // around the playhead and pick the clip there.
       clips = []
+      // Same retirement as pickClip's: a prime still in flight for the previous
+      // camera's clip must not mark the newly entered camera's clip primed.
+      previewGen++
       activeClip = null
       // Drop the review lane for the previous camera; it reloads below over
       // the same span as the clips.
@@ -688,8 +706,18 @@
   function primePreview() {
     const el = previewEl
     if (previewPrimed || !el) return
+    // The clip this prime is for. Every caller runs in a task (a media event, a
+    // pointerdown, the readiness poll), and Svelte flushes the src in a
+    // microtask, so the element already holds activeClip's file here — only the
+    // RESOLUTION below can land against a different one.
+    const gen = previewGen
     el.play()
       .then(() => {
+        // A stale resolution touches nothing at all: the swap that bumped the
+        // generation ran the media load algorithm, which already stopped this
+        // playback, and pausing across generations could abort the new clip's
+        // own prime.
+        if (gen !== previewGen) return
         el.pause()
         previewPrimed = true
         seekPreview()
@@ -716,6 +744,9 @@
       }
     }
     if (next?.src === activeClip?.src) return
+    // Retire any prime still in flight for the outgoing clip before the swap,
+    // so its resolution cannot claim the incoming one as primed.
+    previewGen++
     activeClip = next
     previewDuration = 0
     previewPrimed = false
