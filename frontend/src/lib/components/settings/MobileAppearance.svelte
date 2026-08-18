@@ -4,7 +4,14 @@
   import { glanceStore } from '$lib/stores/glance.svelte'
   import { themeStore, type Theme } from '$lib/stores/theme.svelte'
   import { ui } from '$lib/i18n/strings'
-  import type { Accent, NameStyle, GlanceWindowHours, GlanceMaxMoments, GridFps } from '$lib/api'
+  import type {
+    Accent,
+    NameStyle,
+    GlanceWindowHours,
+    GlanceMaxMoments,
+    GridFps,
+    TimelineZoomAnchor
+  } from '$lib/api'
 
   const themeOptions: { value: Theme; label: string }[] = [
     { value: 'auto', label: ui.themeAuto },
@@ -23,6 +30,10 @@
   const gridFpsOptions = [
     { value: '1' as const, label: '1 Hz' },
     { value: '2' as const, label: '2 Hz' }
+  ]
+  const timelineZoomAnchorOptions: { value: TimelineZoomAnchor; label: string }[] = [
+    { value: 'pointer', label: ui.zoomAnchorPointer },
+    { value: 'playhead', label: ui.zoomAnchorPlayhead }
   ]
   const accentOptions: { value: Accent; label: string }[] = [
     { value: 'cyan', label: ui.accentCyan },
@@ -89,6 +100,18 @@
         value={String(prefsStore.gridFps) as '1' | '2'}
         options={gridFpsOptions}
         onChange={(v) => prefsStore.setGridFps(Number(v) as GridFps)}
+        tone="surface-2"
+      />
+    </div>
+  </div>
+
+  <div class="set-line">
+    <div class="sl-label">{ui.timelineZoomAnchorLabel}</div>
+    <div class="sl-control">
+      <Segmented
+        value={prefsStore.timelineZoomAnchor}
+        options={timelineZoomAnchorOptions}
+        onChange={(v) => prefsStore.setTimelineZoomAnchor(v)}
         tone="surface-2"
       />
     </div>

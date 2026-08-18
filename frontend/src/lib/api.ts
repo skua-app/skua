@@ -21,6 +21,11 @@ export type MobileColumns = 1 | 2
 export type GlanceWindowHours = 6 | 12 | 24 | 48 | 72
 export type GlanceMaxMoments = 10 | 20 | 30 | 50
 export type GridFps = 1 | 2
+// What a zoom gesture on the recording timeline holds in place: the wall-clock
+// time under the pointer, or the playhead at the centre of the window. Named
+// for zoom anchoring in general rather than for the wheel — the pinch gesture
+// reads the same preference.
+export type TimelineZoomAnchor = 'pointer' | 'playhead'
 
 export type Prefs = {
   grid_mode: 'hd' | 'eco'
@@ -36,6 +41,7 @@ export type Prefs = {
   glance_window_hours: GlanceWindowHours
   glance_max_moments: GlanceMaxMoments
   grid_fps: GridFps
+  timeline_zoom_anchor: TimelineZoomAnchor
 }
 
 // EventKind mirrors backend/internal/events.Kind exactly. 'motion' is not

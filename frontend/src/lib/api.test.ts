@@ -73,7 +73,8 @@ describe('success paths', () => {
       grid_filter: null,
       glance_window_hours: 24,
       glance_max_moments: 20,
-      grid_fps: 1
+      grid_fps: 1,
+      timeline_zoom_anchor: 'pointer'
     }
     mockFetchOnce(jsonResponse(prefs))
     await expect(updatePrefs({ grid_mode: 'eco' })).resolves.toEqual(prefs)

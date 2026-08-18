@@ -285,6 +285,57 @@ func TestUpdate_InvalidGridFPS_ReturnsError(t *testing.T) {
 	}
 }
 
+func TestNew_MissingFile_ReturnsTimelineZoomAnchorDefault(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := store.Get().TimelineZoomAnchor; got != "pointer" {
+		t.Errorf("TimelineZoomAnchor: got %q, want default %q", got, "pointer")
+	}
+}
+
+func TestUpdate_TimelineZoomAnchor_PersistsAcrossReload(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "prefs.json")
+	store, err := prefs.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := store.Update(map[string]any{"timeline_zoom_anchor": "playhead"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.TimelineZoomAnchor != "playhead" {
+		t.Errorf("TimelineZoomAnchor: got %q, want %q", updated.TimelineZoomAnchor, "playhead")
+	}
+
+	reloaded, err := prefs.New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Get().TimelineZoomAnchor; got != "playhead" {
+		t.Errorf("TimelineZoomAnchor after reload: got %q, want %q", got, "playhead")
+	}
+}
+
+func TestUpdate_InvalidTimelineZoomAnchor_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	store, err := prefs.New(filepath.Join(dir, "prefs.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.Update(map[string]any{"timeline_zoom_anchor": "centre"}); err == nil {
+		t.Fatal("expected error for invalid timeline_zoom_anchor, got nil")
+	}
+	if _, err := store.Update(map[string]any{"timeline_zoom_anchor": 1}); err == nil {
+		t.Fatal("expected error for non-string timeline_zoom_anchor, got nil")
+	}
+}
+
 func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prefs.json")
@@ -300,7 +351,8 @@ func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 		"accent": "neon",
 		"name_style": "sideways",
 		"desktop_columns": 99,
-		"mobile_columns": 7
+		"mobile_columns": 7,
+		"timeline_zoom_anchor": "sideways"
 	}`)
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatal(err)
@@ -329,6 +381,9 @@ func TestNew_InvalidFieldValues_SanitizedToDefaults(t *testing.T) {
 	}
 	if p.MobileColumns != 1 {
 		t.Errorf("MobileColumns: got %d, want default 1", p.MobileColumns)
+	}
+	if p.TimelineZoomAnchor != "pointer" {
+		t.Errorf("TimelineZoomAnchor: got %q, want default %q", p.TimelineZoomAnchor, "pointer")
 	}
 
 	// Valid non-default bool fields must be preserved across sanitize.

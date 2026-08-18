@@ -28,6 +28,11 @@ type Prefs struct {
 	GlanceWindowHours int     `json:"glance_window_hours"`
 	GlanceMaxMoments  int     `json:"glance_max_moments"`
 	GridFPS           int     `json:"grid_fps"`
+	// TimelineZoomAnchor selects what a zoom gesture on the recording timeline
+	// holds in place: "pointer" keeps the time under the cursor fixed, "playhead"
+	// keeps the timeline centred on the playhead. Named for zoom anchoring in
+	// general, not for the wheel — the pinch gesture adopts the same preference.
+	TimelineZoomAnchor string `json:"timeline_zoom_anchor"`
 }
 
 var defaults = Prefs{
@@ -44,6 +49,10 @@ var defaults = Prefs{
 	GlanceWindowHours: 24,
 	GlanceMaxMoments:  20,
 	GridFPS:           1,
+	// Cursor anchoring by default: the focus view's image zoom already anchors
+	// on the pointer, so the timeline agreeing with it is the least surprising
+	// behaviour. Centre-on-playhead stays available.
+	TimelineZoomAnchor: "pointer",
 }
 
 var validGridModes = map[string]bool{"hd": true, "eco": true}
@@ -54,14 +63,14 @@ var validMobileColumns = map[int]bool{1: true, 2: true}
 var validGlanceWindowHours = map[int]bool{6: true, 12: true, 24: true, 48: true, 72: true}
 var validGlanceMaxMoments = map[int]bool{10: true, 20: true, 30: true, 50: true}
 var validGridFPS = map[int]bool{1: true, 2: true}
+var validTimelineZoomAnchors = map[string]bool{"pointer": true, "playhead": true}
 
-// nameStyleList renders the accepted name_style values for the validation
-// error message. Derived from validNameStyles rather than restated, so
-// adding a style cannot leave the message naming a stale set. Sorted for a
-// stable message.
-func nameStyleList() string {
-	out := make([]string, 0, len(validNameStyles))
-	for k := range validNameStyles {
+// valueList renders an accepted-value set for a validation error message.
+// Derived from the set rather than restated, so adding a value cannot leave
+// the message naming a stale set. Sorted for a stable message.
+func valueList(valid map[string]bool) string {
+	out := make([]string, 0, len(valid))
+	for k := range valid {
 		out = append(out, k)
 	}
 	sort.Strings(out)
@@ -69,19 +78,20 @@ func nameStyleList() string {
 }
 
 var knownFields = map[string]bool{
-	"grid_mode":           true,
-	"muted_by_default":    true,
-	"stream_quality":      true,
-	"show_telemetry":      true,
-	"accent":              true,
-	"name_style":          true,
-	"show_timestamp":      true,
-	"desktop_columns":     true,
-	"mobile_columns":      true,
-	"grid_filter":         true,
-	"glance_window_hours": true,
-	"glance_max_moments":  true,
-	"grid_fps":            true,
+	"grid_mode":            true,
+	"muted_by_default":     true,
+	"stream_quality":       true,
+	"show_telemetry":       true,
+	"accent":               true,
+	"name_style":           true,
+	"show_timestamp":       true,
+	"desktop_columns":      true,
+	"mobile_columns":       true,
+	"grid_filter":          true,
+	"glance_window_hours":  true,
+	"glance_max_moments":   true,
+	"grid_fps":             true,
+	"timeline_zoom_anchor": true,
 }
 
 // Store is a thread-safe, file-backed preferences store.
@@ -155,6 +165,10 @@ func sanitize(p Prefs) (Prefs, []string) {
 	if !validGridFPS[p.GridFPS] {
 		p.GridFPS = defaults.GridFPS
 		reset = append(reset, "grid_fps")
+	}
+	if !validTimelineZoomAnchors[p.TimelineZoomAnchor] {
+		p.TimelineZoomAnchor = defaults.TimelineZoomAnchor
+		reset = append(reset, "timeline_zoom_anchor")
 	}
 	return p, reset
 }
@@ -235,7 +249,7 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("name_style must be a string")
 		}
 		if !validNameStyles[ns] {
-			return Prefs{}, fmt.Errorf("name_style must be one of %s, got %q", nameStyleList(), ns)
+			return Prefs{}, fmt.Errorf("name_style must be one of %s, got %q", valueList(validNameStyles), ns)
 		}
 		next.NameStyle = ns
 	}
@@ -334,6 +348,17 @@ func (s *Store) Update(partial map[string]any) (Prefs, error) {
 			return Prefs{}, fmt.Errorf("grid_fps must be 1 or 2, got %d", n)
 		}
 		next.GridFPS = n
+	}
+
+	if v, ok := partial["timeline_zoom_anchor"]; ok {
+		a, ok := v.(string)
+		if !ok {
+			return Prefs{}, fmt.Errorf("timeline_zoom_anchor must be a string")
+		}
+		if !validTimelineZoomAnchors[a] {
+			return Prefs{}, fmt.Errorf("timeline_zoom_anchor must be one of %s, got %q", valueList(validTimelineZoomAnchors), a)
+		}
+		next.TimelineZoomAnchor = a
 	}
 
 	if err := s.atomicWrite(next); err != nil {
