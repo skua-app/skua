@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-08-19
+
 Added
 
 - The recording timeline can now hold still while you look around it. Until now the playhead was pinned to the middle of the track and the recording slid past it, which is what you want while something is playing but awkward when you are trying to find something: the moment you are examining keeps sliding away as playback carries on. A new Timeline setting picks between two behaviours. Follow, the default and what the timeline has always done, keeps the playhead centred and moves the recording past it. Fixed holds the track still and lets the playhead travel along it, so you can leave a moment playing and go and look at a different stretch of the day without losing your place — drag the track to move along the recording, drag the playhead's grip to scrub, and click to jump straight to a moment. Pinch or scroll to zoom in on a busy few minutes. The grip is large enough to catch with a thumb, the track is taller on a phone so two fingers fit comfortably on it, and if playback carries the playhead outside the stretch you are looking at, a marker shows which side it left by. The switch sits above the timeline itself as well as in Settings → Appearance, since it is worth changing often, and like the other preferences it is stored server-side and applies on every device in the household.
@@ -710,7 +712,8 @@ replaceState: true })` so a single back-tap from focus always lands
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/skua-app/skua/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/skua-app/skua/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/skua-app/skua/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/skua-app/skua/compare/v0.14.0...v0.15.0
