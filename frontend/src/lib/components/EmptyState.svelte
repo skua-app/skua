@@ -16,7 +16,7 @@
 
 <style>
   .empty {
-    min-height: 100dvh;
+    min-height: var(--screen-h);
     display: flex;
     flex-direction: column;
     align-items: center;

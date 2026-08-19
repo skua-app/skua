@@ -52,11 +52,16 @@ export function grabHalfWidth(pointerType: string): number {
 //             the playhead along a stationary track, which seeks.
 //   pan       fixed mode: shift is held, so the drag moves the viewport and
 //             the playhead keeps playing where it is.
-//   idle      fixed mode: a press on empty track. It moves nothing. If it
-//             never travels past the slop it becomes a click, which seeks to
-//             where it landed; if it does travel, it does nothing at all.
-//             Panning is an explicit gesture, so a bare drag is inert.
-export type Gesture = 'tape' | 'playhead' | 'pan' | 'idle'
+//   track     fixed mode: a press on the track away from the playhead. It is
+//             UNDECIDED at this point — the movement threshold decides. Under
+//             the slop it is a click, which seeks to where it landed; past the
+//             slop it becomes a pan. The two are mutually exclusive on one
+//             latched flag, so neither can steal the other.
+//   inert     does nothing at all, ever. Not a press meaning — resolveGesture
+//             never returns it. The component moves into it when a gesture has
+//             been superseded, such as the finger left over after a two-finger
+//             gesture, which is somewhere new and must not resume anything.
+export type Gesture = 'tape' | 'playhead' | 'pan' | 'track' | 'inert'
 
 export type GesturePress = {
   mode: TimelineMode
@@ -82,8 +87,11 @@ export type GesturePress = {
 // shiftKey here and never again for that gesture.
 //
 // Order is load-bearing where the cases overlap: shift wins over the playhead
-// hit test, so shift+drag starting on the playhead pans rather than seeks. An
-// explicit modifier beats a positional guess.
+// hit test, so shift+drag starting on the playhead pans rather than seeks. That
+// is the one thing shift is still FOR, now that a bare track drag pans too — it
+// resolves the case where the press lands on the handle but the user wants the
+// track. Everywhere else the two are the same gesture, and the modifier is a
+// redundant alias kept because it costs nothing.
 export function resolveGesture({
   mode,
   shiftKey,
@@ -97,7 +105,7 @@ export function resolveGesture({
   if (mode === 'follow') return 'tape'
   if (shiftKey) return 'pan'
   if (Math.abs(pressX - playheadX) <= grabHalfWidth(pointerType)) return 'playhead'
-  return 'idle'
+  return 'track'
 }
 
 // Has this press travelled far enough to stop being a click?

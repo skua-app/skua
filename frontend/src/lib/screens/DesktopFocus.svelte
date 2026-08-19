@@ -421,7 +421,7 @@
 <style>
   .df-root {
     width: 100%;
-    min-height: 100dvh;
+    min-height: var(--screen-h);
     background: var(--bg);
     color: var(--text);
     display: flex;

@@ -2079,7 +2079,10 @@
     padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px
       calc(env(safe-area-inset-bottom, 0px) + 96px);
     background: var(--bg);
-    min-height: 100dvh;
+    /* --screen-h, not 100dvh: body reserves the bottom safe-area inset out of
+       its own content box, so a full 100dvh here overflows it by that inset and
+       the screen scrolls a little with nothing to scroll to. See app.css. */
+    min-height: var(--screen-h);
     color: var(--text);
   }
   .bar {
@@ -2135,8 +2138,8 @@
     border-radius: 0;
   }
   /* Desktop (matches the layout's 900px isDesktop breakpoint): the whole player
-     fits exactly one viewport with no scroll. The column is pinned to 100dvh
-     with overflow hidden; header, controls and scrubber keep their natural
+     fits exactly one viewport with no scroll. The column is pinned to one
+     screen with overflow hidden; header, controls and scrubber keep their natural
      height (flex:0 0 auto) and the video frame grows to fill the leftover
      space. The frame drops its fixed 16:9 aspect-ratio so it takes whatever
      height is left — the media layers already object-fit:contain, so the
@@ -2149,7 +2152,7 @@
          overflowing. 64px is .dk-top's desktop height; the fallback covers
          desktop, where --app-header-h is not published (only the mobile header
          publishes it via ResizeObserver). */
-      height: calc(100dvh - var(--app-header-h, 64px));
+      height: calc(var(--screen-h) - var(--app-header-h, 64px));
       min-height: 0;
       overflow: hidden;
       padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);

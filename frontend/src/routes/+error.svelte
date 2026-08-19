@@ -20,7 +20,7 @@
 
 <style>
   .error-root {
-    min-height: 100dvh;
+    min-height: var(--screen-h);
     background: var(--bg);
     color: var(--text);
     display: flex;

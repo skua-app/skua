@@ -249,6 +249,20 @@
   }
 }
 
+/* The height a full-screen element should actually ask for.
+   NOT 100dvh. body below is `height: 100%` with `padding-bottom:
+   env(safe-area-inset-bottom)`, and Tailwind's preflight makes every box
+   border-box — so body's CONTENT box is one viewport minus that inset, and a
+   child asking for a full 100dvh overflows it by exactly the inset. The page
+   then scrolls by a few tens of pixels with nothing to scroll to, in an
+   installed PWA as much as in a browser tab.
+   `dvh` rather than `vh` for the other half of the same problem: `vh` is the
+   viewport measured with a mobile browser's toolbar retracted, so while the
+   toolbar is showing it overstates the space by the toolbar's height. */
+:root {
+  --screen-h: calc(100dvh - env(safe-area-inset-bottom, 0px));
+}
+
 html,
 body {
   height: 100%;
