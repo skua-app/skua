@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Fixed
+
+- Recording timeline: swiping sideways across the track on a Mac trackpad no longer zooms. A two-finger sideways swipe arrives as a scroll with no vertical component at all, and the track read the vertical component alone — so a swipe in either direction was taken as a scroll toward you and zoomed in, and the page could not scroll instead because the gesture had already been claimed. A sideways swipe now moves along the recording in Fixed mode, the same as holding Shift and scrolling, and is left to the page in Follow mode, where there is nothing to move. A swipe that leans is read on whichever way it leans furthest, so an ordinary scroll still zooms.
+
 ## [0.18.0] — 2026-08-19
 
 Added
