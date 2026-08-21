@@ -131,6 +131,32 @@ export function clampViewStart(start: number, viewSpan: number, liveEdge: number
   return start > maxStart ? maxStart : start
 }
 
+// Parse the ?t= deep-link parameter into a unix second, or null for "no usable
+// value, use the default entry window".
+//
+// Deliberately stricter than Number.parseInt, which stops at the first
+// character it cannot use: it reads '12x' as 12 and lands the playhead at unix
+// second 12, in January 1970, with the viewport centred half an hour either
+// side of it. Nothing in the app produces such a URL — the parameter is
+// generated from a real event time — but a hand-edited one should fall back to
+// the last hour rather than to 1970.
+//
+// Digits only, so '', '12x', 'abc', '1.5', ' 12' and '-100' all fall back. A
+// negative second is rejected on purpose rather than clamped: recordings do not
+// predate 1970, so it is a malformed parameter and not a very old one.
+//
+// This is a check on the SYNTAX, not on the plausibility of the number: a
+// well-formed but ancient t (0, 1, last century) is still accepted and still
+// lands the playhead there. Entry deliberately does not clamp by playbackFloor
+// — that is what lets a deep-link to an old event work while the recording
+// summary is still loading — so adding a floor here would be the same clamp by
+// another name, and would break the case the route documents.
+export function parseDeepLinkTime(raw: string | null): number | null {
+  if (raw === null || !/^\d+$/.test(raw)) return null
+  const t = Number(raw)
+  return Number.isSafeInteger(t) ? t : null
+}
+
 // Clamp a seek target to the PLAYABLE domain. The playhead is bounded by what
 // can actually be played, never by the viewport (which follows it), so a drag
 // that runs off either end parks the playhead on the bound rather than seeking
