@@ -24,6 +24,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Part of `make check`, run here as its own step so a changelog problem is
+      # legible in the job log rather than buried in a toolchain step. The
+      # checkout above is shallow and fetches no tags, so this runs in the
+      # script's no-tags mode: heading <-> comparison-link cross-checks only,
+      # which is what catches a deleted release section. It says which mode it
+      # ran in. No network access.
+      - name: CHANGELOG consistency
+        run: make check-changelog
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
