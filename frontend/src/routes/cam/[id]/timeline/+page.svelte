@@ -48,7 +48,8 @@
     anchoredViewStart,
     pinchViewStart,
     clampViewStart,
-    clampPlayhead
+    clampPlayhead,
+    parseDeepLinkTime
   } from '$lib/timeline-viewport'
   import { canDecodeRecording } from '$lib/hls'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
@@ -576,10 +577,11 @@
       // deep-link branch: a deep-link's derived viewport end may sit in the
       // past, but full-res must still play/stop at real now.
       liveEdge = now
-      // Defensive parse: a malformed ?t= (empty, non-numeric) falls back to
-      // the default last-1h window, never NaN.
-      const tSec = rawT !== null ? Number.parseInt(rawT, 10) : Number.NaN
-      if (Number.isFinite(tSec)) {
+      // Defensive parse: a malformed ?t= (empty, non-numeric, partially
+      // numeric) falls back to the default last-1h window, never NaN and never
+      // a 1970 second. See parseDeepLinkTime.
+      const tSec = parseDeepLinkTime(rawT)
+      if (tSec !== null) {
         // Deep-link: a real event time is always a valid past second, so just
         // land the playhead at t (never past live). playbackFloor is derived and
         // may be the permissive fallback until the summary lands, so we do NOT

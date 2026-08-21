@@ -197,11 +197,7 @@
       </div>
     </div>
 
-    <div
-      class="dg-wall"
-      class:name-below={prefsStore.nameStyle === 'below'}
-      style:--tile="{tilePx}px"
-    >
+    <div class="dg-wall" style:--tile="{tilePx}px">
       {#each gridItems as item (item.key)}
         {#if item.kind === 'label'}
           <div class="dg-roomlabel">

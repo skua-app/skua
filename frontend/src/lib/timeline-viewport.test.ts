@@ -10,7 +10,8 @@ import {
   pinchViewStart,
   clampViewStart,
   clampPlayhead,
-  playheadEdge
+  playheadEdge,
+  parseDeepLinkTime
 } from './timeline-viewport'
 
 // The viewport model's load-bearing property is an INVARIANT, not a value:
@@ -110,8 +111,8 @@ class ViewportModel {
   // recompute setPosition just made.
   enter(now: number, tParam: string | null) {
     this.liveEdge = now
-    const tSec = tParam !== null ? Number.parseInt(tParam, 10) : Number.NaN
-    if (Number.isFinite(tSec)) this.setPosition(tSec > this.liveEdge ? this.liveEdge : tSec)
+    const tSec = parseDeepLinkTime(tParam)
+    if (tSec !== null) this.setPosition(tSec > this.liveEdge ? this.liveEdge : tSec)
     else this.setPosition(this.liveEdge - this.viewSpan / 2)
     this.centreOnPlayhead()
   }
@@ -424,6 +425,31 @@ describe('clampPlayhead', () => {
   })
 })
 
+describe('parseDeepLinkTime', () => {
+  it('accepts a plain unix second', () => {
+    expect(parseDeepLinkTime('1770000000')).toBe(1770000000)
+    expect(parseDeepLinkTime('0')).toBe(0)
+  })
+
+  it('rejects everything parseInt used to accept halfway', () => {
+    // The defect: parseInt stops at the first character it cannot use, so a
+    // hand-edited '?t=12x' became unix second 12 and put the playhead in 1970.
+    for (const raw of ['12x', '1.5', '1e9', '0x10', ' 12', '12 ', '-100', '+12']) {
+      expect(parseDeepLinkTime(raw)).toBeNull()
+    }
+  })
+
+  it('rejects an absent or empty parameter', () => {
+    expect(parseDeepLinkTime(null)).toBeNull()
+    expect(parseDeepLinkTime('')).toBeNull()
+    expect(parseDeepLinkTime('abc')).toBeNull()
+  })
+
+  it('rejects a number too large to be an exact integer', () => {
+    expect(parseDeepLinkTime('9'.repeat(20))).toBeNull()
+  })
+})
+
 describe('viewport invariant: entry', () => {
   it('holds for the default entry, and the window is the last viewSpan up to live', () => {
     const v: Violation[] = []
@@ -460,14 +486,16 @@ describe('viewport invariant: entry', () => {
       expect(Number.isFinite(m.position)).toBe(true)
       expect(m.windowEnd).toBe(NOW)
     }
-    // parseInt is lenient, so a partially-numeric t parses to its leading
-    // digits rather than falling back: ?t=12x lands the playhead at unix 12.
-    // Pre-existing route behaviour, only reachable by hand-editing the URL (the
-    // app generates t itself) — pinned here so a future parse change is a
-    // deliberate one. The invariant holds either way, which is the point.
-    const lenient = freshModel(PERMISSIVE_FLOOR, NOW, '12x')
-    checkInvariants(lenient, 'lenient parse', v)
-    expect(lenient.position).toBe(12)
+    // A partially-numeric t falls back too. parseInt used to read '12x' as 12
+    // and land the playhead at unix second 12, in 1970, with the window centred
+    // on it; the parse is digits-only now. Only reachable by hand-editing the
+    // URL, since the app generates t itself.
+    for (const raw of ['12x', '1.5', ' 12', '-100', '0x10', '1e9']) {
+      const m = freshModel(PERMISSIVE_FLOOR, NOW, raw)
+      checkInvariants(m, `partially numeric ${JSON.stringify(raw)}`, v)
+      expect(m.position).toBe(NOW - DEFAULT_VIEW_SPAN / 2)
+      expect(m.windowEnd).toBe(NOW)
+    }
     expect(v).toEqual([])
   })
 })

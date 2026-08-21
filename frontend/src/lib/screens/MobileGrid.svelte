@@ -22,11 +22,7 @@
 </script>
 
 <div class="mobile-grid">
-  <div
-    class="grid"
-    class:name-below={prefsStore.nameStyle === 'below'}
-    style:--cols={prefsStore.mobileColumns}
-  >
+  <div class="grid" style:--cols={prefsStore.mobileColumns}>
     {#each cameras as camera, i (camera.id)}
       <CameraTile
         {camera}
