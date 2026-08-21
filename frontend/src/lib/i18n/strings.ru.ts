@@ -19,8 +19,6 @@ export const streamErrorHints: Record<string, string> = {
 }
 
 export const ui = {
-  // grid mode toggle
-  hd: 'HD',
   // stream errors
   retry: 'Повторить',
   streamErrorHeading: 'Не удалось подключиться к камере',
