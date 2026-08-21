@@ -3,11 +3,15 @@ import {
   CLICK_SLOP_PX,
   PLAYHEAD_GRAB_PX,
   PLAYHEAD_GRAB_TOUCH_PX,
+  WHEEL_LINE_PX,
   grabHalfWidth,
   resolveGesture,
   exceedsClickSlop,
-  type Gesture
+  resolveWheel,
+  type Gesture,
+  type WheelIntent
 } from './timeline-gestures'
+import type { TimelineMode } from './api'
 
 // The gesture matrix, as code. Each case below is one row of it, so a change to
 // what a press means fails here rather than only on a device.
@@ -284,5 +288,187 @@ describe('click versus pan on a fixed-mode track press', () => {
     const few = replayTrackPress([300, 306, 504])
     expect(many.panned).toBe(few.panned)
     expect(many.panned).toBe(-198)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// The wheel: which axis carries the intent.
+// ---------------------------------------------------------------------------
+// The two wheel rows of the gesture matrix, plus the axis question the matrix
+// does not state: a trackpad reports a sideways swipe as an unmodified wheel
+// event on deltaX, and it must pan rather than zoom.
+
+const TRACK_W = 800
+
+function wheel(
+  over: Partial<Parameters<typeof resolveWheel>[0]> = {},
+  mode: TimelineMode = 'fixed'
+) {
+  return resolveWheel(
+    { deltaX: 0, deltaY: 0, deltaMode: 0, shiftKey: false, ...over },
+    mode,
+    TRACK_W
+  )
+}
+
+// Terser assertions for the three shapes, so a case reads as one line.
+function expectPan(intent: WheelIntent, pixels: number) {
+  expect(intent).toEqual({ kind: 'pan', pixels })
+}
+function expectZoom(intent: WheelIntent, out: boolean) {
+  expect(intent).toEqual({ kind: 'zoom', out })
+}
+
+describe('resolveWheel: a plain mouse wheel', () => {
+  it('zooms in both modes, out when scrolled away and in when scrolled toward', () => {
+    // The one wheel gesture that has always worked. deltaX is exactly 0 on a
+    // wheel without a tilt, so it never reaches the horizontal branch.
+    for (const mode of ['follow', 'fixed'] as const) {
+      expectZoom(wheel({ deltaY: 120 }, mode), true)
+      expectZoom(wheel({ deltaY: -120 }, mode), false)
+    }
+  })
+
+  it('zooms whatever unit the browser reports it in — the direction is a sign', () => {
+    expectZoom(wheel({ deltaY: 3, deltaMode: 1 }), true)
+    expectZoom(wheel({ deltaY: -1, deltaMode: 2 }), false)
+  })
+})
+
+describe('resolveWheel: a dead event', () => {
+  it('means nothing, rather than zooming in', () => {
+    // The defect this pins: `deltaY > 0` is false for deltaY 0, so an event
+    // with no direction at all used to be read as "scroll toward" and zoom in.
+    for (const mode of ['follow', 'fixed'] as const) {
+      expect(wheel({}, mode)).toEqual({ kind: 'none' })
+      expect(wheel({ deltaMode: 1 }, mode)).toEqual({ kind: 'none' })
+      expect(wheel({ deltaMode: 2 }, mode)).toEqual({ kind: 'none' })
+    }
+  })
+
+  it('is not swallowed — `none` is what tells the caller to leave the page alone', () => {
+    // Stated as the contract rather than the value: the caller preventDefaults
+    // for pan and zoom and for nothing else, so a `none` here IS the page
+    // keeping its own scroll.
+    expect(wheel({}).kind).toBe('none')
+  })
+})
+
+describe('resolveWheel: an unmodified horizontal swipe', () => {
+  it('pans in fixed mode, in both directions, in track pixels', () => {
+    // The Mac trackpad case: deltaX set, deltaY exactly 0. Positive scrolls
+    // right and moves the window later, as a horizontal scrollbar would.
+    expectPan(wheel({ deltaX: 40 }), 40)
+    expectPan(wheel({ deltaX: -40 }), -40)
+  })
+
+  it('does nothing in follow mode, where there is nothing to pan', () => {
+    // And specifically not a zoom, which is what it used to do. `none` also
+    // leaves the page's own scroll alone, the way shift+wheel already does
+    // there — the reason the gesture is not swallowed to do nothing.
+    expect(wheel({ deltaX: 40 }, 'follow')).toEqual({ kind: 'none' })
+    expect(wheel({ deltaX: -40 }, 'follow')).toEqual({ kind: 'none' })
+  })
+
+  it('never zooms, at any magnitude, in either mode', () => {
+    // The whole bug in one assertion: a sideways swipe changed the zoom level,
+    // in both directions and in both modes.
+    for (const mode of ['follow', 'fixed'] as const) {
+      for (const deltaX of [-500, -120, -1, 1, 120, 500]) {
+        expect(wheel({ deltaX }, mode).kind).not.toBe('zoom')
+      }
+    }
+  })
+
+  it('reads a tilt wheel the same way as a trackpad swipe', () => {
+    // A tilt wheel reports the same shape — deltaX only — usually in lines.
+    expectPan(wheel({ deltaX: 2, deltaMode: 1 }), 2 * WHEEL_LINE_PX)
+    expectPan(wheel({ deltaX: -1, deltaMode: 2 }), -TRACK_W)
+  })
+})
+
+describe('resolveWheel: diagonal swipes', () => {
+  it('follows the dominant axis, because fingers are never purely horizontal', () => {
+    // A sideways swipe with a little vertical drift is still a pan...
+    expectPan(wheel({ deltaX: -60, deltaY: 4 }), -60)
+    expectPan(wheel({ deltaX: 60, deltaY: -9 }), 60)
+    // ...and a scroll with a little sideways drift is still a zoom.
+    expectZoom(wheel({ deltaX: 4, deltaY: 60 }), true)
+    expectZoom(wheel({ deltaX: -9, deltaY: -60 }), false)
+  })
+
+  it('pans only the horizontal component, discarding the vertical one', () => {
+    // The pan distance comes off deltaX alone. A swipe that leans does not pan
+    // further for leaning.
+    expectPan(wheel({ deltaX: 30, deltaY: 25 }), 30)
+    expectPan(wheel({ deltaX: 30, deltaY: -25 }), 30)
+  })
+
+  it('resolves the exact diagonal to a zoom, in both signs and both directions', () => {
+    // 45 degrees is the only ambiguous input, and the tie has to go somewhere.
+    // It goes to the zoom, which is what an unmodified wheel has always meant;
+    // the horizontal branch is the new, narrower claim, so it takes only what
+    // it can show is horizontal.
+    expectZoom(wheel({ deltaX: 50, deltaY: 50 }), true)
+    expectZoom(wheel({ deltaX: -50, deltaY: 50 }), true)
+    expectZoom(wheel({ deltaX: 50, deltaY: -50 }), false)
+    expectZoom(wheel({ deltaX: -50, deltaY: -50 }), false)
+  })
+
+  it('flips at 45 degrees and nowhere else, one pixel either side', () => {
+    // The boundary is where deliberate gestures are least likely to sit: they
+    // cluster near 0 and near 90. Pinned exactly so a future ratio threshold
+    // cannot be introduced silently.
+    expect(wheel({ deltaX: 51, deltaY: 50 }).kind).toBe('pan')
+    expect(wheel({ deltaX: 50, deltaY: 50 }).kind).toBe('zoom')
+    expect(wheel({ deltaX: 49, deltaY: 50 }).kind).toBe('zoom')
+  })
+})
+
+describe('resolveWheel: shift+wheel', () => {
+  it('pans in fixed mode and does nothing in follow mode', () => {
+    // Unchanged: the matrix row is "pan track" / "nothing".
+    expectPan(wheel({ deltaY: 100, shiftKey: true }), 100)
+    expect(wheel({ deltaY: 100, shiftKey: true }, 'follow')).toEqual({ kind: 'none' })
+  })
+
+  it('pans when the browser relocates it to deltaX', () => {
+    // Several browsers report shift+wheel on the horizontal axis. With shift
+    // held, a deltaX is therefore VERTICAL intent wearing a horizontal name —
+    // it must not be read by the axis rule, and resolving shift first is what
+    // guarantees it never is.
+    expectPan(wheel({ deltaX: 100, shiftKey: true }), 100)
+    expectPan(wheel({ deltaX: -100, shiftKey: true }), -100)
+    expect(wheel({ deltaX: 100, shiftKey: true }, 'follow')).toEqual({ kind: 'none' })
+  })
+
+  it('prefers deltaX when the browser reports both, as it always has', () => {
+    expectPan(wheel({ deltaX: 70, deltaY: 12, shiftKey: true }), 70)
+  })
+
+  it('never zooms, whichever axis it arrives on', () => {
+    // Shift is the one modifier bound to a pan; it cannot fall through to the
+    // zoom no matter how the deltas are distributed.
+    for (const d of [
+      { deltaX: 0, deltaY: 100 },
+      { deltaX: 100, deltaY: 0 },
+      { deltaX: 100, deltaY: 100 },
+      { deltaX: -30, deltaY: 80 }
+    ]) {
+      expect(wheel({ ...d, shiftKey: true }).kind).toBe('pan')
+    }
+  })
+
+  it('is left exactly as it was for a dead event — the zero guard is the zoom’s', () => {
+    // A shift+wheel carrying no distance asks for a pan of nothing, which is
+    // what it did before. Only the zoom needed a guard, because only the zoom
+    // turned a missing direction into a direction.
+    expectPan(wheel({ shiftKey: true }), 0)
+  })
+
+  it('normalises lines and pages the same way an unmodified swipe does', () => {
+    expectPan(wheel({ deltaY: 3, deltaMode: 1, shiftKey: true }), 3 * WHEEL_LINE_PX)
+    expectPan(wheel({ deltaX: 3, deltaMode: 1, shiftKey: true }), 3 * WHEEL_LINE_PX)
+    expectPan(wheel({ deltaY: 1, deltaMode: 2, shiftKey: true }), TRACK_W)
   })
 })

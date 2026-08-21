@@ -1,13 +1,14 @@
 // Recording-timeline POINTER GESTURE MODEL — pure arithmetic, no state, no
 // effects, nothing Svelte. TimelineScrubber owns the pointer bookkeeping (which
 // pointers are down, where they started, whether the press has travelled); this
-// module owns the two decisions that bookkeeping feeds, so both are testable
-// without dispatching synthetic PointerEvents at a mounted component.
+// module owns the decisions that bookkeeping feeds, so each is testable without
+// dispatching synthetic events at a mounted component.
 //
 // The decisions are deliberately separate:
 //
 //   resolveGesture     what a press MEANS — settled once, at pointerdown
 //   exceedsClickSlop   whether a press has become a drag — sticky, per move
+//   resolveWheel       what a wheel event MEANS — pan, zoom, or nothing at all
 //
 // All coordinates are CSS pixels measured from the track's left edge.
 
@@ -117,4 +118,94 @@ export function resolveGesture({
 // the pointer happens to finish.
 export function exceedsClickSlop(startX: number, x: number): boolean {
   return Math.abs(x - startX) > CLICK_SLOP_PX
+}
+
+// ---------------------------------------------------------------------------
+// The wheel.
+// ---------------------------------------------------------------------------
+
+// One notch of a wheel reported in LINES rather than pixels (deltaMode 1),
+// taken as the usual ~1 line of text. Pages (deltaMode 2) scale by the track
+// width instead, which the caller passes in.
+export const WHEEL_LINE_PX = 16
+
+// Everything resolveWheel reads off a WheelEvent. Named rather than taking the
+// event itself so the model can be exercised with plain objects.
+export type WheelInput = {
+  deltaX: number
+  deltaY: number
+  deltaMode: number
+  shiftKey: boolean
+}
+
+// What a wheel event means.
+//
+//   pan    move the viewport by `pixels` of track, positive = later. The SAME
+//          unit shift+wheel has always spoken in, because it is the same
+//          request through the same writer.
+//   zoom   change the span; `out` is the direction (away from the user = out).
+//   none   do nothing, AND do not preventDefault — the page keeps its own
+//          scroll rather than having the gesture swallowed to do nothing.
+export type WheelIntent =
+  | { kind: 'pan'; pixels: number }
+  | { kind: 'zoom'; out: boolean }
+  | { kind: 'none' }
+
+// Normalise a delta to CSS pixels. deltaMode can report lines or pages rather
+// than pixels, and a browser is free to pick either.
+function toPixels(delta: number, deltaMode: number, trackWidth: number): number {
+  if (deltaMode === 1) return delta * WHEEL_LINE_PX
+  if (deltaMode === 2) return delta * trackWidth
+  return delta
+}
+
+// What does this wheel event mean, in this mode?
+//
+// Three cases, in this order, and the order is the whole of the axis problem:
+//
+// 1. SHIFT WINS OUTRIGHT. Browsers disagree about which axis a shift+wheel
+//    lands on — several relocate it to deltaX — so with shift held, deltaX
+//    says nothing about direction and only says which field the browser chose.
+//    Taking whichever axis moved (preferring deltaX, since that is the one a
+//    relocating browser uses) is therefore correct HERE and nowhere else, and
+//    resolving shift first is what confines that heuristic to the one case it
+//    is true for. Fixed mode only, exactly as before: in follow mode shift has
+//    no meaning, so the event is left entirely alone.
+//
+// 2. UNMODIFIED, HORIZONTAL-DOMINANT — a pan. Without shift, deltaX means what
+//    it says, so the intent is read off the DOMINANT axis: |deltaX| > |deltaY|.
+//    A Mac trackpad two-finger swipe sideways arrives with deltaX set and
+//    deltaY 0 (or near it) and pans; a tilt wheel reports the same shape and
+//    pans too; a mouse wheel has deltaX exactly 0 and never reaches this
+//    branch. Fixed mode only — panning is a fixed-mode gesture, and follow
+//    mode returns `none` rather than swallowing the event.
+//
+//    Fingers are never purely horizontal, so the boundary matters. It is at
+//    45 degrees deliberately: deliberate gestures cluster near 0 (a sideways
+//    swipe) and near 90 (a scroll), and 45 is the angle they visit least, so
+//    the one place the answer flips is the one place nobody aims. A ratio
+//    threshold would move that boundary INTO a region real gestures occupy —
+//    a slightly-off vertical scroll — for no gain. A swipe that genuinely sits
+//    on the diagonal gets some of each, frame by frame, in proportion to how
+//    it is leaning; that is the same answer the two-finger gesture already
+//    gives, where separation and midpoint are read independently off one
+//    gesture rather than discriminated between.
+//
+// 3. EVERYTHING ELSE — a zoom, in both modes, about whatever the caller
+//    decides to anchor on. The direction is deltaY's sign, so an event with NO
+//    vertical component has no direction to give and means nothing: a wheel
+//    event with both deltas zero returns `none` rather than being read as
+//    "not greater than zero" and silently zooming in.
+export function resolveWheel(e: WheelInput, mode: TimelineMode, trackWidth: number): WheelIntent {
+  if (e.shiftKey) {
+    if (mode !== 'fixed') return { kind: 'none' }
+    const raw = e.deltaX !== 0 ? e.deltaX : e.deltaY
+    return { kind: 'pan', pixels: toPixels(raw, e.deltaMode, trackWidth) }
+  }
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+    if (mode !== 'fixed') return { kind: 'none' }
+    return { kind: 'pan', pixels: toPixels(e.deltaX, e.deltaMode, trackWidth) }
+  }
+  if (e.deltaY === 0) return { kind: 'none' }
+  return { kind: 'zoom', out: e.deltaY > 0 }
 }
