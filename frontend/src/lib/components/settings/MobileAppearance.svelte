@@ -2,58 +2,21 @@
   import Segmented from '$lib/components/Segmented.svelte'
   import { prefsStore } from '$lib/stores/prefs.svelte'
   import { glanceStore } from '$lib/stores/glance.svelte'
-  import { themeStore, type Theme } from '$lib/stores/theme.svelte'
+  import { themeStore } from '$lib/stores/theme.svelte'
   import { ui } from '$lib/i18n/strings'
-  import type {
-    Accent,
-    NameStyle,
-    GlanceWindowHours,
-    GlanceMaxMoments,
-    GridFps,
-    TimelineMode
-  } from '$lib/api'
-
-  const themeOptions: { value: Theme; label: string }[] = [
-    { value: 'auto', label: ui.themeAuto },
-    { value: 'dark', label: ui.themeDark },
-    { value: 'light', label: ui.themeLight }
-  ]
-  const nameStyleOptions: { value: NameStyle; label: string }[] = [
-    { value: 'below', label: ui.nameStyleBelow },
-    { value: 'overlay', label: ui.nameStyleOverlay },
-    { value: 'off', label: ui.nameStyleOff }
-  ]
-  const showTimestampOptions = [
-    { value: 'on' as const, label: ui.yes },
-    { value: 'off' as const, label: ui.no }
-  ]
-  const gridFpsOptions = [
-    { value: '1' as const, label: '1 Hz' },
-    { value: '2' as const, label: '2 Hz' }
-  ]
-  const timelineModeOptions: { value: TimelineMode; label: string }[] = [
-    { value: 'follow', label: ui.timelineModeFollow },
-    { value: 'fixed', label: ui.timelineModeFixed }
-  ]
-  const accentOptions: { value: Accent; label: string }[] = [
-    { value: 'cyan', label: ui.accentCyan },
-    { value: 'sage', label: ui.accentSage },
-    { value: 'amber', label: ui.accentAmber },
-    { value: 'violet', label: ui.accentViolet }
-  ]
-  const glanceWindowOptions = [
-    { value: '6' as const, label: '6h' },
-    { value: '12' as const, label: '12h' },
-    { value: '24' as const, label: '24h' },
-    { value: '48' as const, label: '48h' },
-    { value: '72' as const, label: '72h' }
-  ]
-  const glanceMaxMomentsOptions = [
-    { value: '10' as const, label: '10' },
-    { value: '20' as const, label: '20' },
-    { value: '30' as const, label: '30' },
-    { value: '50' as const, label: '50' }
-  ]
+  // The option lists are shared with AppearanceSection, which renders the same
+  // preferences in the desktop layout. One copy, in $lib/appearance-options.
+  import {
+    themeOptions,
+    nameStyleOptions,
+    showTimestampOptions,
+    gridFpsOptions,
+    timelineModeOptions,
+    accentOptions,
+    glanceWindowOptions,
+    glanceMaxMomentsOptions
+  } from '$lib/appearance-options'
+  import type { GlanceWindowHours, GlanceMaxMoments, GridFps } from '$lib/api'
 </script>
 
 <div class="set-block">
