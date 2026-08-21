@@ -19,6 +19,24 @@ below, e.g. `name_duplicate` for groups, `frigate_url_invalid` for runtime
 config).
 
 ```ts
+// === Health (stable) ===
+
+// GET /healthz
+//   NOT under /api — it is registered at the root, above the /api group, so
+//   it carries no cross-site guard and no JSON envelope.
+//   → 200, Content-Type: text/plain, body "ok". No auth, no dependencies
+//   checked: it reports that THIS process is serving, not that Frigate or
+//   go2rtc are reachable.
+//
+//   The 503 case comes from a different server. When a startup blocker fires
+//   (fs.ErrPermission on /data, or first start with no cameras.yaml AND
+//   Frigate unreachable) the BFF serves internal/emergency on the same port
+//   instead, and that server answers /healthz — and every /api/* path — with
+//   503. The emergency page polls /healthz every 3 s and reloads on a 200, so
+//   only a restart into a healthy BFF clears it. A container healthcheck
+//   pointed here therefore reports the emergency state as unhealthy, which is
+//   the intent.
+
 // === E1/E2 (stable) ===
 
 // GET /api/cameras
@@ -752,7 +770,26 @@ type CameraOrderErrorBody = {
   message: string  // English, ready to display
 }
 
-// === Recording timeline (Phase 1, unreleased) ===
+// === Recording timeline (v0.14.0) ===
+//
+// Shipped in v0.14.0 and extended since; the group covers the whole
+// /cam/{id}/timeline screen. Nine routes: the VOD ladder, the recordings
+// summary, the three activity/coverage lanes (review, audio-events,
+// recordings) and the four preview routes (two list, two static file).
+//
+// SHARED VALIDATION. Every route in this group validates in the same order,
+// entirely before any upstream call, and returns the same three codes:
+//   1. {id} against validUpstreamID          → 400 invalid_id
+//   2. {id} present in the camera registry   → 404 not_found
+//   3. where the route takes start/end as QUERY parameters: both must be
+//      INTEGER unix seconds (validUnixSeconds + strconv.ParseInt, so no
+//      fractional, signed, or empty value passes) and end > start
+//                                            → 400 invalid_range
+// The /vod/ route embeds start/end in the PATH instead and enforces only
+// digit-only / non-empty there — see its own note. A fractional second is
+// the easy mistake to make from the client side: the FE floors both slots in
+// timelineMasterURL / timelineVideoOnlyURL precisely because the BFF rejects
+// a fractional path.
 //
 // Thin BFF passthrough for Frigate's recording VOD endpoint plus the
 // per-camera recordings summary. Single camera; codec-agnostic; no
@@ -804,6 +841,21 @@ type CameraOrderErrorBody = {
 //     - other upstream / transport       → 502 upstream_error
 //   Frigate's VOD endpoint may return 416 / 404 / etc. directly;
 //   those statuses are passed through verbatim.
+//
+//   THE 503 A REIMPLEMENTER WILL HIT. Frigate serves /vod/ through
+//   nginx-vod, which refuses to splice adjacent recording segments whose
+//   AUDIO-TRACK COUNTS DIFFER — which happens whenever a camera's RTSP
+//   audio flaps mid-window. The combined video+audio rendition
+//   (master.m3u8) then 503s for that window while the video-only
+//   rendition (index-v1.m3u8) serves 200 for the very same
+//   [start,end]. The BFF passes the 503 through unchanged and does not
+//   retry: it cannot know which rendition the client wants. The client
+//   owns the fallback — on a 503 it reloads the same range from
+//   index-v1.m3u8 and marks the chunk audio-less (see
+//   timelineVideoOnlyURL and degradeActiveToVideoOnly on the FE). So a
+//   503 from this route is NOT necessarily "no recording": treat it as
+//   "not in this rendition" and retry video-only before surfacing an
+//   error, or windows that play fine will be reported as missing.
 
 // GET /api/cameras/{id}/recordings-summary[?timezone=]
 //   Verbatim pass-through of Frigate's
@@ -935,6 +987,25 @@ type CameraOrderErrorBody = {
 //   {id}    camera id (must be present in the camera registry).
 //   start,end  integer unix seconds, end > start.
 //   Cache-Control: no-store (the open hour's frame list grows).
+//
+//   FRAMES VERSUS THE ASSEMBLED MP4, AND THE HOUR BOUNDARY. Frigate keeps
+//   only the CURRENT hour as individual webp frames. When that hour ends it
+//   assembles the hour's preview mp4, publishes it to /preview-clips — and
+//   DELETES the frames. The two sources are therefore never both valid for
+//   the same hour, and the crossover is driven by the wall clock, not by
+//   anything in a response.
+//
+//   The consequence for any client: a fetched frame list is identified by
+//   TWO things, not one — the span it covers AND the clock hour it was
+//   fetched in. Cached on the span alone it outlives its footage the instant
+//   the clock crosses the top of the hour, and every later scrub in that span
+//   requests webps Frigate has already deleted (404s from
+//   /preview-frame/{file}, and a scrub surface that silently stops painting).
+//   A client must re-derive "is the tail hour still open?" from now on each
+//   scrub and switch to the newly assembled clip when it is not; see
+//   tailHourOpen / previewTailKey in frontend/src/lib/timeline.ts. This
+//   endpoint is stateless and will happily serve a list for a closed hour —
+//   it does not, and cannot, tell the client the frames are about to vanish.
 //
 //   Errors:
 //     - invalid camera id                → 400 invalid_id
