@@ -37,8 +37,7 @@
     PreviewFrame,
     ReviewSegment,
     AudioMarker,
-    CoverageSegment,
-    TimelineMode
+    CoverageSegment
   } from '$lib/api'
   import { footageToWallclock, previewTailKey, tailHourOpen } from '$lib/timeline'
   import {
@@ -52,6 +51,9 @@
     parseDeepLinkTime
   } from '$lib/timeline-viewport'
   import { canDecodeRecording } from '$lib/hls'
+  // The mode option list is shared with the Settings Appearance screens, which
+  // offer the same preference. One copy, in $lib/appearance-options.
+  import { timelineModeOptions } from '$lib/appearance-options'
   import HlsVideo from '$lib/components/HlsVideo.svelte'
   import TimelineScrubber from '$lib/components/TimelineScrubber.svelte'
   import ZoomPane from '$lib/components/ZoomPane.svelte'
@@ -148,16 +150,6 @@
   // lands. The entry window is placed explicitly by the capture effect rather
   // than as a side effect of follow being on, so a flip mid-load moves nothing.
   const follow = $derived(prefsStore.timelineMode === 'follow')
-
-  // The on-timeline mode switch. The SAME server-side preference the Settings
-  // control writes, so the two are never two settings — switching in either
-  // place is reflected in the other the next time it is drawn. It lives here as
-  // well as in Settings because the mode is switched often and Settings is a
-  // different screen.
-  const timelineModeOptions: { value: TimelineMode; label: string }[] = [
-    { value: 'follow', label: ui.timelineModeFollow },
-    { value: 'fixed', label: ui.timelineModeFixed }
-  ]
 
   // The window the scrubber draws. Unchanged in meaning and still the exact
   // pair of props passed to TimelineScrubber — only their source moved, from
@@ -2006,6 +1998,11 @@
          which lives INSIDE the track at the live-edge fraction — a different
          concept in a different place. Visual treatment is a first pass. -->
     <div class="mode-row" role="group" aria-label={ui.timelineModeAria}>
+      <!-- The on-timeline mode switch. The SAME server-side preference the
+           Settings control writes, so the two are never two settings —
+           switching in either place is reflected in the other the next time it
+           is drawn. It lives here as well as in Settings because the mode is
+           switched often and Settings is a different screen. -->
       <Segmented
         value={prefsStore.timelineMode}
         options={timelineModeOptions}
