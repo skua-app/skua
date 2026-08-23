@@ -226,7 +226,10 @@
   }
   .dg-main {
     flex: 1;
-    padding: 24px 28px;
+    /* No bottom tab bar at this breakpoint, so the last row of tiles is what
+       paints against the bottom edge — it reserves the home-indicator inset
+       itself (iPad in standalone). */
+    padding: 24px 28px calc(env(safe-area-inset-bottom, 0px) + 24px);
   }
 
   /* dk-pagehead — toolbar: online/offline status on the left, controls right.

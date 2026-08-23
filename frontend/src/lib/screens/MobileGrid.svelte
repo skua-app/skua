@@ -47,6 +47,6 @@
     grid-template-columns: repeat(var(--cols, 1), 1fr);
     gap: 14px;
     margin-top: 2px;
-    padding: 14px 14px 96px;
+    padding: 14px 14px calc(env(safe-area-inset-bottom, 0px) + 96px);
   }
 </style>
