@@ -303,6 +303,29 @@ body {
   touch-action: manipulation;
 }
 
+/* One pixel of deliberate overflow, standalone only.
+
+   In iOS standalone WebKit withholds the last stretch of the screen from a
+   document that cannot scroll: while the page fits, the layout viewport comes
+   back shorter than the screen by the top safe-area inset (812 against 874 on
+   a device with a notch), and it expands to the full height the moment the
+   document becomes scrollable. A fixed, bottom-anchored element is anchored to
+   that short viewport, so on any screen whose content fits, the tab bar sits
+   an inset clear of the physical bottom edge.
+
+   Keeping the page one pixel taller than the viewport keeps it scrollable,
+   which is what buys back the full height and holds the bar against the edge.
+   One pixel of scroll is imperceptible.
+
+   Scoped to standalone on purpose. In a browser tab the bar already sits
+   flush and there is nothing to buy back, and the point of c544703 was to
+   stop pages there from scrolling when they fit. */
+@media (display-mode: standalone) {
+  body {
+    min-height: calc(100dvh + 1px);
+  }
+}
+
 /* Re-enable text selection inside fields where typing/editing happens. */
 input,
 textarea,
