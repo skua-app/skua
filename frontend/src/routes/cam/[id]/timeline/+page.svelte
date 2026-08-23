@@ -2081,9 +2081,8 @@
     padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px
       calc(env(safe-area-inset-bottom, 0px) + 96px);
     background: var(--bg);
-    /* --screen-h, not 100dvh: body reserves the bottom safe-area inset out of
-       its own content box, so a full 100dvh here overflows it by that inset and
-       the screen scrolls a little with nothing to scroll to. See app.css. */
+    /* --screen-h rather than a bare 100dvh: the token is `dvh` and carries the
+       reason why in one place. See app.css. */
     min-height: var(--screen-h);
     color: var(--text);
   }

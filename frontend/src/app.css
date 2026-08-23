@@ -250,17 +250,13 @@
 }
 
 /* The height a full-screen element should actually ask for.
-   NOT 100dvh. body below is `height: 100%` with `padding-bottom:
-   env(safe-area-inset-bottom)`, and Tailwind's preflight makes every box
-   border-box — so body's CONTENT box is one viewport minus that inset, and a
-   child asking for a full 100dvh overflows it by exactly the inset. The page
-   then scrolls by a few tens of pixels with nothing to scroll to, in an
-   installed PWA as much as in a browser tab.
-   `dvh` rather than `vh` for the other half of the same problem: `vh` is the
-   viewport measured with a mobile browser's toolbar retracted, so while the
-   toolbar is showing it overstates the space by the toolbar's height. */
+   `dvh`, never `vh`: `vh` is the viewport measured with a mobile browser's
+   toolbar retracted, so while that toolbar is showing it overstates the space
+   by the toolbar's height and the page can be dragged up to reveal nothing.
+   Kept as a token rather than writing 100dvh at each call site so that one
+   piece of reasoning lives in exactly one place. */
 :root {
-  --screen-h: calc(100dvh - env(safe-area-inset-bottom, 0px));
+  --screen-h: 100dvh;
 }
 
 html,
@@ -289,18 +285,45 @@ body {
 }
 
 body {
-  /* safe-area-inset-top is now applied inside AppHeader so a sticky `top: 0`
+  /* safe-area-inset-top is applied inside AppHeader so a sticky `top: 0`
      header floats below the iOS notch in PWA standalone mode. /cam/[id]
      renders without AppHeader and carries its own .status-spacer.
-     safe-area-inset-bottom stays here so short pages don't bottom-out
-     against the home indicator. */
-  padding-bottom: env(safe-area-inset-bottom);
+
+     The BOTTOM inset is deliberately NOT reserved here. It is owned by
+     whoever paints at the bottom edge: the mobile tab bar's own padding,
+     each screen's bottom spacer, and the sheets and overlays. Reserving it
+     on body as well holds the fixed tab bar off the physical bottom edge in
+     iOS standalone — the bar stops one inset short and a strip of page
+     background shows underneath it. */
   /* No accidental text selection on UI chrome (re-enabled for inputs below).
      `touch-action: manipulation` removes double-tap-to-zoom and the legacy
      300ms tap delay while still allowing scroll/pan. */
   -webkit-user-select: none;
   user-select: none;
   touch-action: manipulation;
+}
+
+/* One pixel of deliberate overflow, standalone only.
+
+   In iOS standalone WebKit withholds the last stretch of the screen from a
+   document that cannot scroll: while the page fits, the layout viewport comes
+   back shorter than the screen by the top safe-area inset (812 against 874 on
+   a device with a notch), and it expands to the full height the moment the
+   document becomes scrollable. A fixed, bottom-anchored element is anchored to
+   that short viewport, so on any screen whose content fits, the tab bar sits
+   an inset clear of the physical bottom edge.
+
+   Keeping the page one pixel taller than the viewport keeps it scrollable,
+   which is what buys back the full height and holds the bar against the edge.
+   One pixel of scroll is imperceptible.
+
+   Scoped to standalone on purpose. In a browser tab the bar already sits
+   flush and there is nothing to buy back, and the point of c544703 was to
+   stop pages there from scrolling when they fit. */
+@media (display-mode: standalone) {
+  body {
+    min-height: calc(100dvh + 1px);
+  }
 }
 
 /* Re-enable text selection inside fields where typing/editing happens. */

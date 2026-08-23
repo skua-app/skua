@@ -433,7 +433,10 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) 348px;
     gap: 22px;
-    padding: 22px 28px;
+    /* Page scrolls naturally and the columns run to the bottom, so the last
+       content is what meets the bottom edge — reserve the home-indicator
+       inset here (iPad in standalone). */
+    padding: 22px 28px calc(env(safe-area-inset-bottom, 0px) + 22px);
     align-items: start;
   }
   .df-live-main {
