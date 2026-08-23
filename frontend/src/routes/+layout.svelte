@@ -188,14 +188,44 @@
 <InstallPrompt />
 
 <style>
-  /* Was Tailwind's `min-h-screen`, i.e. `min-height: 100vh` — the viewport
-     measured with a mobile browser's toolbar retracted, so while that toolbar
-     was showing the document was taller than the screen on every route and the
-     page could be dragged up by the toolbar's height to reveal nothing.
-     --screen-h is that same measure taken in `dvh`, which tracks the toolbar
-     instead of ignoring it; see app.css. Still a minimum, so a page taller
-     than the screen grows and scrolls as before. */
+  /* Two display modes, two viewports, two answers.
+
+     In a browser tab the shell is sized in `dvh`, via --screen-h. A bare `vh`
+     is the viewport measured with the mobile toolbar retracted, so while that
+     toolbar is showing it overstates the space: the document came out taller
+     than the screen on every route and could be dragged up by the toolbar's
+     height to reveal nothing. `dvh` tracks the toolbar instead of ignoring it.
+     See app.css.
+
+     In the installed app there is no such toolbar, and iOS does the opposite
+     — it withholds the last stretch of the viewport from a document that
+     cannot scroll. A page that fits is handed a viewport shorter than the
+     screen by the top safe-area inset (812 against 874 physical on a notched
+     device) and only gets the rest once the document becomes scrollable. A
+     fixed, bottom-anchored element is anchored to that short viewport, so the
+     tab bar floats an inset clear of the physical bottom edge. The shell is
+     therefore kept a full screen height tall in standalone, which is what
+     holds the bar against the bottom edge from the very first frame.
+
+     A document only barely taller than the viewport does not do it. The
+     expansion then lands lazily, after first paint, and on a cold start the
+     bar is drawn against the short viewport and visibly slides down into
+     place; a full screen height gets the expansion during first layout.
+
+     `lvh` rather than `vh`: identical in standalone, but it names what is
+     meant — the viewport at its largest — and it leaves a repo-wide grep for
+     a bare `vh` meaningful as a guard against the browser-tab regression
+     coming back.
+
+     Both are minimums, so a page taller than the screen grows and scrolls as
+     before. */
   .shell {
     min-height: var(--screen-h);
+  }
+
+  @media (display-mode: standalone) {
+    .shell {
+      min-height: 100lvh;
+    }
   }
 </style>
