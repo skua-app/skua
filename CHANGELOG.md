@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-08-23
+
 Fixed
 
 - The same Skua release now contains the same files whenever it is built, and your device notices a new version because the app changed rather than because it was rebuilt. Every build stamped itself with the clock, so building identical code twice produced different app files, and the `main` and commit tags for one commit could point at genuinely different downloads — which makes "what am I actually running?" hard to answer and an upgrade harder to trust. The stamp now comes from the contents of the build instead, so one release means one set of files however many times it is built. (The image as a whole is still not bit-for-bit identical between builds: the container's own build timestamp and its build-provenance record are written fresh each time. The application layers inside it are what no longer vary.) Your phone or browser keeps a copy of the app's shell so it starts instantly and works offline, and the marker that tells it the copy is out of date comes from that same stamp: it changes whenever anything in the app changes, so upgrading still gives you the new version straight away, and re-pulling a release you already have no longer makes every device fetch the shell again for nothing.
@@ -718,7 +720,8 @@ replaceState: true })` so a single back-tap from focus always lands
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/skua-app/skua/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/skua-app/skua/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/skua-app/skua/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/skua-app/skua/compare/v0.15.0...v0.16.0
