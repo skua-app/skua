@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Fixed
+
+- On a phone, the last item on a screen no longer sits under a band of empty space above the bar along the bottom. Every screen holds some space back at its foot so that bar cannot cover its last camera, event or setting, but the amount held back was a fixed guess rather than the height the bar actually has — and since the bar is taller in the app installed to the home screen than in a browser tab, the guess left a different, and in both cases too generous, gap in each. The space is now measured from the bar itself, so what is held back is the bar plus a consistent margin, on both.
+
 ## [0.19.0] — 2026-08-23
 
 Fixed

@@ -2073,10 +2073,11 @@
     flex-direction: column;
     gap: 14px;
     /* Mobile (< 900px) renders the fixed bottom tab bar, which would overlap
-       the scrubber + its note. Reserve safe-area + 96px at the bottom for it,
-       mirroring MobileFocus's .mf-body clearance. Desktop resets this below. */
+       the scrubber + its note. Reserve the bar's measured height plus the
+       standard gap, through the same --tabbar-h token every mobile screen
+       reserves against. Desktop resets this below. */
     padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px
-      calc(env(safe-area-inset-bottom, 0px) + 96px);
+      calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
     background: var(--bg);
     /* --screen-h rather than a bare 100dvh: the token is `dvh` and carries the
        reason why in one place. See app.css. */

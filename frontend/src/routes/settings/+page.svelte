@@ -277,7 +277,7 @@
   .m-index {
     max-width: 720px;
     margin: 0 auto;
-    padding: 6px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding: 6px 18px calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
   }
   .set-grouplabel {
     padding: 20px 4px 6px;
@@ -353,7 +353,7 @@
   .m-drill {
     max-width: 720px;
     margin: 0 auto;
-    padding: 6px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding: 6px 18px calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
   }
   .drill-head {
     display: flex;
