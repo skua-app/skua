@@ -1777,6 +1777,19 @@
     if (typeof history !== 'undefined' && history.length > 1) history.back()
     else goto(`/cam/${camId}`)
   }
+
+  // On a short viewport this route hides the global mobile tab bar (app.css
+  // holds the rule and the reason). That bar is rendered by the layout, well
+  // outside this component's scoped styles, so the only way to reach it from
+  // here is a hook on documentElement — mirroring how MobileTabBar publishes
+  // --tabbar-h to the same element. The class says only "the timeline is on
+  // screen"; app.css decides what that means and at which size, so nothing
+  // here needs to know the threshold. No reactive reads, so this runs once on
+  // mount and its cleanup runs on unmount.
+  $effect(() => {
+    document.documentElement.classList.add('timeline-route')
+    return () => document.documentElement.classList.remove('timeline-route')
+  })
 </script>
 
 <div class="page">
@@ -1828,6 +1841,14 @@
         />
       </div>
     </ZoomPane>
+
+    <!-- Back, on the picture itself. Only visible on a short viewport, where
+         .bar is hidden to buy back its height; above that size .bar carries
+         the back button and this one is display:none. Same handler and same
+         aria-label as that button — one affordance, two placements. -->
+    <button type="button" class="back-float" onclick={goBack} aria-label={ui.backLabel}>
+      <Icon name="back" size={20} />
+    </button>
 
     {#if chunkEnded}
       <div class="frame-hint">
@@ -2295,6 +2316,62 @@
   }
   .rush-osd.ff {
     right: 16px;
+  }
+  /* Floating back control. Same visual language as the overlays above — the
+     black scrim and the blur — but unlike every one of them it MUST take
+     pointer events, because at the size where it appears it is the only way
+     out of the route. Hidden by default: above the threshold .bar carries the
+     back button, and two of them would be one too many, in the accessibility
+     tree as much as on screen. Raised above the media layers and above the
+     error scrim, which is inset:0 and would otherwise dim it. */
+  .back-float {
+    display: none;
+    position: absolute;
+    top: 10px;
+    /* Rotate an iPhone and the notch goes to the SIDE: in landscape
+       safe-area-inset-left is 59px, so a bare 10px would tuck this control
+       underneath it. The inset is 0 wherever nothing intrudes, which makes
+       this the plain offset everywhere else. */
+    left: calc(env(safe-area-inset-left, 0px) + 10px);
+    z-index: 2;
+    align-items: center;
+    justify-content: center;
+    width: var(--ctrl-h);
+    height: var(--ctrl-h);
+    padding: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: rgba(255, 255, 255, 0.95);
+    cursor: pointer;
+  }
+  .back-float:active {
+    transform: translateY(1px);
+  }
+  /* SHORT VIEWPORT — the one place this threshold is written on the route, and
+     the reason for the number. 500px catches a phone held sideways (an iPhone
+     in standalone is 402px tall there) and deliberately misses an unfolded
+     foldable at 653x841 and a 360x640 phone, where the frame yielding its
+     height is already enough and taking navigation away would be gratuitous.
+     Two moves, both about the same scarce pixels:
+       .bar         hidden, reclaiming its 38px control plus the column's 14px
+                    gap. The camera name goes with it — there is no room for it
+                    at this size and no attempt is made to fit it elsewhere.
+       .back-float  revealed, so hiding .bar does not strand the user.
+     app.css hides the global tab bar under the same threshold, keyed off the
+     .timeline-route class this route puts on documentElement; the number is
+     repeated there only because a media query cannot read a custom property. */
+  @media (max-height: 500px) {
+    .bar {
+      display: none;
+    }
+    .back-float {
+      display: inline-flex;
+    }
   }
 
   /* One centred bar: the transport cluster, a gap, then the meta cluster, both
