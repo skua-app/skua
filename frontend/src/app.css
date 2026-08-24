@@ -316,3 +316,32 @@ img,
 video {
   -webkit-user-drag: none;
 }
+
+/* The recording timeline (/cam/[id]/timeline) on a SHORT viewport.
+   That route puts .timeline-route on documentElement while it is mounted, the
+   same element and the same lifetime as MobileTabBar's --tabbar-h; the rule
+   lives here rather than in the route because the bar it hides is rendered by
+   the layout, outside any route's scoped styles.
+   Held sideways, an iPhone gives the app 402px of height. The route has
+   already dropped its own title bar by then, and this bar is the largest piece
+   of chrome left: about 101px in standalone, twice what the title bar cost.
+   The timeline carries its own back control on the picture at this size, so it
+   needs no global nav to be escapable, and the 101px goes to the recording.
+   500px is the same threshold the route's own rules use — written twice only
+   because a media query cannot read a custom property — and it deliberately
+   misses an unfolded foldable at 653x841 and a 360x640 phone.
+   `html.timeline-route` rather than a bare class so this outranks the scoped
+   `.tabbar.svelte-<hash>` (0,2,0) that sets display:flex, instead of tying on
+   specificity and being decided by whichever stylesheet the build emits last.
+   Consequence, and correct as-is: MobileTabBar observes a display:none element,
+   so its ResizeObserver reports a zero border box, --tabbar-h becomes 0px, and
+   every spacer reserving against it collapses on its own. Nothing needs to
+   reserve room for a bar that is not there. Leaving the route restores the bar,
+   the observer republishes its real height, and the spacers come back with it.
+   This route only, and only at this size — in portrait the bar stays, because
+   there the timeline has its own title bar and the room to spare. */
+@media (max-height: 500px) {
+  html.timeline-route .tabbar {
+    display: none;
+  }
+}
