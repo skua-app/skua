@@ -823,8 +823,13 @@
      two fingers, and 60px is a thin strip to land them in — especially since
      the fingers then cover most of what they are aiming at.
      Gated on BOTH conditions, because the height has to come out of a real
-     budget: below 900px the timeline screen is a min-height of one screen with
-     no overflow clip, so anything that overflows scrolls, and it must not.
+     budget: below 900px the timeline screen is exactly one screen tall, and
+     what this track takes is what the picture above it gives up. The frame
+     yields first now — it is flex: 0 1 auto in a fixed-height column — so
+     overrunning the budget no longer costs a scroll, it costs picture. This
+     gate is no longer the last line of defence it was originally written as;
+     it is what stops the taller track being handed to a screen whose picture
+     cannot spare the 28px.
        pointer: coarse   only a finger needs this; a cursor does not, and on
                          desktop the page is height-capped with the video
                          flexing, so every pixel here is taken from the picture.
@@ -840,11 +845,13 @@
                          a scroll. Above it, the tightest is a 375x812 phone at
                          ~29px while loading, ~57px settled.
        max-aspect-ratio  the screen is tall RELATIVE TO ITS WIDTH. Height alone
-                         is not enough, because the 16:9 frame above the
-                         scrubber grows with the viewport's WIDTH: a wide, short
-                         screen spends its height on the picture and has none
-                         left. An unfolded foldable at 653x841 clears 780 but is
-                         left with ~4px, which is nothing. 3/4 excludes that
+                         is not enough, because the height the 16:9 frame above
+                         the scrubber asks for is set by the viewport's WIDTH:
+                         on a wide, short screen it is already yielding well
+                         below the ratio it wants, and this track's extra 28px
+                         would come straight out of a picture that is short
+                         already. An unfolded foldable at 653x841 clears 780 but
+                         is left with ~4px, which is nothing. 3/4 excludes that
                          shape while keeping every phone (all near 0.46) and
                          portrait tablets (~0.63-0.70).
      A landscape tablet is excluded by the ratio too. That costs it nothing it

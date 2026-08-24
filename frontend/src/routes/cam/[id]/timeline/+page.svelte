@@ -2079,10 +2079,31 @@
     padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px
       calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
     background: var(--bg);
-    /* --screen-h rather than a bare 100dvh: the token is `dvh` and carries the
-       reason why in one place. See app.css. */
-    min-height: var(--screen-h);
+    /* Exactly one screen tall, not at least one — the same arrangement the
+       desktop block below reaches, but arrived at by shrinking rather than
+       growing. Bar, controls and scrubber keep their natural height; the frame
+       is the one thing allowed to yield, so a viewport too short for a full
+       16:9 picture takes the height out of the picture instead of pushing the
+       scrubber and the transport off the bottom edge. A phone in landscape
+       (874x402) and an unfolded foldable (653x841) are both this shape.
+       --screen-h rather than a bare 100dvh: the token is `dvh` and carries the
+       reason why in one place. See app.css.
+       Deliberately NOT `overflow: hidden` here, unlike desktop: if some
+       viewport is so short that even a fully-yielded frame cannot fit, the
+       page must still scroll so the controls stay reachable. Clipping would
+       put them permanently out of reach, which is the very failure this rule
+       exists to prevent. */
+    height: var(--screen-h);
     color: var(--text);
+  }
+  /* The three fixed rows of the column. Pinned to their natural height at every
+     width so flex cannot balance a short viewport by squeezing them: the frame
+     is the only row that gives. Without this the header and the controls would
+     shrink alongside the picture and the tap targets would go with them. */
+  .bar,
+  .controls,
+  .scrub {
+    flex: 0 0 auto;
   }
   .bar {
     display: flex;
@@ -2120,7 +2141,16 @@
 
   .frame {
     position: relative;
+    /* 16:9 stays the frame's NATURAL size — what it asks for when the column
+       has room to give. `flex: 0 1 auto` then lets the column take height back
+       off it when there is not enough, down to `min-height: 0` (without which
+       the flex item's automatic minimum size would floor it at its content and
+       overflow anyway). No height or max-height: the picture is not being
+       capped, it is being made compressible. The media layers already
+       object-fit: contain, so a frame shorter than 16:9 letterboxes cleanly. */
     aspect-ratio: 16 / 9;
+    flex: 0 1 auto;
+    min-height: 0;
     width: 100%;
     border-radius: var(--r);
     overflow: hidden;
