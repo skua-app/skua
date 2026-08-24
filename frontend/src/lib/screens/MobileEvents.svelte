@@ -216,7 +216,7 @@
   .ev-page {
     max-width: 720px;
     margin: 0 auto;
-    padding: 14px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding: 14px 18px calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
   }
   .chip-groups {
     display: flex;

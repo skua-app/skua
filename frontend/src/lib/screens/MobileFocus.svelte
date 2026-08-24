@@ -397,7 +397,7 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 6px 18px calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding: 6px 18px calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
   }
 
   /* Header crumb row — calm .h-row + .cbtn + .crumb + .qseg */

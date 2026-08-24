@@ -17,9 +17,32 @@
     if (href === '/') return path === '/'
     return path === href || path.startsWith(href + '/')
   }
+
+  // Screens reserve space at their bottom so their last item is not covered by
+  // this fixed bar; --tabbar-h is what they reserve. Published from the BORDER
+  // box, not contentRect: the bar's padding is where the safe-area inset lives
+  // and the top border adds another pixel, so the content box would report
+  // roughly half the bar and under-reserve worse than a constant. This bar is
+  // only mounted below 900px, so the property exists only there and desktop
+  // call sites fall through to the fallback in their own var().
+  let tabbarEl = $state<HTMLElement | null>(null)
+  $effect(() => {
+    if (!tabbarEl) return
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const h = entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height
+      document.documentElement.style.setProperty('--tabbar-h', `${Math.round(h)}px`)
+    })
+    ro.observe(tabbarEl)
+    return () => {
+      ro.disconnect()
+      document.documentElement.style.removeProperty('--tabbar-h')
+    }
+  })
 </script>
 
-<nav class="tabbar" aria-label={ui.primaryNavLabel}>
+<nav class="tabbar" bind:this={tabbarEl} aria-label={ui.primaryNavLabel}>
   {#each tabs as tab (tab.href)}
     <a
       href={tab.href}
