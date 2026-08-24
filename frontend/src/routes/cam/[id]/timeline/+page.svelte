@@ -2328,11 +2328,22 @@
     display: none;
     position: absolute;
     top: 10px;
-    /* Rotate an iPhone and the notch goes to the SIDE: in landscape
-       safe-area-inset-left is 59px, so a bare 10px would tuck this control
-       underneath it. The inset is 0 wherever nothing intrudes, which makes
-       this the plain offset everywhere else. */
-    left: calc(env(safe-area-inset-left, 0px) + 10px);
+    /* Two things at once, and the second is why the first alone is wrong.
+       Rotate an iPhone and the notch goes to the SIDE: in landscape
+       safe-area-inset-left is 59px, so a control at a bare 10px would sit
+       underneath it.
+       But this control is positioned inside .frame, and .frame already starts
+       18px in from the viewport edge, because .page carries that much
+       horizontal padding — whereas the inset is measured from the viewport
+       edge. Adding the inset whole counts that 18px twice and puts the control
+       18 + 59 + 10 = 87px from the screen edge, floating out in the letterbox
+       well away from the picture. So subtract the padding the frame already
+       provides, and what is left is the notch's reach INTO the frame.
+       max() because that subtraction goes negative wherever there is no inset
+       (0 - 18 + 10 = -8px) and the control must keep its plain 10px from the
+       frame's edge there. The 59 is a device figure quoted to explain the
+       arithmetic; it is deliberately not written into it. */
+    left: max(10px, calc(env(safe-area-inset-left, 0px) - 18px + 10px));
     z-index: 2;
     align-items: center;
     justify-content: center;
@@ -2362,6 +2373,11 @@
                     gap. The camera name goes with it — there is no room for it
                     at this size and no attempt is made to fit it elsewhere.
        .back-float  revealed, so hiding .bar does not strand the user.
+       .mode-row    lifted out of .scrub's flow and anchored to the column's
+                    trailing edge, level with the controls row, so the mode
+                    switch shares that row instead of holding one of its own
+                    with an empty middle. Reclaims its 38px plus one of
+                    .scrub's 8px gaps — 46px, the largest of the three moves.
      app.css hides the global tab bar under the same threshold, keyed off the
      .timeline-route class this route puts on documentElement; the number is
      repeated there only because a media query cannot read a custom property. */
@@ -2371,6 +2387,41 @@
     }
     .back-float {
       display: inline-flex;
+    }
+    /* Out of flow, NOT a flex sibling of the transport. Folding the switch
+       into .controls is what the comment above the .mode-row markup rejects,
+       and that objection stands: .controls centres its one group, so a third
+       member would shove the transport off centre. Absolute positioning keeps
+       the transport's x untouched (measured identical, 268.19px at 874x402)
+       while still vacating the row.
+       .scrub is the containing block because it is the only full-width box on
+       the stack: .controls is capped at 720px and centred, so its right edge is
+       59px short of the column's at this size, and the switch is meant to hold
+       the column's trailing edge — the same edge it holds today.
+       `bottom: calc(100% + 18px)` reads as "18px above .scrub's top": the 100%
+       cancels .scrub's own height, so nothing here depends on how tall the
+       track is. 18px = .page's 14px column gap plus half the 8px by which the
+       46px control row exceeds this 38px switch, which centres it on that row.
+       Absolutely positioned children are not flex items, so this also drops one
+       of .scrub's 8px gaps — the 46px is genuinely reclaimed, not just vacated,
+       and it goes to the picture, the only item on the column that grows.
+       KNOWN LIMIT, measured, not guessed: what the switch can run into is the
+       meta cluster, which is the trailing half of the centred group, not the
+       transport. Clearance is half the column minus 311.59px, so it reaches
+       zero at a 659px-wide viewport. Comfortable on every current phone in
+       landscape (874x402 leaves 107.42px, 926x428 leaves 133.42px), down to
+       3.92px on a 667x375 iPhone SE2/6/7/8, and genuinely overlapping by
+       45.58px on a 568x320 SE1. Not guarded here: a width condition would put
+       a second threshold on this route, and the gate is deliberately one
+       number. Revisit together with the group's layout if those two sizes
+       start to matter. */
+    .scrub {
+      position: relative;
+    }
+    .mode-row {
+      position: absolute;
+      right: 0;
+      bottom: calc(100% + 18px);
     }
   }
 
