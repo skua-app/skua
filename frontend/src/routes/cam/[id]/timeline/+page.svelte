@@ -2090,10 +2090,9 @@
 
 <style>
   .page {
-    /* The column's base horizontal padding — the design inset, before any
-       device intrusion is accounted for. It is the leading term on BOTH sides
-       of the shorthand below, where the lateral safe-area insets are added on
-       top of it.
+    /* The column's base horizontal padding — the design inset, and the FLOOR
+       under each lateral term of the shorthand below rather than something the
+       safe-area insets get added to.
        Scope note: this is the HORIZONTAL padding and nothing else. Other 18px
        figures on this route (.mode-row's vertical offset below) are different
        quantities that happen to share the number; routing them through this
@@ -2107,22 +2106,32 @@
        would overlap the scrubber + its note, so reserve the bar's measured
        height plus the standard gap through the same --tabbar-h token every
        mobile screen reserves against. Desktop resets the bottom below.
-       Left/right: the base padding PLUS the lateral safe-area inset. Rotate an
-       iPhone and the notch moves to the side and takes 59px of it; without
-       this the column starts 18px in and the frame's leading edge — and with
-       it the scrubber's earliest time labels — sits underneath the notch.
-       Adding the inset moves the whole column clear, which is the actual fix:
-       no child then has to dodge an intrusion the page failed to reserve for.
-       Unconditional on purpose, under no threshold. Both insets resolve to 0
-       in portrait, on desktop and on any device without an intrusion, so this
-       is a no-op everywhere they do not exist and needs no media query to say
-       so. In landscape on a notched iPhone the column gives up 118px of width
-       (59 on each side); the picture is object-fit: contain, so it simply
-       renders smaller inside a wider letterbox rather than being clipped. */
+       Left/right: whichever is LARGER, the base padding or the lateral inset —
+       max(), not a sum. Rotate an iPhone and the notch moves to the side and
+       takes 59px; the column must clear it, or the frame's leading edge and
+       the scrubber's earliest time labels sit underneath. But the inset IS
+       that clearance: it already holds the content off the screen edge by the
+       full reach of the intrusion, so adding a decorative 18px on top of it
+       reserves 77px to solve a 59px problem and costs the picture 36px of
+       width for nothing. The base padding is therefore a floor: it applies
+       where there is no inset, and the inset takes over the moment it exceeds
+       it.
+       Same idiom as .mm-backdrop / .cm-backdrop in MomentModal and
+       CameraEditModal, deliberately spelled the same way.
+       The two sides are necessarily equal and cannot be made otherwise from
+       CSS: iOS reports safe-area-inset-left and -right as the SAME value in
+       landscape whichever side the notch is physically on, so there is no way
+       here to reserve the intrusion on one edge and only the base padding on
+       the other. Do not try; the symmetry belongs to the platform.
+       Unconditional on purpose, under no threshold. Both insets are 0 in
+       portrait, on desktop and on any device without an intrusion, where max()
+       therefore yields the plain base padding — a no-op needing no media query
+       to say so. The picture is object-fit: contain, so whatever width the
+       column does give up letterboxes it rather than cropping it. */
     padding: calc(env(safe-area-inset-top, 0px) + 12px)
-      calc(var(--page-pad-x) + env(safe-area-inset-right, 0px))
+      max(var(--page-pad-x), env(safe-area-inset-right))
       calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px)
-      calc(var(--page-pad-x) + env(safe-area-inset-left, 0px));
+      max(var(--page-pad-x), env(safe-area-inset-left));
     background: var(--bg);
     /* Exactly one screen tall, not at least one — the same arrangement the
        desktop block below reaches, but arrived at by shrinking rather than
