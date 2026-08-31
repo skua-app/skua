@@ -2116,8 +2116,14 @@
        width for nothing. The base padding is therefore a floor: it applies
        where there is no inset, and the inset takes over the moment it exceeds
        it.
-       Same idiom as .mm-backdrop / .cm-backdrop in MomentModal and
-       CameraEditModal, deliberately spelled the same way.
+       The max() shape is the one .mm-backdrop and .cm-backdrop already use in
+       MomentModal and CameraEditModal. The `, 0px` is this codebase's majority
+       spelling for env() (17 uses to 9 at the time of writing) and is what all
+       four terms of this shorthand carry, so the declaration reads one way
+       throughout. It is belt-and-braces either way: safe-area-inset-* is
+       defined wherever env() is supported at all, and where it is not the whole
+       declaration fails fallback or no fallback. Consistency is the point, not
+       coverage.
        The two sides are necessarily equal and cannot be made otherwise from
        CSS: iOS reports safe-area-inset-left and -right as the SAME value in
        landscape whichever side the notch is physically on, so there is no way
@@ -2129,9 +2135,9 @@
        to say so. The picture is object-fit: contain, so whatever width the
        column does give up letterboxes it rather than cropping it. */
     padding: calc(env(safe-area-inset-top, 0px) + 12px)
-      max(var(--page-pad-x), env(safe-area-inset-right))
+      max(var(--page-pad-x), env(safe-area-inset-right, 0px))
       calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px)
-      max(var(--page-pad-x), env(safe-area-inset-left));
+      max(var(--page-pad-x), env(safe-area-inset-left, 0px));
     background: var(--bg);
     /* Exactly one screen tall, not at least one — the same arrangement the
        desktop block below reaches, but arrived at by shrinking rather than
