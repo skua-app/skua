@@ -2090,6 +2090,16 @@
 
 <style>
   .page {
+    /* The column's horizontal padding, named because one other rule genuinely
+       has to undo it: .back-float is positioned inside .frame, which already
+       starts this far in from the viewport edge, while env(safe-area-inset-*)
+       is measured from the edge itself. Two places, one quantity, so it is one
+       declaration and they cannot drift apart.
+       Scope note: this is the HORIZONTAL padding and nothing else. Other 18px
+       figures on this route (.mode-row's vertical offset below) are different
+       quantities that happen to share the number; routing them through this
+       property would couple two things that have no reason to move together. */
+    --page-pad-x: 18px;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -2097,7 +2107,7 @@
        the scrubber + its note. Reserve the bar's measured height plus the
        standard gap, through the same --tabbar-h token every mobile screen
        reserves against. Desktop resets this below. */
-    padding: calc(env(safe-area-inset-top, 0px) + 12px) 18px
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) var(--page-pad-x)
       calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
     background: var(--bg);
     /* Exactly one screen tall, not at least one — the same arrangement the
@@ -2333,17 +2343,20 @@
        safe-area-inset-left is 59px, so a control at a bare 10px would sit
        underneath it.
        But this control is positioned inside .frame, and .frame already starts
-       18px in from the viewport edge, because .page carries that much
+       --page-pad-x in from the viewport edge, because that is .page's
        horizontal padding — whereas the inset is measured from the viewport
-       edge. Adding the inset whole counts that 18px twice and puts the control
-       18 + 59 + 10 = 87px from the screen edge, floating out in the letterbox
-       well away from the picture. So subtract the padding the frame already
-       provides, and what is left is the notch's reach INTO the frame.
+       edge. Adding the inset whole counts that padding twice and puts the
+       control 18 + 59 + 10 = 87px from the screen edge, floating out in the
+       letterbox well away from the picture. So subtract the padding the frame
+       already provides, and what is left is the notch's reach INTO the frame.
+       The subtraction reads the property rather than repeating the number:
+       this is the same quantity as .page's padding, so re-padding the column
+       moves this control with it.
        max() because that subtraction goes negative wherever there is no inset
        (0 - 18 + 10 = -8px) and the control must keep its plain 10px from the
        frame's edge there. The 59 is a device figure quoted to explain the
        arithmetic; it is deliberately not written into it. */
-    left: max(10px, calc(env(safe-area-inset-left, 0px) - 18px + 10px));
+    left: max(10px, calc(env(safe-area-inset-left, 0px) - var(--page-pad-x) + 10px));
     z-index: 2;
     align-items: center;
     justify-content: center;
@@ -2368,16 +2381,18 @@
      in standalone is 402px tall there) and deliberately misses an unfolded
      foldable at 653x841 and a 360x640 phone, where the frame yielding its
      height is already enough and taking navigation away would be gratuitous.
-     Two moves, both about the same scarce pixels:
+     Two moves, both about the same scarce pixels, and both keyed on HEIGHT
+     alone — neither depends on how wide the screen is:
        .bar         hidden, reclaiming its 38px control plus the column's 14px
                     gap. The camera name goes with it — there is no room for it
                     at this size and no attempt is made to fit it elsewhere.
-       .back-float  revealed, so hiding .bar does not strand the user.
-       .mode-row    lifted out of .scrub's flow and anchored to the column's
-                    trailing edge, level with the controls row, so the mode
-                    switch shares that row instead of holding one of its own
-                    with an empty middle. Reclaims its 38px plus one of
-                    .scrub's 8px gaps — 46px, the largest of the three moves.
+       .back-float  revealed, so hiding .bar does not strand the user. This one
+                    especially must stay width-free: hiding the bar without
+                    revealing it would strand the user on exactly the narrow
+                    landscape screens (an SE at 568x320) that the fold below
+                    declines to apply to.
+     The third move, folding .mode-row up into the controls row, is width-gated
+     and lives in its own block below.
      app.css hides the global tab bar under the same threshold, keyed off the
      .timeline-route class this route puts on documentElement; the number is
      repeated there only because a media query cannot read a custom property. */
@@ -2388,33 +2403,61 @@
     .back-float {
       display: inline-flex;
     }
-    /* Out of flow, NOT a flex sibling of the transport. Folding the switch
-       into .controls is what the comment above the .mode-row markup rejects,
-       and that objection stands: .controls centres its one group, so a third
-       member would shove the transport off centre. Absolute positioning keeps
-       the transport's x untouched (measured identical, 268.19px at 874x402)
-       while still vacating the row.
-       .scrub is the containing block because it is the only full-width box on
-       the stack: .controls is capped at 720px and centred, so its right edge is
-       59px short of the column's at this size, and the switch is meant to hold
-       the column's trailing edge — the same edge it holds today.
-       `bottom: calc(100% + 18px)` reads as "18px above .scrub's top": the 100%
-       cancels .scrub's own height, so nothing here depends on how tall the
-       track is. 18px = .page's 14px column gap plus half the 8px by which the
-       46px control row exceeds this 38px switch, which centres it on that row.
-       Absolutely positioned children are not flex items, so this also drops one
-       of .scrub's 8px gaps — the 46px is genuinely reclaimed, not just vacated,
-       and it goes to the picture, the only item on the column that grows.
-       KNOWN LIMIT, measured, not guessed: what the switch can run into is the
-       meta cluster, which is the trailing half of the centred group, not the
-       transport. Clearance is half the column minus 311.59px, so it reaches
-       zero at a 659px-wide viewport. Comfortable on every current phone in
-       landscape (874x402 leaves 107.42px, 926x428 leaves 133.42px), down to
-       3.92px on a 667x375 iPhone SE2/6/7/8, and genuinely overlapping by
-       45.58px on a 568x320 SE1. Not guarded here: a width condition would put
-       a second threshold on this route, and the gate is deliberately one
-       number. Revisit together with the group's layout if those two sizes
-       start to matter. */
+  }
+
+  /* THE FOLD — the mode switch shares the controls row instead of holding one
+     of its own. Short AND wide enough: the only rule on this route that reads
+     both axes, and the reason is measured rather than stylistic.
+     Out of flow, NOT a flex sibling of the transport. Folding the switch into
+     .controls is what the comment above the .mode-row markup rejects, and that
+     objection stands: .controls centres its one group, so a third member would
+     shove the transport off centre. Absolute positioning keeps the transport's
+     x untouched (measured identical, 268.19px at 874x402) while still vacating
+     the row.
+     .scrub is the containing block because it is the only full-width box on the
+     stack: .controls is capped at 720px and centred, so its right edge is 59px
+     short of the column's at this size, and the switch is meant to hold the
+     column's trailing edge — the same edge it holds today.
+     `bottom: calc(100% + 18px)` reads as "18px above .scrub's top": the 100%
+     cancels .scrub's own height, so nothing here depends on how tall the track
+     is. That 18px is a VERTICAL offset — .page's 14px column gap plus half the
+     8px by which the 46px control row exceeds this 38px switch, which centres
+     the switch on that row. It is deliberately NOT --page-pad-x: the two are
+     unrelated quantities that happen to share the number 18, and tying them
+     together would make re-padding the column silently shift this switch
+     vertically. Left as a literal on purpose.
+     Absolutely positioned children are not flex items, so this also drops one
+     of .scrub's 8px gaps — the 46px is genuinely reclaimed, not just vacated,
+     and it goes to the picture, the only item on the column that grows.
+
+     WHY min-width: 700px. What the switch runs into is the meta cluster — the
+     trailing half of the centred group — not the transport. Both the switch and
+     that group are fixed-width while the column is not, so clearance falls off
+     linearly with the viewport:
+
+         clearance = (viewportWidth - 2 * --page-pad-x) / 2 - 311.59px
+
+     where 311.59px is the switch's 142.78px plus half the 337.61px control
+     group. That reaches zero at a 659px-wide viewport, which is inside the
+     range of real devices, not a hypothetical one. Measured in a headless
+     harness built from the emitted CSS:
+
+         874x402  (iPhone 14/15 landscape)   +107.42px   folds
+         926x428  (Pro Max landscape)        +133.42px   folds
+         700x400  (the gate itself)           +20.42px   folds
+         667x375  (SE2/SE3/6/7/8 landscape)    +3.92px   would touch
+         568x320  (SE1 landscape)             -45.58px   would overlap
+
+     700 rather than the 659 the formula gives, so the gate keeps ~20px of real
+     clearance instead of landing on the boundary; and rather than a rounder 760,
+     because the measurement does not justify folding any later than it must.
+     Below 700px the switch keeps its own trailing-aligned row — a short SE-class
+     landscape screen has less room, but a row costs 46px whereas a control
+     sitting on top of another control costs the user the control. Note this
+     gates the FOLD only: hiding .bar, revealing .back-float and app.css hiding
+     the tab bar are all height-only, so an SE in landscape still gets its
+     back control. */
+  @media (max-height: 500px) and (min-width: 700px) {
     .scrub {
       position: relative;
     }
