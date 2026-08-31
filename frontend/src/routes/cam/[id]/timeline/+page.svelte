@@ -2090,11 +2090,10 @@
 
 <style>
   .page {
-    /* The column's horizontal padding, named because one other rule genuinely
-       has to undo it: .back-float is positioned inside .frame, which already
-       starts this far in from the viewport edge, while env(safe-area-inset-*)
-       is measured from the edge itself. Two places, one quantity, so it is one
-       declaration and they cannot drift apart.
+    /* The column's base horizontal padding — the design inset, before any
+       device intrusion is accounted for. It is the leading term on BOTH sides
+       of the shorthand below, where the lateral safe-area insets are added on
+       top of it.
        Scope note: this is the HORIZONTAL padding and nothing else. Other 18px
        figures on this route (.mode-row's vertical offset below) are different
        quantities that happen to share the number; routing them through this
@@ -2103,12 +2102,27 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    /* Mobile (< 900px) renders the fixed bottom tab bar, which would overlap
-       the scrubber + its note. Reserve the bar's measured height plus the
-       standard gap, through the same --tabbar-h token every mobile screen
-       reserves against. Desktop resets this below. */
-    padding: calc(env(safe-area-inset-top, 0px) + 12px) var(--page-pad-x)
-      calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px);
+    /* Four-value shorthand, because the two sides are no longer the same.
+       Top/bottom: mobile (< 900px) renders the fixed bottom tab bar, which
+       would overlap the scrubber + its note, so reserve the bar's measured
+       height plus the standard gap through the same --tabbar-h token every
+       mobile screen reserves against. Desktop resets the bottom below.
+       Left/right: the base padding PLUS the lateral safe-area inset. Rotate an
+       iPhone and the notch moves to the side and takes 59px of it; without
+       this the column starts 18px in and the frame's leading edge — and with
+       it the scrubber's earliest time labels — sits underneath the notch.
+       Adding the inset moves the whole column clear, which is the actual fix:
+       no child then has to dodge an intrusion the page failed to reserve for.
+       Unconditional on purpose, under no threshold. Both insets resolve to 0
+       in portrait, on desktop and on any device without an intrusion, so this
+       is a no-op everywhere they do not exist and needs no media query to say
+       so. In landscape on a notched iPhone the column gives up 118px of width
+       (59 on each side); the picture is object-fit: contain, so it simply
+       renders smaller inside a wider letterbox rather than being clipped. */
+    padding: calc(env(safe-area-inset-top, 0px) + 12px)
+      calc(var(--page-pad-x) + env(safe-area-inset-right, 0px))
+      calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px)
+      calc(var(--page-pad-x) + env(safe-area-inset-left, 0px));
     background: var(--bg);
     /* Exactly one screen tall, not at least one — the same arrangement the
        desktop block below reaches, but arrived at by shrinking rather than
@@ -2338,25 +2352,19 @@
     display: none;
     position: absolute;
     top: 10px;
-    /* Two things at once, and the second is why the first alone is wrong.
-       Rotate an iPhone and the notch goes to the SIDE: in landscape
-       safe-area-inset-left is 59px, so a control at a bare 10px would sit
-       underneath it.
-       But this control is positioned inside .frame, and .frame already starts
-       --page-pad-x in from the viewport edge, because that is .page's
-       horizontal padding — whereas the inset is measured from the viewport
-       edge. Adding the inset whole counts that padding twice and puts the
-       control 18 + 59 + 10 = 87px from the screen edge, floating out in the
-       letterbox well away from the picture. So subtract the padding the frame
-       already provides, and what is left is the notch's reach INTO the frame.
-       The subtraction reads the property rather than repeating the number:
-       this is the same quantity as .page's padding, so re-padding the column
-       moves this control with it.
-       max() because that subtraction goes negative wherever there is no inset
-       (0 - 18 + 10 = -8px) and the control must keep its plain 10px from the
-       frame's edge there. The 59 is a device figure quoted to explain the
-       arithmetic; it is deliberately not written into it. */
-    left: max(10px, calc(env(safe-area-inset-left, 0px) - var(--page-pad-x) + 10px));
+    /* A plain offset from the frame's corner, and it can be plain because
+       .page now reserves the lateral safe-area insets in its own padding. The
+       frame's leading edge is therefore already clear of the notch, so this
+       control has nothing left to dodge and simply sits 10px inside the
+       corner it measures from — the same 10px as `top`, so the two read as one
+       corner offset.
+       This used to add the inset and subtract the page padding to claw its way
+       out from under a notch the page had not reserved for. That arithmetic
+       was correct on its own terms and still looked wrong, because the corner
+       it measured from was itself under the notch: the control ended up 51px
+       into the frame, visually detached from a picture whose own edge was
+       hidden. Fixing the cause in .page removes the need for the dodge. */
+    left: 10px;
     z-index: 2;
     align-items: center;
     justify-content: center;
