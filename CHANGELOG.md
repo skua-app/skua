@@ -14,13 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-09-01
+
+Changed
+
+- On the recording timeline, the Follow/Fixed switch now shares a row with the playback controls, keeping the far end of that row to itself, instead of taking a whole row of its own with nothing beside it. This applies to any window wide enough for the two to sit side by side — a desktop window as much as a phone held sideways, where it was first needed. The playback controls stay centred exactly where they were. On a window too narrow for both, the switch keeps a row of its own, which is where the two would otherwise overlap.
+
 Fixed
 
 - On a phone, the last item on a screen no longer sits under a band of empty space above the bar along the bottom. Every screen holds some space back at its foot so that bar cannot cover its last camera, event or setting, but the amount held back was a fixed guess rather than the height the bar actually has — and since the bar is taller in the app installed to the home screen than in a browser tab, the guess left a different, and in both cases too generous, gap in each. The space is now measured from the bar itself, so what is held back is the bar plus a consistent margin, on both.
 - On a phone held sideways, and on tall-but-tight screens such as an unfolded foldable, the recording timeline pushed the scrubber and the playback controls off the bottom of the screen, leaving no way to move through the recording or to start and stop it. The picture insisted on its full widescreen height whatever room was left over, and everything below it was carried past the bottom edge. The picture now gives up height first and the controls stay where they are.
 - Held sideways, the recording timeline now hides its title bar and the navigation bar along the bottom, and puts a back control on the picture itself, so that space goes to the recording instead of to chrome.
 - Held sideways on an iPhone whose camera notch moves to the side, the recording timeline's picture and track no longer run underneath it. The screen now keeps that strip clear along both edges, so the earliest times on the track, and the back control on the picture, are no longer hidden behind the notch. The picture is letterboxed a little narrower to make the room, which is the trade — nothing is cropped, and nothing is left under the notch.
-- On the recording timeline, the Follow/Fixed switch now shares a row with the playback controls, keeping the far end of that row to itself, instead of taking a whole row of its own with nothing beside it. This applies to any window wide enough for the two to sit side by side — a desktop window as much as a phone held sideways, where it was first needed. The playback controls stay centred exactly where they were. On a window too narrow for both, the switch keeps a row of its own, which is where the two would otherwise overlap.
 
 ## [0.19.0] — 2026-08-23
 
@@ -728,7 +733,8 @@ replaceState: true })` so a single back-tap from focus always lands
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/skua-app/skua/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/skua-app/skua/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/skua-app/skua/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/skua-app/skua/compare/v0.16.0...v0.17.0
