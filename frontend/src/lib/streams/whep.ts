@@ -30,7 +30,7 @@ export type WhepOpts = {
 // go2rtc answers non-trickle: the SDP answer already carries every candidate
 // it intends to offer, so the answer alone tells us whether the browser was
 // given anywhere reachable to send media.
-function parseAnswerCandidates(sdp: string): string[] {
+export function parseAnswerCandidates(sdp: string): string[] {
   const out: string[] = []
   const seen = new Set<string>()
   for (const line of sdp.split(/\r\n|\r|\n/)) {
@@ -47,7 +47,7 @@ function parseAnswerCandidates(sdp: string): string[] {
   return out
 }
 
-function isLoopback(entry: string): boolean {
+export function isLoopback(entry: string): boolean {
   const address = entry.slice(0, entry.lastIndexOf(':'))
   return address === '::1' || address === '[::1]' || /^127\./.test(address)
 }
