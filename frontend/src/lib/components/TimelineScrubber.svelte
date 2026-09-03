@@ -7,6 +7,16 @@
     type Gesture
   } from '$lib/timeline-gestures'
   import { playheadEdge } from '$lib/timeline-viewport'
+  import {
+    chooseTickStep,
+    tickPositions,
+    microTickFractions,
+    hourLineFractions,
+    clampLabelPx,
+    bandGeometry,
+    pointerDistance,
+    pointerMidX
+  } from '$lib/timeline-track'
   import type { ReviewSegment, AudioMarker, CoverageSegment, TimelineMode } from '$lib/api'
   import Icon from '$lib/components/Icon.svelte'
   import { ui } from '$lib/i18n/strings'
@@ -179,16 +189,15 @@
   // Coverage bands: each recorded range mapped onto the viewport, same idiom as
   // reviewBands but with NO severity and — crucially — NO min-width clamp, so a
   // recorded range renders at its true width and a real gap between ranges stays
-  // visible as empty track. timeToFraction clamps to [0,1], so a range fully
-  // outside the viewport collapses to zero width and is dropped (x1 <= x0).
+  // visible as empty track. bandGeometry drops a range that collapses to zero
+  // width, which is what a range fully outside the viewport does.
   type CoverageBand = { id: string; x0: number; width: number }
   const coverageBands = $derived.by((): CoverageBand[] => {
     const out: CoverageBand[] = []
     for (const seg of coverage) {
-      const x0 = timeToFraction(seg.start, windowStart, windowEnd)
-      const x1 = timeToFraction(seg.end, windowStart, windowEnd)
-      if (x1 <= x0) continue
-      out.push({ id: `${seg.start}-${seg.end}`, x0, width: x1 - x0 })
+      const g = bandGeometry(seg.start, seg.end, windowStart, windowEnd)
+      if (!g) continue
+      out.push({ id: `${seg.start}-${seg.end}`, ...g })
     }
     return out
   })
@@ -228,56 +237,39 @@
   )
 
   // Review-lane bands: each segment mapped onto the viewport. An active
-  // segment (end null) extends to the live edge. timeToFraction clamps to
-  // [0,1], so a segment fully outside the viewport collapses to zero width and
-  // is dropped (x1 <= x0); left/width are kept in % so the CSS scales with the
-  // track. Severity selects the colour (alert vs detection) in the template.
+  // segment (end null) extends to the live edge. bandGeometry drops a segment
+  // that collapses to zero width, which is what a segment fully outside the
+  // viewport does; left/width are kept in % so the CSS scales with the track.
+  // Severity selects the colour (alert vs detection) in the template.
   type ReviewBand = { id: string; severity: ReviewSegment['severity']; x0: number; width: number }
   const reviewBands = $derived.by((): ReviewBand[] => {
     const out: ReviewBand[] = []
     for (const seg of reviews) {
-      const x0 = timeToFraction(seg.start, windowStart, windowEnd)
-      const x1 = timeToFraction(seg.end ?? liveEdge, windowStart, windowEnd)
-      if (x1 <= x0) continue
-      out.push({ id: seg.id, severity: seg.severity, x0, width: x1 - x0 })
+      const g = bandGeometry(seg.start, seg.end ?? liveEdge, windowStart, windowEnd)
+      if (!g) continue
+      out.push({ id: seg.id, severity: seg.severity, ...g })
     }
     return out
   })
 
   // Audio-lane bands: same viewport mapping as reviewBands, minus severity. An
   // active marker (end null) extends to the live edge; a marker fully outside
-  // the viewport collapses to zero width and is dropped (x1 <= x0).
+  // the viewport collapses to zero width and is dropped.
   type AudioBand = { id: string; x0: number; width: number }
   const audioBands = $derived.by((): AudioBand[] => {
     const out: AudioBand[] = []
     for (const mark of audioEvents) {
-      const x0 = timeToFraction(mark.start, windowStart, windowEnd)
-      const x1 = timeToFraction(mark.end ?? liveEdge, windowStart, windowEnd)
-      if (x1 <= x0) continue
-      out.push({ id: mark.id, x0, width: x1 - x0 })
+      const g = bandGeometry(mark.start, mark.end ?? liveEdge, windowStart, windowEnd)
+      if (!g) continue
+      out.push({ id: mark.id, ...g })
     }
     return out
   })
 
-  // Tick model. The label STEP adapts to the zoom span AND the available width
-  // so labels stay useful at every level: a ladder of round intervals
-  // (1m … 12h), choosing the smallest entry whose count across the viewport
-  // (span / step) fits the pixel budget (maxLabels = trackWidth / minPx). Ticks
-  // land on ABSOLUTE multiples of that step and are rendered directly — NO
-  // index-based decimation. Decimating by array index would shift which
-  // absolute minutes survive as the window pans, making the labels jitter
-  // between e.g. :41/:43 and :40/:42; absolute marks slide smoothly instead.
-  const TICK_STEPS = [60, 120, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200]
-  const TICK_MIN_PX = 56
-  function chooseTickStep(span: number, width: number): number {
-    // Before the ResizeObserver fires width is 0; fall back to ~10 labels' worth
-    // of budget so the step is sane rather than dividing by a zero label count.
-    const maxLabels = width > 0 ? Math.max(1, Math.floor(width / TICK_MIN_PX)) : 10
-    for (const step of TICK_STEPS) {
-      if (span / step <= maxLabels) return step
-    }
-    return TICK_STEPS[TICK_STEPS.length - 1]!
-  }
+  // Tick model. The layout arithmetic — which step, where the marks land, the
+  // micro subdivision, the hour grid, the label clamp — lives in
+  // lib/timeline-track.ts; this is only the reactive wiring plus the one thing
+  // that cannot live there, the locale-dependent label string.
   type Tick = { tSec: number; fraction: number; label: string }
   const hourLabelFmt = new Intl.DateTimeFormat([], {
     hour: '2-digit',
@@ -288,88 +280,20 @@
   // and the micro-ticks derive from this single value, so the two ladders can
   // never diverge as the window pans (calling chooseTickStep twice could).
   const majorStep = $derived(chooseTickStep(windowEnd - windowStart, trackWidth))
-  const ticks = $derived.by((): Tick[] => {
-    if (windowEnd <= windowStart) return []
-    const out: Tick[] = []
-    const step = majorStep
-    // First step boundary at or after windowStart.
-    const first = Math.ceil(windowStart / step) * step
-    for (let t = first; t <= windowEnd; t += step) {
-      out.push({
-        tSec: t,
-        fraction: timeToFraction(t, windowStart, windowEnd),
-        label: hourLabelFmt.format(new Date(t * 1000))
-      })
-    }
-    return out
-  })
+  const ticks = $derived.by((): Tick[] =>
+    tickPositions(windowStart, windowEnd, majorStep).map((t) => ({
+      ...t,
+      label: hourLabelFmt.format(new Date(t.tSec * 1000))
+    }))
+  )
+  const microTicks = $derived(microTickFractions(windowStart, windowEnd, majorStep, trackWidth))
+  const hourLines = $derived(hourLineFractions(windowStart, windowEnd))
 
-  // Micro-ticks: finer unlabelled marks subdividing each labelled interval.
-  // MICRO_DIVISIONS=4 quarters each major interval — a first-pass subdivision
-  // count, tunable. microStep stays integer for every TICK_STEPS entry, so the
-  // "is this also a major?" modulo test below is exact.
-  const MICRO_DIVISIONS = 4
-  // Hide micro-ticks once their pixel spacing drops below this, so wide zooms
-  // stay clean instead of crowding. ~9px is a first pass — tune on device.
-  const MIN_MICRO_PX = 9
-  const microTicks = $derived.by((): { fraction: number }[] => {
-    if (windowEnd <= windowStart) return []
-    const span = windowEnd - windowStart
-    const microStep = majorStep / MICRO_DIVISIONS
-    // Pixel-spacing guard: drop the whole micro layer when it would crowd.
-    if ((microStep / span) * trackWidth < MIN_MICRO_PX) return []
-    const out: { fraction: number }[] = []
-    const first = Math.ceil(windowStart / microStep) * microStep
-    for (let t = first; t <= windowEnd; t += microStep) {
-      // Skip marks that are also major boundaries — those get the labelled tick.
-      if (t % majorStep === 0) continue
-      out.push({ fraction: timeToFraction(t, windowStart, windowEnd) })
-    }
-    return out
-  })
-
-  // Approximate half-width of a labelled tick in px. The first/last labels are
-  // clamped so their centre stays this far inside the track, keeping them from
-  // clipping under .track's overflow:hidden. ~22px is a tune-on-device guess.
-  const LABEL_HALF_W = 22
-  // Clamp a tick's label centre (in px across the track) to stay fully visible.
-  // The tick MARK itself stays at the true fraction; only the label clamps.
-  function clampLabelPx(fraction: number): number {
-    const x = fraction * trackWidth
-    const hi = trackWidth - LABEL_HALF_W
-    if (hi < LABEL_HALF_W) return x // track too narrow to clamp meaningfully
-    return Math.min(Math.max(x, LABEL_HALF_W), hi)
-  }
-
-  // Hour-boundary dividers, computed from TIME on a fixed 3600s grid (NOT from
-  // any band geometry, whose straddling-edge x0/x1 are clamped to [0,1] and so
-  // are not real boundaries). Walks whole-hour marks across the window like ticks.
-  // Keep only STRICTLY interior lines so a boundary landing exactly on a window
-  // edge does not draw a spurious divider pinned at 0 or 1.
-  const HOUR = 3600
-  const hourLines = $derived.by((): number[] => {
-    if (windowEnd <= windowStart) return []
-    const out: number[] = []
-    const first = Math.ceil(windowStart / HOUR) * HOUR
-    for (let t = first; t <= windowEnd; t += HOUR) {
-      const fraction = timeToFraction(t, windowStart, windowEnd)
-      if (fraction > 0 && fraction < 1) out.push(fraction)
-    }
-    return out
-  })
-
-  // Distance between the two active pointers (used by the pinch gesture).
-  function pointerDistance(): number {
-    const xs = [...activePointers.values()]
-    if (xs.length < 2) return 0
-    return Math.abs(xs[0]! - xs[1]!)
-  }
-  // Midpoint between the two active pointers, in client x. The pan half of the
-  // two-finger gesture is entirely this value moving.
-  function pointerMidX(): number {
-    const xs = [...activePointers.values()]
-    if (xs.length < 2) return xs[0] ?? 0
-    return (xs[0]! + xs[1]!) / 2
+  // The active pointers' x positions, in insertion order — the shape the
+  // two-pointer geometry in lib/timeline-track.ts takes. The Map stays here;
+  // only its values travel.
+  function pointerXs(): number[] {
+    return [...activePointers.values()]
   }
   // Arm a relative pan from the given clientX: capture the press point and the
   // current playhead so onPointerMove applies the finger delta to startPosition
@@ -450,10 +374,10 @@
       // first was doing — the same handoff ZoomPane makes, and the only one
       // that lets the track be zoomed while a finger rests on the playhead.
       pinching = true
-      pinchStartDist = pointerDistance()
+      pinchStartDist = pointerDistance(pointerXs())
       pinchStartSpan = windowEnd - windowStart
       // The point the fingers are holding, captured once.
-      const midF = pointerFraction(pointerMidX())
+      const midF = pointerFraction(pointerMidX(pointerXs()))
       pinchAnchorTime = midF === null ? position : fractionToTime(midF, windowStart, windowEnd)
     } else if (activePointers.size === 1 && !pinching) {
       armPan(e.clientX)
@@ -464,7 +388,7 @@
     activePointers.set(e.pointerId, e.clientX)
     if (pinching && activePointers.size === 2) {
       // Fingers apart -> currentDist up -> smaller span -> zoom in.
-      const currentDist = pointerDistance()
+      const currentDist = pointerDistance(pointerXs())
       if (currentDist <= 0) return
       const nextSpan = (pinchStartSpan * pinchStartDist) / currentDist
       if (mode === 'fixed') {
@@ -473,7 +397,7 @@
         // because there is nothing to discriminate — they are independent
         // readings of one gesture, so fingers that do a bit of each (which they
         // always do) get a bit of each.
-        const f = pointerFraction(pointerMidX())
+        const f = pointerFraction(pointerMidX(pointerXs()))
         if (f === null) return
         onPinch?.(nextSpan, pinchAnchorTime, f)
       } else {
@@ -708,8 +632,8 @@
     {/if}
 
     <div class="ticks" aria-hidden="true">
-      {#each microTicks as mt (mt.fraction)}
-        <span class="microtick" style:left="{mt.fraction * 100}%"></span>
+      {#each microTicks as fraction (fraction)}
+        <span class="microtick" style:left="{fraction * 100}%"></span>
       {/each}
       {#each ticks as tick (tick.tSec)}
         <span class="tick" style:left="{tick.fraction * 100}%">
@@ -717,7 +641,9 @@
         </span>
       {/each}
       {#each ticks as tick (tick.tSec)}
-        <span class="tick-label" style:left="{clampLabelPx(tick.fraction)}px">{tick.label}</span>
+        <span class="tick-label" style:left="{clampLabelPx(tick.fraction, trackWidth)}px"
+          >{tick.label}</span
+        >
       {/each}
     </div>
 
