@@ -139,7 +139,15 @@ awk '
     if (cur != "" && !seen) print "empty:" cur
     cur = $0
     sub(/^## \[/, "", cur); sub(/\].*/, "", cur)
-    if ($0 !~ /\][[:space:]]+[—-][[:space:]]+[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]*$/) print "undated:" cur
+    # The separator is an em dash, deliberately NOT written out in the pattern.
+    # Under a C locale awk matches byte by byte, so a literal em dash inside a
+    # bracket expression decomposes into its three UTF-8 bytes as three separate
+    # single-byte alternatives: one byte matches, the pattern then wants
+    # whitespace and finds the second byte of the dash instead, and every dated
+    # heading in the file reports as undated. Testing the separator only as "one
+    # or more non-space characters" is byte-safe and behaves the same in any
+    # locale, and still rejects a heading with no separator or no date.
+    if ($0 !~ /\][[:space:]]+[^[:space:]]+[[:space:]]+[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]*$/) print "undated:" cur
     seen = 0
     next
   }
