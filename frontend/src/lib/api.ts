@@ -96,6 +96,23 @@ export class ApiError extends Error {
   }
 }
 
+// serverError turns a non-ok response into an ApiError. The {error, message}
+// envelope is the BFF's; the status line is the fallback for a body that is
+// missing or not JSON. The path prefix is what makes a thrown message say
+// which endpoint failed.
+async function serverError(path: string, res: Response): Promise<ApiError> {
+  let message = `${res.status} ${res.statusText}`
+  try {
+    const body = (await res.json()) as { error?: string; message?: string }
+    if (body && typeof body.message === 'string' && body.message) {
+      message = body.message
+    }
+  } catch {
+    // non-JSON or empty body: keep the status-text fallback
+  }
+  return new ApiError('server', `${path}: ${message}`, res.status)
+}
+
 // Every coded endpoint in this file — groups, camera names, camera refresh,
 // stream overrides, runtime config — answers a failure with the same
 // {error, message} envelope, and each names its own union of codes. This base
@@ -162,16 +179,7 @@ async function apiFetch<T>(path: string): Promise<T> {
     clearTimeout(timer)
   }
   if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`
-    try {
-      const body = (await res.json()) as { error?: string; message?: string }
-      if (body && typeof body.message === 'string' && body.message) {
-        message = body.message
-      }
-    } catch {
-      // non-JSON or empty body: keep the status-text fallback
-    }
-    throw new ApiError('server', `${path}: ${message}`, res.status)
+    throw await serverError(path, res)
   }
   return res.json() as Promise<T>
 }
@@ -191,16 +199,7 @@ export async function updatePrefs(partial: Partial<Prefs>): Promise<Prefs> {
     body: JSON.stringify(partial)
   })
   if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`
-    try {
-      const body = (await res.json()) as { error?: string; message?: string }
-      if (body && typeof body.message === 'string' && body.message) {
-        message = body.message
-      }
-    } catch {
-      // non-JSON or empty body: keep the status-text fallback
-    }
-    throw new Error(`/api/prefs: ${message}`)
+    throw await serverError('/api/prefs', res)
   }
   return res.json() as Promise<Prefs>
 }
@@ -345,16 +344,7 @@ export async function markAllGlanceSeen(scope?: string): Promise<void> {
   }
   const res = await fetch('/api/glance/seen-all', init)
   if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`
-    try {
-      const errBody = (await res.json()) as { error?: string; message?: string }
-      if (errBody && typeof errBody.message === 'string' && errBody.message) {
-        message = errBody.message
-      }
-    } catch {
-      // non-JSON or empty body: keep the status-text fallback
-    }
-    throw new Error(`/api/glance/seen-all: ${message}`)
+    throw await serverError('/api/glance/seen-all', res)
   }
 }
 
@@ -365,16 +355,7 @@ export async function markAllGlanceSeen(scope?: string): Promise<void> {
 export async function glanceHeartbeat(): Promise<boolean> {
   const res = await fetch('/api/glance/heartbeat', { method: 'POST' })
   if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`
-    try {
-      const errBody = (await res.json()) as { error?: string; message?: string }
-      if (errBody && typeof errBody.message === 'string' && errBody.message) {
-        message = errBody.message
-      }
-    } catch {
-      // non-JSON or empty body: keep the status-text fallback
-    }
-    throw new Error(`/api/glance/heartbeat: ${message}`)
+    throw await serverError('/api/glance/heartbeat', res)
   }
   const body = (await res.json()) as { away: boolean }
   return body.away
@@ -393,16 +374,7 @@ export async function markGlanceSeen(eventIds: string[], scope?: string): Promis
     body: JSON.stringify(body)
   })
   if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`
-    try {
-      const errBody = (await res.json()) as { error?: string; message?: string }
-      if (errBody && typeof errBody.message === 'string' && errBody.message) {
-        message = errBody.message
-      }
-    } catch {
-      // non-JSON or empty body: keep the status-text fallback
-    }
-    throw new Error(`/api/glance/seen: ${message}`)
+    throw await serverError('/api/glance/seen', res)
   }
 }
 
@@ -550,14 +522,7 @@ export async function setCameraOrder(order: string[]): Promise<string[]> {
     body: JSON.stringify({ order })
   })
   if (!res.ok) {
-    let message = `${res.status} ${res.statusText}`
-    try {
-      const body = (await res.json()) as { message?: string }
-      if (body.message) message = body.message
-    } catch {
-      // Ignore: keep the status fallback above.
-    }
-    throw new Error(message)
+    throw await serverError('/api/camera-order', res)
   }
   const body = (await res.json()) as CameraOrderResponse
   return body.order ?? []
