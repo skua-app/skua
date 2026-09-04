@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  ApiError,
   CameraNameApiError,
   GroupApiError,
   RefreshApiError,
@@ -11,11 +12,14 @@ import {
   fetchPrefs,
   fetchRecordingsSummary,
   fetchStreamOverrides,
+  glanceHeartbeat,
+  markAllGlanceSeen,
   markGlanceSeen,
   refreshCameras,
   restartRuntimeConfig,
   saveRuntimeConfig,
   setCameraName,
+  setCameraOrder,
   setStreamOverride,
   timelineMasterURL,
   updateGroup,
@@ -210,6 +214,69 @@ describe('RuntimeConfigApiError', () => {
   })
 })
 
+// The shared parser behind all five coded-error classes. It is module-private
+// (an exported base would invite an `instanceof` that matched every endpoint
+// at once), so it is exercised through the call sites that use it — including
+// the property that matters most: it returns the caller's own subclass, not
+// some shared type the five would collapse into.
+describe('shared coded-error parser', () => {
+  it('takes the code and the message from a well-formed body', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'camera_not_found', message: 'no camera cam9' },
+        { status: 404, statusText: 'Not Found' }
+      )
+    )
+    const err = (await createGroup('x').catch((e: unknown) => e)) as GroupApiError
+    expect(err.code).toBe('camera_not_found')
+    expect(err.message).toBe('no camera cam9')
+  })
+
+  it('falls back to code internal with the status text on a non-JSON body', async () => {
+    mockFetchOnce(
+      new Response('<html>nope</html>', { status: 503, statusText: 'Service Unavailable' })
+    )
+    const err = (await refreshCameras().catch((e: unknown) => e)) as RefreshApiError
+    expect(err.code).toBe('internal')
+    expect(err.message).toBe('503 Service Unavailable')
+  })
+
+  it('carries the response status through on both paths', async () => {
+    mockFetchOnce(
+      jsonResponse({ error: 'invalid_body', message: 'bad' }, { status: 422, statusText: 'x' })
+    )
+    const parsed = (await setCameraName('cam1', 'x').catch((e: unknown) => e)) as CameraNameApiError
+    expect(parsed.status).toBe(422)
+
+    mockFetchOnce(new Response('', { status: 500, statusText: 'Internal Server Error' }))
+    const fallback = (await refreshCameras().catch((e: unknown) => e)) as RefreshApiError
+    expect(fallback.status).toBe(500)
+  })
+
+  it('returns the specific subclass, so sibling endpoints stay distinguishable', async () => {
+    const body = { error: 'internal', message: 'same body, different endpoint' }
+
+    mockFetchOnce(jsonResponse(body, { status: 500, statusText: 'Internal Server Error' }))
+    const group = await createGroup('x').catch((e: unknown) => e)
+    expect(group).toBeInstanceOf(GroupApiError)
+    expect(group).not.toBeInstanceOf(RefreshApiError)
+    expect(group).not.toBeInstanceOf(CameraNameApiError)
+    expect(group).not.toBeInstanceOf(StreamOverrideApiError)
+    expect(group).not.toBeInstanceOf(RuntimeConfigApiError)
+
+    mockFetchOnce(jsonResponse(body, { status: 500, statusText: 'Internal Server Error' }))
+    const refresh = await refreshCameras().catch((e: unknown) => e)
+    expect(refresh).toBeInstanceOf(RefreshApiError)
+    expect(refresh).not.toBeInstanceOf(GroupApiError)
+  })
+
+  it('leaves name as Error, since no subclass sets it', async () => {
+    mockFetchOnce(new Response('', { status: 500, statusText: 'Internal Server Error' }))
+    const err = (await refreshCameras().catch((e: unknown) => e)) as RefreshApiError
+    expect(err.name).toBe('Error')
+  })
+})
+
 describe('glance', () => {
   it('fetchGlance parses the envelope', async () => {
     const body: GlanceResponse = {
@@ -344,5 +411,89 @@ describe('apiFetch error path (via fetchPrefs)', () => {
     const thrown = await fetchPrefs().catch((e: unknown) => e)
     expect(thrown).toBeInstanceOf(Error)
     expect((thrown as Error).message).toContain('503 Service Unavailable')
+  })
+})
+
+// The five mutating calls that used to throw a bare Error from a hand-rolled
+// copy of the same body.message block. They now go through ApiError, so a
+// caller can tell a server refusal from a network failure -- which a bare
+// Error never allowed.
+describe('mutating calls throw ApiError', () => {
+  it('updatePrefs rejects with a server ApiError carrying the status', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'internal', message: 'prefs file is locked' },
+        { status: 503, statusText: 'Service Unavailable' }
+      )
+    )
+    const thrown = await updatePrefs({ grid_mode: 'eco' }).catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(ApiError)
+    const err = thrown as ApiError
+    expect(err.kind).toBe('server')
+    expect(err.status).toBe(503)
+    expect(err.message).toBe('/api/prefs: prefs file is locked')
+  })
+
+  it('markGlanceSeen rejects with a server ApiError', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'bad_request', message: 'event_ids must be non-empty' },
+        { status: 400, statusText: 'Bad Request' }
+      )
+    )
+    const thrown = await markGlanceSeen([]).catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(ApiError)
+    const err = thrown as ApiError
+    expect(err.kind).toBe('server')
+    expect(err.status).toBe(400)
+    expect(err.message).toBe('/api/glance/seen: event_ids must be non-empty')
+  })
+
+  it('markAllGlanceSeen rejects with a server ApiError', async () => {
+    mockFetchOnce(new Response('not json', { status: 502, statusText: 'Bad Gateway' }))
+    const thrown = await markAllGlanceSeen().catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(ApiError)
+    const err = thrown as ApiError
+    expect(err.kind).toBe('server')
+    expect(err.status).toBe(502)
+    expect(err.message).toBe('/api/glance/seen-all: 502 Bad Gateway')
+  })
+
+  it('glanceHeartbeat rejects with a server ApiError', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'internal', message: 'device store unwritable' },
+        { status: 500, statusText: 'Internal Server Error' }
+      )
+    )
+    const thrown = await glanceHeartbeat().catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(ApiError)
+    const err = thrown as ApiError
+    expect(err.kind).toBe('server')
+    expect(err.status).toBe(500)
+    expect(err.message).toBe('/api/glance/heartbeat: device store unwritable')
+  })
+
+  // setCameraOrder is the one message that changes: it threw the bare server
+  // message with no path prefix, and now reads like the other four.
+  it('setCameraOrder rejects with a server ApiError, message now path-prefixed', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'invalid_body', message: 'order must be an array' },
+        { status: 400, statusText: 'Bad Request' }
+      )
+    )
+    const thrown = await setCameraOrder(['cam1']).catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(ApiError)
+    const err = thrown as ApiError
+    expect(err.kind).toBe('server')
+    expect(err.status).toBe(400)
+    expect(err.message).toBe('/api/camera-order: order must be an array')
+  })
+
+  it('setCameraOrder falls back to the status text with the same prefix', async () => {
+    mockFetchOnce(new Response('', { status: 502, statusText: 'Bad Gateway' }))
+    const thrown = await setCameraOrder([]).catch((e: unknown) => e)
+    expect((thrown as ApiError).message).toBe('/api/camera-order: 502 Bad Gateway')
   })
 })
