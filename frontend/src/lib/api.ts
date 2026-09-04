@@ -96,6 +96,50 @@ export class ApiError extends Error {
   }
 }
 
+// Every coded endpoint in this file — groups, camera names, camera refresh,
+// stream overrides, runtime config — answers a failure with the same
+// {error, message} envelope, and each names its own union of codes. This base
+// carries the two fields all five share; the subclasses below add nothing but
+// their own union, so `instanceof` still tells the endpoints apart.
+//
+// Deliberately not exported. An exported base would invite
+// `instanceof CodedApiError`, which matches a coded error from every endpoint
+// at once — exactly the distinction the five separate names exist to keep.
+//
+// No subclass sets `this.name`, so it resolves to 'Error' through the
+// prototype chain, which is what callers have always seen.
+type CodedErrorBody<Code extends string> = {
+  error: Code
+  message: string
+}
+
+class CodedApiError<Code extends string> extends Error {
+  code: Code
+  status: number
+  constructor(body: CodedErrorBody<Code>, status: number) {
+    super(body.message)
+    this.code = body.error
+    this.status = status
+  }
+}
+
+// parseCodedError reads that envelope and builds the caller's own subclass
+// from it. Every code union in this file includes 'internal', so the
+// unparseable-body fallback needs no per-endpoint special case.
+async function parseCodedError<Code extends string, E>(
+  res: Response,
+  Ctor: new (body: CodedErrorBody<Code | 'internal'>, status: number) => E
+): Promise<E> {
+  let body: CodedErrorBody<Code | 'internal'>
+  try {
+    body = (await res.json()) as CodedErrorBody<Code>
+  } catch {
+    // non-JSON or empty body: fall back to the code every union shares
+    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
+  }
+  return new Ctor(body, res.status)
+}
+
 const API_TIMEOUT_MS = 10_000
 
 async function apiFetch<T>(path: string): Promise<T> {
@@ -389,25 +433,7 @@ export type GroupErrorBody = {
 
 // GroupApiError carries the parsed server error so callers can switch on
 // `.code` for inline validation messages.
-export class GroupApiError extends Error {
-  code: GroupErrorCode
-  status: number
-  constructor(body: GroupErrorBody, status: number) {
-    super(body.message)
-    this.code = body.error
-    this.status = status
-  }
-}
-
-async function parseGroupError(res: Response): Promise<GroupApiError> {
-  let body: GroupErrorBody
-  try {
-    body = (await res.json()) as GroupErrorBody
-  } catch {
-    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
-  }
-  return new GroupApiError(body, res.status)
-}
+export class GroupApiError extends CodedApiError<GroupErrorCode> {}
 
 export async function fetchGroups(): Promise<Group[]> {
   return apiFetch<Group[]>('/api/groups')
@@ -419,7 +445,7 @@ export async function createGroup(name: string): Promise<Group> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name })
   })
-  if (!res.ok) throw await parseGroupError(res)
+  if (!res.ok) throw await parseCodedError(res, GroupApiError)
   return res.json() as Promise<Group>
 }
 
@@ -432,13 +458,13 @@ export async function updateGroup(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch)
   })
-  if (!res.ok) throw await parseGroupError(res)
+  if (!res.ok) throw await parseCodedError(res, GroupApiError)
   return res.json() as Promise<Group>
 }
 
 export async function deleteGroup(id: string): Promise<void> {
   const res = await fetch(`/api/groups/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (!res.ok) throw await parseGroupError(res)
+  if (!res.ok) throw await parseCodedError(res, GroupApiError)
 }
 
 // Per-camera friendly-name overrides. The store keeps only cameras that
@@ -463,25 +489,7 @@ export type CameraNameErrorBody = {
   message: string
 }
 
-export class CameraNameApiError extends Error {
-  code: CameraNameErrorCode
-  status: number
-  constructor(body: CameraNameErrorBody, status: number) {
-    super(body.message)
-    this.code = body.error
-    this.status = status
-  }
-}
-
-async function parseCameraNameError(res: Response): Promise<CameraNameApiError> {
-  let body: CameraNameErrorBody
-  try {
-    body = (await res.json()) as CameraNameErrorBody
-  } catch {
-    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
-  }
-  return new CameraNameApiError(body, res.status)
-}
+export class CameraNameApiError extends CodedApiError<CameraNameErrorCode> {}
 
 export async function fetchCameraNames(): Promise<CameraNamesMap> {
   const res = await apiFetch<{ names: CameraNamesMap }>('/api/camera-names')
@@ -494,7 +502,7 @@ export async function setCameraName(camId: string, name: string): Promise<Camera
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name })
   })
-  if (!res.ok) throw await parseCameraNameError(res)
+  if (!res.ok) throw await parseCodedError(res, CameraNameApiError)
   return res.json() as Promise<CameraNameUpdate>
 }
 
@@ -514,29 +522,11 @@ export type RefreshErrorBody = {
   message: string
 }
 
-export class RefreshApiError extends Error {
-  code: RefreshErrorCode
-  status: number
-  constructor(body: RefreshErrorBody, status: number) {
-    super(body.message)
-    this.code = body.error
-    this.status = status
-  }
-}
-
-async function parseRefreshError(res: Response): Promise<RefreshApiError> {
-  let body: RefreshErrorBody
-  try {
-    body = (await res.json()) as RefreshErrorBody
-  } catch {
-    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
-  }
-  return new RefreshApiError(body, res.status)
-}
+export class RefreshApiError extends CodedApiError<RefreshErrorCode> {}
 
 export async function refreshCameras(): Promise<RefreshDiff> {
   const res = await fetch('/api/cameras/refresh', { method: 'POST' })
-  if (!res.ok) throw await parseRefreshError(res)
+  if (!res.ok) throw await parseCodedError(res, RefreshApiError)
   return res.json() as Promise<RefreshDiff>
 }
 
@@ -597,38 +587,20 @@ export type StreamOverrideErrorBody = {
   message: string
 }
 
-export class StreamOverrideApiError extends Error {
-  code: StreamOverrideErrorCode
-  status: number
-  constructor(body: StreamOverrideErrorBody, status: number) {
-    super(body.message)
-    this.code = body.error
-    this.status = status
-  }
-}
-
-async function parseStreamOverrideError(res: Response): Promise<StreamOverrideApiError> {
-  let body: StreamOverrideErrorBody
-  try {
-    body = (await res.json()) as StreamOverrideErrorBody
-  } catch {
-    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
-  }
-  return new StreamOverrideApiError(body, res.status)
-}
+export class StreamOverrideApiError extends CodedApiError<StreamOverrideErrorCode> {}
 
 // fetchGo2RTCStreams returns the sorted list of go2rtc stream aliases.
 // The BFF passes through go2rtc's /api/streams keys directly; the response
 // body IS the array, not wrapped in an envelope.
 export async function fetchGo2RTCStreams(): Promise<string[]> {
   const res = await fetch('/api/go2rtc/streams')
-  if (!res.ok) throw await parseStreamOverrideError(res)
+  if (!res.ok) throw await parseCodedError(res, StreamOverrideApiError)
   return res.json() as Promise<string[]>
 }
 
 export async function fetchStreamOverrides(): Promise<StreamOverridesMap> {
   const res = await fetch('/api/stream-overrides')
-  if (!res.ok) throw await parseStreamOverrideError(res)
+  if (!res.ok) throw await parseCodedError(res, StreamOverrideApiError)
   const body = (await res.json()) as { overrides: StreamOverridesMap | null }
   return body.overrides ?? {}
 }
@@ -647,7 +619,7 @@ export async function setStreamOverride(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ main, sub })
   })
-  if (!res.ok) throw await parseStreamOverrideError(res)
+  if (!res.ok) throw await parseCodedError(res, StreamOverrideApiError)
   return res.json() as Promise<Override>
 }
 
@@ -698,29 +670,11 @@ export type RuntimeConfigErrorBody = {
   message: string
 }
 
-export class RuntimeConfigApiError extends Error {
-  code: RuntimeConfigErrorCode
-  status: number
-  constructor(body: RuntimeConfigErrorBody, status: number) {
-    super(body.message)
-    this.code = body.error
-    this.status = status
-  }
-}
-
-async function parseRuntimeConfigError(res: Response): Promise<RuntimeConfigApiError> {
-  let body: RuntimeConfigErrorBody
-  try {
-    body = (await res.json()) as RuntimeConfigErrorBody
-  } catch {
-    body = { error: 'internal', message: `${res.status} ${res.statusText}` }
-  }
-  return new RuntimeConfigApiError(body, res.status)
-}
+export class RuntimeConfigApiError extends CodedApiError<RuntimeConfigErrorCode> {}
 
 export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
   const res = await fetch('/api/runtime-config')
-  if (!res.ok) throw await parseRuntimeConfigError(res)
+  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
   return res.json() as Promise<RuntimeConfig>
 }
 
@@ -733,7 +687,7 @@ export async function testRuntimeConfig(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ frigate_url, go2rtc_url })
   })
-  if (!res.ok) throw await parseRuntimeConfigError(res)
+  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
   return res.json() as Promise<ProbeReport>
 }
 
@@ -743,13 +697,13 @@ export async function saveRuntimeConfig(values: RuntimeConfigURLs): Promise<Runt
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(values)
   })
-  if (!res.ok) throw await parseRuntimeConfigError(res)
+  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
   return res.json() as Promise<RuntimeConfig>
 }
 
 export async function restartRuntimeConfig(): Promise<void> {
   const res = await fetch('/api/runtime-config/restart', { method: 'POST' })
-  if (!res.ok) throw await parseRuntimeConfigError(res)
+  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
 }
 
 // Recording timeline (Phase 2a). The recordings-summary shape is owned by

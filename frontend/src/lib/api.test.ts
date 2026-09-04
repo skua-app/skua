@@ -210,6 +210,69 @@ describe('RuntimeConfigApiError', () => {
   })
 })
 
+// The shared parser behind all five coded-error classes. It is module-private
+// (an exported base would invite an `instanceof` that matched every endpoint
+// at once), so it is exercised through the call sites that use it — including
+// the property that matters most: it returns the caller's own subclass, not
+// some shared type the five would collapse into.
+describe('shared coded-error parser', () => {
+  it('takes the code and the message from a well-formed body', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'camera_not_found', message: 'no camera cam9' },
+        { status: 404, statusText: 'Not Found' }
+      )
+    )
+    const err = (await createGroup('x').catch((e: unknown) => e)) as GroupApiError
+    expect(err.code).toBe('camera_not_found')
+    expect(err.message).toBe('no camera cam9')
+  })
+
+  it('falls back to code internal with the status text on a non-JSON body', async () => {
+    mockFetchOnce(
+      new Response('<html>nope</html>', { status: 503, statusText: 'Service Unavailable' })
+    )
+    const err = (await refreshCameras().catch((e: unknown) => e)) as RefreshApiError
+    expect(err.code).toBe('internal')
+    expect(err.message).toBe('503 Service Unavailable')
+  })
+
+  it('carries the response status through on both paths', async () => {
+    mockFetchOnce(
+      jsonResponse({ error: 'invalid_body', message: 'bad' }, { status: 422, statusText: 'x' })
+    )
+    const parsed = (await setCameraName('cam1', 'x').catch((e: unknown) => e)) as CameraNameApiError
+    expect(parsed.status).toBe(422)
+
+    mockFetchOnce(new Response('', { status: 500, statusText: 'Internal Server Error' }))
+    const fallback = (await refreshCameras().catch((e: unknown) => e)) as RefreshApiError
+    expect(fallback.status).toBe(500)
+  })
+
+  it('returns the specific subclass, so sibling endpoints stay distinguishable', async () => {
+    const body = { error: 'internal', message: 'same body, different endpoint' }
+
+    mockFetchOnce(jsonResponse(body, { status: 500, statusText: 'Internal Server Error' }))
+    const group = await createGroup('x').catch((e: unknown) => e)
+    expect(group).toBeInstanceOf(GroupApiError)
+    expect(group).not.toBeInstanceOf(RefreshApiError)
+    expect(group).not.toBeInstanceOf(CameraNameApiError)
+    expect(group).not.toBeInstanceOf(StreamOverrideApiError)
+    expect(group).not.toBeInstanceOf(RuntimeConfigApiError)
+
+    mockFetchOnce(jsonResponse(body, { status: 500, statusText: 'Internal Server Error' }))
+    const refresh = await refreshCameras().catch((e: unknown) => e)
+    expect(refresh).toBeInstanceOf(RefreshApiError)
+    expect(refresh).not.toBeInstanceOf(GroupApiError)
+  })
+
+  it('leaves name as Error, since no subclass sets it', async () => {
+    mockFetchOnce(new Response('', { status: 500, statusText: 'Internal Server Error' }))
+    const err = (await refreshCameras().catch((e: unknown) => e)) as RefreshApiError
+    expect(err.name).toBe('Error')
+  })
+})
+
 describe('glance', () => {
   it('fetchGlance parses the envelope', async () => {
     const body: GlanceResponse = {
