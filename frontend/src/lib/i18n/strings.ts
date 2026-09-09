@@ -124,6 +124,8 @@ export const ui = {
   connectionRestartPolicyNote:
     'Apply restarts Skua through the container, so Skua must be running with a restart policy (restart: unless-stopped or always) or it will not come back on its own.',
   connectionApplyConfirm: 'Restart now',
+  connectionRestartNoAnswer:
+    'No answer from Skua. It may already be restarting — waiting for it to come back.',
   connectionSaveErrorGeneric: 'Could not save.',
   connectionTestErrorGeneric: 'Could not run test.',
   connectionLoadError: 'Could not load connection settings.',
