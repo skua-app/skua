@@ -184,6 +184,53 @@ async function apiFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// apiWrite is the counterpart to apiFetch for every call that carries its own
+// method, body or error type. It repeats apiFetch's AbortController pattern and
+// its exact classification of a failed fetch, so a call routed through here
+// fails the same way a read does: an abort is kind 'timeout', a dead network is
+// kind 'offline', anything else is 'unknown', all worded as apiFetch words them.
+//
+// buildError is the caller's hook for a non-ok response, and it is what lets
+// this be shared without changing anything: the coded endpoints hand back their
+// own subclass through parseCodedError, the plain ones go through serverError,
+// and no call site changes what it throws.
+//
+// The three GETs that bypass apiFetch (go2rtc streams, stream overrides,
+// runtime config) come through here too. They are reads, not writes, but they
+// need the same timeout and their own error subclass, and leaving them out
+// would split the file into timed and untimed calls along a line that means
+// nothing.
+//
+// Returns the Response rather than parsed JSON because callers differ: some
+// read a body, some (204s) have none to read.
+async function apiWrite(
+  path: string,
+  init: RequestInit,
+  buildError: (res: Response) => Promise<Error>,
+  timeoutMs: number = API_TIMEOUT_MS
+): Promise<Response> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  let res: Response
+  try {
+    res = await fetch(path, { ...init, signal: ctrl.signal })
+  } catch (e) {
+    // AbortController firing surfaces as DOMException 'AbortError'. Any
+    // network/DNS/connection failure surfaces as a TypeError in fetch.
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new ApiError('timeout', `${path}: request timed out`)
+    }
+    if (e instanceof TypeError) {
+      throw new ApiError('offline', `${path}: network unreachable`)
+    }
+    throw new ApiError('unknown', `${path}: ${e instanceof Error ? e.message : String(e)}`)
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) throw await buildError(res)
+  return res
+}
+
 export async function fetchCameras(): Promise<Camera[]> {
   return apiFetch<Camera[]>('/api/cameras')
 }
@@ -193,14 +240,15 @@ export async function fetchPrefs(): Promise<Prefs> {
 }
 
 export async function updatePrefs(partial: Partial<Prefs>): Promise<Prefs> {
-  const res = await fetch('/api/prefs', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(partial)
-  })
-  if (!res.ok) {
-    throw await serverError('/api/prefs', res)
-  }
+  const res = await apiWrite(
+    '/api/prefs',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(partial)
+    },
+    (r) => serverError('/api/prefs', r)
+  )
   return res.json() as Promise<Prefs>
 }
 
@@ -342,10 +390,7 @@ export async function markAllGlanceSeen(scope?: string): Promise<void> {
     init.headers = { 'Content-Type': 'application/json' }
     init.body = JSON.stringify({ scope })
   }
-  const res = await fetch('/api/glance/seen-all', init)
-  if (!res.ok) {
-    throw await serverError('/api/glance/seen-all', res)
-  }
+  await apiWrite('/api/glance/seen-all', init, (r) => serverError('/api/glance/seen-all', r))
 }
 
 // glanceHeartbeat pings the per-device session so the server can tell
@@ -353,10 +398,9 @@ export async function markAllGlanceSeen(scope?: string): Promise<void> {
 // cookie on first call; same-origin fetch carries it automatically.
 // Returns the server's away verdict for this device.
 export async function glanceHeartbeat(): Promise<boolean> {
-  const res = await fetch('/api/glance/heartbeat', { method: 'POST' })
-  if (!res.ok) {
-    throw await serverError('/api/glance/heartbeat', res)
-  }
+  const res = await apiWrite('/api/glance/heartbeat', { method: 'POST' }, (r) =>
+    serverError('/api/glance/heartbeat', r)
+  )
   const body = (await res.json()) as { away: boolean }
   return body.away
 }
@@ -368,14 +412,15 @@ export async function glanceHeartbeat(): Promise<boolean> {
 export async function markGlanceSeen(eventIds: string[], scope?: string): Promise<void> {
   const body: { event_ids: string[]; scope?: string } = { event_ids: eventIds }
   if (scope !== undefined) body.scope = scope
-  const res = await fetch('/api/glance/seen', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  if (!res.ok) {
-    throw await serverError('/api/glance/seen', res)
-  }
+  await apiWrite(
+    '/api/glance/seen',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    },
+    (r) => serverError('/api/glance/seen', r)
+  )
 }
 
 // Camera groups (E3.3). Server-side single-membership: when a camera is added
@@ -412,12 +457,15 @@ export async function fetchGroups(): Promise<Group[]> {
 }
 
 export async function createGroup(name: string): Promise<Group> {
-  const res = await fetch('/api/groups', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name })
-  })
-  if (!res.ok) throw await parseCodedError(res, GroupApiError)
+  const res = await apiWrite(
+    '/api/groups',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    },
+    (r) => parseCodedError(r, GroupApiError)
+  )
   return res.json() as Promise<Group>
 }
 
@@ -425,18 +473,22 @@ export async function updateGroup(
   id: string,
   patch: { name?: string; camera_ids?: string[] }
 ): Promise<Group> {
-  const res = await fetch(`/api/groups/${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(patch)
-  })
-  if (!res.ok) throw await parseCodedError(res, GroupApiError)
+  const res = await apiWrite(
+    `/api/groups/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch)
+    },
+    (r) => parseCodedError(r, GroupApiError)
+  )
   return res.json() as Promise<Group>
 }
 
 export async function deleteGroup(id: string): Promise<void> {
-  const res = await fetch(`/api/groups/${encodeURIComponent(id)}`, { method: 'DELETE' })
-  if (!res.ok) throw await parseCodedError(res, GroupApiError)
+  await apiWrite(`/api/groups/${encodeURIComponent(id)}`, { method: 'DELETE' }, (r) =>
+    parseCodedError(r, GroupApiError)
+  )
 }
 
 // Per-camera friendly-name overrides. The store keeps only cameras that
@@ -469,12 +521,15 @@ export async function fetchCameraNames(): Promise<CameraNamesMap> {
 }
 
 export async function setCameraName(camId: string, name: string): Promise<CameraNameUpdate> {
-  const res = await fetch(`/api/camera-names/${encodeURIComponent(camId)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name })
-  })
-  if (!res.ok) throw await parseCodedError(res, CameraNameApiError)
+  const res = await apiWrite(
+    `/api/camera-names/${encodeURIComponent(camId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    },
+    (r) => parseCodedError(r, CameraNameApiError)
+  )
   return res.json() as Promise<CameraNameUpdate>
 }
 
@@ -497,8 +552,9 @@ export type RefreshErrorBody = {
 export class RefreshApiError extends CodedApiError<RefreshErrorCode> {}
 
 export async function refreshCameras(): Promise<RefreshDiff> {
-  const res = await fetch('/api/cameras/refresh', { method: 'POST' })
-  if (!res.ok) throw await parseCodedError(res, RefreshApiError)
+  const res = await apiWrite('/api/cameras/refresh', { method: 'POST' }, (r) =>
+    parseCodedError(r, RefreshApiError)
+  )
   return res.json() as Promise<RefreshDiff>
 }
 
@@ -516,14 +572,15 @@ export async function fetchCameraOrder(): Promise<string[]> {
 }
 
 export async function setCameraOrder(order: string[]): Promise<string[]> {
-  const res = await fetch('/api/camera-order', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ order })
-  })
-  if (!res.ok) {
-    throw await serverError('/api/camera-order', res)
-  }
+  const res = await apiWrite(
+    '/api/camera-order',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order })
+    },
+    (r) => serverError('/api/camera-order', r)
+  )
   const body = (await res.json()) as CameraOrderResponse
   return body.order ?? []
 }
@@ -558,14 +615,16 @@ export class StreamOverrideApiError extends CodedApiError<StreamOverrideErrorCod
 // The BFF passes through go2rtc's /api/streams keys directly; the response
 // body IS the array, not wrapped in an envelope.
 export async function fetchGo2RTCStreams(): Promise<string[]> {
-  const res = await fetch('/api/go2rtc/streams')
-  if (!res.ok) throw await parseCodedError(res, StreamOverrideApiError)
+  const res = await apiWrite('/api/go2rtc/streams', {}, (r) =>
+    parseCodedError(r, StreamOverrideApiError)
+  )
   return res.json() as Promise<string[]>
 }
 
 export async function fetchStreamOverrides(): Promise<StreamOverridesMap> {
-  const res = await fetch('/api/stream-overrides')
-  if (!res.ok) throw await parseCodedError(res, StreamOverrideApiError)
+  const res = await apiWrite('/api/stream-overrides', {}, (r) =>
+    parseCodedError(r, StreamOverrideApiError)
+  )
   const body = (await res.json()) as { overrides: StreamOverridesMap | null }
   return body.overrides ?? {}
 }
@@ -579,12 +638,15 @@ export async function setStreamOverride(
   main: string,
   sub: string
 ): Promise<Override> {
-  const res = await fetch(`/api/stream-overrides/${encodeURIComponent(camId)}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ main, sub })
-  })
-  if (!res.ok) throw await parseCodedError(res, StreamOverrideApiError)
+  const res = await apiWrite(
+    `/api/stream-overrides/${encodeURIComponent(camId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ main, sub })
+    },
+    (r) => parseCodedError(r, StreamOverrideApiError)
+  )
   return res.json() as Promise<Override>
 }
 
@@ -637,9 +699,25 @@ export type RuntimeConfigErrorBody = {
 
 export class RuntimeConfigApiError extends CodedApiError<RuntimeConfigErrorCode> {}
 
+// The Connection editor's Test button needs a longer budget than the shared
+// one. The BFF probes each upstream with runtimeConfigTestTimeout = 3s
+// (backend/internal/api/runtimeconfig.go), and it probes them SEQUENTIALLY —
+// probe.Frigate and probe.Go2RTC are two fields of one struct literal, not two
+// goroutines — so the server's own worst case is 6s, not 3s. 15s is that
+// ceiling plus headroom for request overhead and a slow LAN.
+//
+// The headroom is load-bearing: the probes run on the request's own
+// r.Context(), so aborting from this side does not merely abandon the answer,
+// it cancels a probe the server is still working on. These two values move
+// together — raising runtimeConfigTestTimeout means raising this one, and the
+// sequential pair means this one has to clear double the backend constant
+// before any headroom is counted.
+const RUNTIME_CONFIG_TEST_TIMEOUT_MS = 15_000
+
 export async function fetchRuntimeConfig(): Promise<RuntimeConfig> {
-  const res = await fetch('/api/runtime-config')
-  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
+  const res = await apiWrite('/api/runtime-config', {}, (r) =>
+    parseCodedError(r, RuntimeConfigApiError)
+  )
   return res.json() as Promise<RuntimeConfig>
 }
 
@@ -647,28 +725,36 @@ export async function testRuntimeConfig(
   frigate_url: string,
   go2rtc_url: string
 ): Promise<ProbeReport> {
-  const res = await fetch('/api/runtime-config/test', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ frigate_url, go2rtc_url })
-  })
-  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
+  const res = await apiWrite(
+    '/api/runtime-config/test',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ frigate_url, go2rtc_url })
+    },
+    (r) => parseCodedError(r, RuntimeConfigApiError),
+    RUNTIME_CONFIG_TEST_TIMEOUT_MS
+  )
   return res.json() as Promise<ProbeReport>
 }
 
 export async function saveRuntimeConfig(values: RuntimeConfigURLs): Promise<RuntimeConfig> {
-  const res = await fetch('/api/runtime-config', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(values)
-  })
-  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
+  const res = await apiWrite(
+    '/api/runtime-config',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values)
+    },
+    (r) => parseCodedError(r, RuntimeConfigApiError)
+  )
   return res.json() as Promise<RuntimeConfig>
 }
 
 export async function restartRuntimeConfig(): Promise<void> {
-  const res = await fetch('/api/runtime-config/restart', { method: 'POST' })
-  if (!res.ok) throw await parseCodedError(res, RuntimeConfigApiError)
+  await apiWrite('/api/runtime-config/restart', { method: 'POST' }, (r) =>
+    parseCodedError(r, RuntimeConfigApiError)
+  )
 }
 
 // Recording timeline (Phase 2a). The recordings-summary shape is owned by

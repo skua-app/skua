@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ApiError,
   CameraNameApiError,
@@ -21,6 +21,7 @@ import {
   setCameraName,
   setCameraOrder,
   setStreamOverride,
+  testRuntimeConfig,
   timelineMasterURL,
   updateGroup,
   updatePrefs,
@@ -495,5 +496,134 @@ describe('mutating calls throw ApiError', () => {
     mockFetchOnce(new Response('', { status: 502, statusText: 'Bad Gateway' }))
     const thrown = await setCameraOrder([]).catch((e: unknown) => e)
     expect((thrown as ApiError).message).toBe('/api/camera-order: 502 Bad Gateway')
+  })
+})
+
+// F046. Every call that bypasses apiFetch used to run with no timeout at all,
+// so a hung write never settled and its caller's spinner never stopped. They
+// now share apiWrite, which repeats apiFetch's AbortController and its exact
+// classification. The abort path is the only new behaviour: what each call
+// throws for a non-ok response is unchanged, which the last test in each pair
+// pins down.
+
+// A fetch that never settles on its own — it resolves only when the caller's
+// AbortController fires, which is what makes the timeout observable.
+function hangingFetch() {
+  return vi.fn<typeof fetch>(
+    (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        })
+      })
+  )
+}
+
+describe('apiWrite timeout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('updatePrefs rejects with kind timeout carrying the path', async () => {
+    vi.stubGlobal('fetch', hangingFetch())
+    const p = updatePrefs({ grid_mode: 'eco' }).catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(10_000)
+    const err = (await p) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.kind).toBe('timeout')
+    expect(err.message).toBe('/api/prefs: request timed out')
+  })
+
+  it('fetchStreamOverrides rejects with kind timeout carrying the path', async () => {
+    vi.stubGlobal('fetch', hangingFetch())
+    const p = fetchStreamOverrides().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(10_000)
+    const err = (await p) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.kind).toBe('timeout')
+    expect(err.message).toBe('/api/stream-overrides: request timed out')
+  })
+
+  it('restartRuntimeConfig rejects with kind timeout like any other call', async () => {
+    vi.stubGlobal('fetch', hangingFetch())
+    const p = restartRuntimeConfig().catch((e: unknown) => e)
+    await vi.advanceTimersByTimeAsync(10_000)
+    const err = (await p) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.kind).toBe('timeout')
+    expect(err.message).toBe('/api/runtime-config/restart: request timed out')
+  })
+
+  // The Connection editor's Test probes two upstreams sequentially at 3s each,
+  // so it carries its own 15s budget. Proving it is longer than the shared one
+  // matters more than the exact number: at 10s it must still be waiting.
+  it('testRuntimeConfig waits past the shared budget and aborts at its own', async () => {
+    vi.stubGlobal('fetch', hangingFetch())
+    let settled = false
+    const p = testRuntimeConfig('http://frigate', 'http://go2rtc').catch((e: unknown) => {
+      settled = true
+      return e
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(5_000)
+    const err = (await p) as ApiError
+    expect(settled).toBe(true)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.kind).toBe('timeout')
+    expect(err.message).toBe('/api/runtime-config/test: request timed out')
+  })
+})
+
+describe('apiWrite network and non-ok classification', () => {
+  it('updatePrefs rejects with kind offline when fetch throws a TypeError', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError('failed')))
+    const err = (await updatePrefs({ grid_mode: 'eco' }).catch((e: unknown) => e)) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.kind).toBe('offline')
+    expect(err.message).toBe('/api/prefs: network unreachable')
+  })
+
+  it('fetchStreamOverrides rejects with kind offline when fetch throws a TypeError', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError('failed')))
+    const err = (await fetchStreamOverrides().catch((e: unknown) => e)) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.kind).toBe('offline')
+    expect(err.message).toBe('/api/stream-overrides: network unreachable')
+  })
+
+  // The plain endpoint still throws a server ApiError, unchanged by F046.
+  it('updatePrefs still rejects with a server ApiError on a non-ok response', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'internal', message: 'prefs file is locked' },
+        { status: 503, statusText: 'Service Unavailable' }
+      )
+    )
+    const err = (await updatePrefs({ grid_mode: 'eco' }).catch((e: unknown) => e)) as ApiError
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.kind).toBe('server')
+    expect(err.status).toBe(503)
+    expect(err.message).toBe('/api/prefs: prefs file is locked')
+  })
+
+  // The coded endpoint still throws its own subclass, not the shared ApiError.
+  it('fetchStreamOverrides still rejects with StreamOverrideApiError on a non-ok response', async () => {
+    mockFetchOnce(
+      jsonResponse(
+        { error: 'go2rtc_unreachable', message: 'go2rtc is unreachable' },
+        { status: 502, statusText: 'Bad Gateway' }
+      )
+    )
+    const thrown = await fetchStreamOverrides().catch((e: unknown) => e)
+    expect(thrown).toBeInstanceOf(StreamOverrideApiError)
+    expect(thrown).not.toBeInstanceOf(ApiError)
+    const err = thrown as StreamOverrideApiError
+    expect(err.code).toBe('go2rtc_unreachable')
+    expect(err.status).toBe(502)
+    expect(err.message).toBe('go2rtc is unreachable')
   })
 })
