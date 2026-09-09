@@ -2090,14 +2090,6 @@
 
 <style>
   .page {
-    /* The column's base horizontal padding — the design inset, and the FLOOR
-       under each lateral term of the shorthand below rather than something the
-       safe-area insets get added to.
-       Scope note: this is the HORIZONTAL padding and nothing else. Other 18px
-       figures on this route (.mode-row's vertical offset below) are different
-       quantities that happen to share the number; routing them through this
-       property would couple two things that have no reason to move together. */
-    --page-pad-x: 18px;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -2106,16 +2098,16 @@
        would overlap the scrubber + its note, so reserve the bar's measured
        height plus the standard gap through the same --tabbar-h token every
        mobile screen reserves against. Desktop resets the bottom below.
-       Left/right: whichever is LARGER, the base padding or the lateral inset —
-       max(), not a sum. Rotate an iPhone and the notch moves to the side and
-       takes 59px; the column must clear it, or the frame's leading edge and
-       the scrubber's earliest time labels sit underneath. But the inset IS
-       that clearance: it already holds the content off the screen edge by the
-       full reach of the intrusion, so adding a decorative 18px on top of it
-       reserves 77px to solve a 59px problem and costs the picture 36px of
-       width for nothing. The base padding is therefore a floor: it applies
-       where there is no inset, and the inset takes over the moment it exceeds
-       it.
+       Left/right: whichever is LARGER, the 18px base padding or the lateral
+       inset — max(), not a sum. Rotate an iPhone and the notch moves to the
+       side and takes 59px; the column must clear it, or the frame's leading
+       edge and the scrubber's earliest time labels sit underneath. But the
+       inset IS that clearance: it already holds the content off the screen
+       edge by the full reach of the intrusion, so adding a decorative 18px on
+       top of it reserves 77px to solve a 59px problem and costs the picture
+       36px of width for nothing. The base padding is therefore a floor: it
+       applies where there is no inset, and the inset takes over the moment it
+       exceeds it.
        The max() shape is the one .mm-backdrop and .cm-backdrop already use in
        MomentModal and CameraEditModal. The `, 0px` is this codebase's majority
        spelling for env() (17 uses to 9 at the time of writing) and is what all
@@ -2134,10 +2126,9 @@
        therefore yields the plain base padding — a no-op needing no media query
        to say so. The picture is object-fit: contain, so whatever width the
        column does give up letterboxes it rather than cropping it. */
-    padding: calc(env(safe-area-inset-top, 0px) + 12px)
-      max(var(--page-pad-x), env(safe-area-inset-right, 0px))
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) max(18px, env(safe-area-inset-right, 0px))
       calc(var(--tabbar-h, calc(env(safe-area-inset-bottom, 0px) + 56px)) + 24px)
-      max(var(--page-pad-x), env(safe-area-inset-left, 0px));
+      max(18px, env(safe-area-inset-left, 0px));
     background: var(--bg);
     /* Exactly one screen tall, not at least one — the same arrangement the
        desktop block below reaches, but arrived at by shrinking rather than
@@ -2463,10 +2454,10 @@
      neither 900px block overrides .page's gap or .scrub's gap, so the two
      figures it is built from are the same on desktop as on a phone. Verified
      by measurement, not by reading — the switch centres on the controls row at
-     1440x900 exactly as it does at 874x402. It is deliberately NOT --page-pad-x: the two are
-     unrelated quantities that happen to share the number 18, and tying them
-     together would make re-padding the column silently shift this switch
-     vertically. Left as a literal on purpose.
+     1440x900 exactly as it does at 874x402. It is deliberately not shared with
+     .page's 18px horizontal padding: the two are unrelated quantities that
+     happen to agree on the number, and tying them together would make
+     re-padding the column silently shift this switch vertically.
      Absolutely positioned children are not flex items, so this also drops one
      of .scrub's 8px gaps — the 46px is genuinely reclaimed, not just vacated,
      and it goes to the picture, the only item on the column that grows.
@@ -2476,12 +2467,13 @@
      that group are fixed-width while the column is not, so clearance falls off
      linearly with the viewport:
 
-         clearance = (viewportWidth - 2 * --page-pad-x) / 2 - 311.59px
+         clearance = (viewportWidth - 2 * 18px) / 2 - 311.59px
 
-     where 311.59px is the switch's 142.78px plus half the 337.61px control
-     group. That reaches zero at a 659px-wide viewport, which is inside the
-     range of real devices, not a hypothetical one. Measured in a headless
-     harness built from the emitted CSS:
+     where 18px is .page's horizontal padding and 311.59px is the switch's
+     142.78px plus half the 337.61px control group. That reaches zero at a
+     659px-wide viewport, which is inside the range of real devices, not a
+     hypothetical one. Measured in a headless harness built from the emitted
+     CSS:
 
          874x402  (iPhone 14/15 landscape)   +107.42px   folds
          926x428  (Pro Max landscape)        +133.42px   folds
