@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1] — 2026-09-10
+
 Changed
 
 - The confirmation you answer before Settings → Connection → Apply restarts Skua now says that the container needs a restart policy such as `restart: unless-stopped`, and that without one Skua will not come back on its own. The same warning already sits at the top of the Connection section, but on a phone that note has scrolled out of view by the time you reach the button, so the confirmation — the one thing you are certain to read before committing — now carries it too.
@@ -743,7 +745,8 @@ replaceState: true })` so a single back-tap from focus always lands
 
 ## Comparison links
 
-[Unreleased]: https://github.com/skua-app/skua/compare/v0.20.0...HEAD
+[Unreleased]: https://github.com/skua-app/skua/compare/v0.20.1...HEAD
+[0.20.1]: https://github.com/skua-app/skua/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/skua-app/skua/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/skua-app/skua/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/skua-app/skua/compare/v0.17.0...v0.18.0
