@@ -17,11 +17,10 @@
 // LABELS LIVE HERE, and they are the same labels as before. Words come from
 // `ui` — the app centralises language, and Below / Follow / Cyan / Yes are
 // language. Unit symbols and bare numerals ('1 Hz', '6h', '10') stay literal,
-// which is what the rest of the app already does with HD / ECO / HQ / LQ, and
-// is why strings.ru.ts has no translation for any of them: there is nothing in
-// them to translate. Reading labels from strings.ts at the point of use instead
-// would put the value -> label mapping back in both screens, which is the
-// duplication this module exists to remove.
+// which is what the rest of the app already does with HD / ECO / HQ / LQ:
+// there is nothing in them to translate. Reading labels from strings.ts at the
+// point of use instead would put the value -> label mapping back in both
+// screens, which is the duplication this module exists to remove.
 //
 // Every list is annotated with the domain its values come from. Four of them
 // used to be, and four leaned on `as const` instead; uniform annotation is the
