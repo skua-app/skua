@@ -69,11 +69,8 @@ you open a PR.
 ## Conventions
 
 - **Language.** English everywhere — code, comments, identifiers,
-  commit messages, log messages, docs. UI strings have an English
-  baseline in `frontend/src/lib/i18n/strings.ts`. The Russian backup
-  file `strings.ru.ts` is not imported by the app and should not be
-  edited unless you are intentionally translating a key for a future
-  runtime locale-switching change.
+  commit messages, log messages, docs. UI strings live in
+  `frontend/src/lib/i18n/strings.ts`; the app ships English only.
 - **Go.** `gofmt` and `golangci-lint` clean. No `interface{}` without a
   concrete reason. Do not silence the linter with `//nolint`; fix the
   finding or argue against the rule in the PR.
