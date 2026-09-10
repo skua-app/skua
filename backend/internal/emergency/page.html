@@ -241,7 +241,7 @@
 
       <footer>
         <a
-          href="https://github.com/skua-app/skua#troubleshooting"
+          href="{{if eq .Reason "data_not_writable"}}https://github.com/skua-app/skua#container-wont-start--data-folder-stays-empty{{else}}https://github.com/skua-app/skua#troubleshooting{{end}}"
           target="_blank"
           rel="noopener noreferrer"
           >Troubleshooting</a
