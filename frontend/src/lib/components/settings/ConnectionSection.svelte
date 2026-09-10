@@ -110,9 +110,25 @@
     try {
       await restartRuntimeConfig()
     } catch (err) {
-      saveError = err instanceof RuntimeConfigApiError ? err.message : ui.connectionSaveErrorGeneric
-      applying = false
-      return
+      // The split is on what the rejection says about the SERVER, not about
+      // the request. A RuntimeConfigApiError is an error envelope the server
+      // composed and sent, so it is still up and the restart did not happen:
+      // report it and stop.
+      //
+      // Anything else means no answer arrived at all, and that is the shape a
+      // SUCCESSFUL restart takes as readily as a failed one — the BFF writes
+      // its 202 and then begins the graceful shutdown that drains the very
+      // connection carrying it. Treating a lost response as a failure would
+      // strand the operator on a save error while the server was already
+      // coming back, so the outcome counts as unknown: keep applying set and
+      // poll. The thirty-second fallback below covers the other reading, a
+      // server that never returns.
+      if (err instanceof RuntimeConfigApiError) {
+        saveError = err.message
+        applying = false
+        return
+      }
+      saveError = ui.connectionRestartNoAnswer
     }
     startHealthPoll()
   }
