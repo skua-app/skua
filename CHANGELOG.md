@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Changed
+
+- The confirmation you answer before Settings → Connection → Apply restarts Skua now says that the container needs a restart policy such as `restart: unless-stopped`, and that without one Skua will not come back on its own. The same warning already sits at the top of the Connection section, but on a phone that note has scrolled out of view by the time you reach the button, so the confirmation — the one thing you are certain to read before committing — now carries it too.
+
 Fixed
 
 - Saving a preference, renaming a camera, reordering the grid, creating or editing a group, and saving or applying a connection change no longer hang indefinitely when the server stops answering part-way through. These actions were sent with no time limit at all, so a request that stalled — a phone waking onto a network that is not quite back, the server restarting underneath it — left the spinner turning with no error, nothing to retry, and no way out short of reloading the app. They now give up after ten seconds and report the failure the same way any other failure is reported, so you can see what happened and try again. The connection editor's Test button waits longer, fifteen seconds, because the server checks Frigate and go2rtc one after the other rather than at the same time, and cutting it short would abandon a check that was still running.
